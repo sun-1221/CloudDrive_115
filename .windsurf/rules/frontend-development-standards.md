@@ -71,26 +71,21 @@ trigger: manual
 
 ## 路由、授权与账号上下文
 
-### OAuth 与授权流程
-
-- **[项目约定]** 浏览器侧授权交互继承 `frontend-general-standards.md` 中的 OAuth / PKCE 基线，本文档只补充 115 专用口径
-- **[项目约定]** 未授权态与功能不可用态由布局容器承载，不额外引入“授权空页面专用路由”
-- **[项目约定]** 鉴权失败时优先保持当前 URL，由布局层决定渲染授权引导或禁用态
-
 ### 115 Cloud Drive 当前授权口径
 
-- **[当前契约]** 默认授权入口为 `createPkceSession()`，而不是直接 `getAuthorizationUrl()`
-- **[当前契约]** `getAuthorizationUrl()` 仅保留为兼容能力，不参与默认授权主路径
-- **[当前契约]** OAuth 回调时使用 `exchangeCode({ code, flowType: 'AuthorizationCodeWithPkce', pkceSessionId })`
-- **[当前契约]** `bootstrapAuthState()` 先调用 `listAccounts()`，再恢复 `currentAccountUid` 或回退到首个账号
-- **[当前契约]** 切换账号顺序固定为：更新当前账号 → 拉取账号信息 → 清空搜索 → 刷新目录 → 刷新任务 → 关闭预览
+- **[当前契约]** 前端采用 Cookie-based 会话模型，Cookie 由后端 integration 服务管理和注入 115 API 请求
+- **[当前契约]** Cookie-based 仅说明会话承载方式，不代表自动安全；后端必须为会话 Cookie 设置 `HttpOnly`、`Secure`、`SameSite`，并对状态变更请求实施 CSRF 防护
+- **[当前契约]** 前端不得读取、写入或覆盖会话 Cookie；若后端 OpenAPI 暴露 CSRF header/token 契约，前端只能在统一 API 层按契约携带，不得自造 token
+- **[当前契约]** 前端仅通过 `GET /api/auth/check` 查询登录态，不实现 OAuth、PKCE、授权回调页或账号授权交换
+- **[当前契约]** 当前前端为单账号模型，不提供多账号切换，不维护 `currentAccountUid`
+- **[项目约定]** 未登录态、Cookie 失效态与功能不可用态由布局容器承载
+- **[项目约定]** 鉴权失败时优先保持当前 URL，由布局层决定渲染登录引导或禁用态
 
 ### 账号上下文传递
 
-- **[项目约定]** 所有授权后的 Cloud Drive 请求都必须有显式账号上下文
-- **[当前契约]** `CloudAccountUid` 必须按接口契约显式放入 `query`、`form-data` 或 `body`
-- **[当前契约]** `CloudAccountUid` 不是统一隐式请求头约定
-- **[当前契约]** 即使当前只有单账号，也保留显式 `currentAccountUid`
+- **[当前契约]** 前端不向 Cloud Drive API 显式传递 `CloudAccountUid`
+- **[当前契约]** 账号上下文由后端 integration 服务根据 Cookie 会话解析
+- **[项目约定]** 若未来恢复多账号能力，必须先更新 `.kiro/specs/115-cloud-drive-frontend/` 后再修改前端实现
 
 ---
 
@@ -117,7 +112,7 @@ trigger: manual
 
 - **[当前契约]** 当前前端代理上传流程只使用 `fileApi.upload()`，不使用 `/files/upload/init`
 - **[当前契约]** 上传请求必须组装为 `multipart/form-data`
-- **[当前契约]** 上传字段名固定为 `file`、`cloudAccountUid`、`directoryId`、`forceAsync`
+- **[当前契约]** 上传字段名固定为 `file`、`directoryId`、`forceAsync`
 - **[当前契约]** `videoApi.getPlayUrl()` 使用 `POST`
 - **[当前契约]** 显式提交转码任务时使用 `submitTranscode()`
 - **[当前契约]** `getSubtitles()` 返回 `ListResult<CloudDriveSubtitleDto>`，消费方必须从 `items` 读取
@@ -127,9 +122,8 @@ trigger: manual
 
 ## 状态管理与数据流规范
 
-- **[项目约定]** 至少维护以下 Store：`AuthStore`、`FileStore`、`SearchStore`、`RecycleBinStore`、`UploadStore`、`JobStore`、`UIStore`
+- **[项目约定]** 至少维护以下 Store：`AuthStore`、`FileStore`、`SearchStore`、`RecycleBinStore`、`UploadStore`、`OfflineStore`、`ShareStore`、`UserCenterStore`、`UIStore`
 - **[项目约定]** `UploadStore` 必须对每个上传文件独立建模，分别维护状态、进度与错误信息
-- **[项目约定]** `JobStore` 必须维护任务刷新目标与本地上下文映射
 - **[项目约定]** `UIStore` 必须维护快捷键作用域相关状态，如 `fileBrowserFocused`、`activeModal`、`keyboardSuspended`
 - **[当前契约]** 根目录固定为 `"0"`
 - **[当前契约]** `SearchStore` 必须保存 `previousDirectoryId`，用于“返回浏览”恢复目录上下文
@@ -175,31 +169,26 @@ trigger: manual
 
 ---
 
-## 同步/异步双态与任务面板规范
+## 同步/异步双态与后台任务轮询规范
 
 - **[项目约定]** 所有文件操作统一按“同步完成 / 异步受理”双态处理
 - **[项目约定]** 同步完成后立即刷新受影响视图并反馈成功状态
-- **[项目约定]** 异步受理后写入 `Task_Panel`，提示“任务已开始”，待任务完成后再刷新视图
+- **[项目约定]** 异步受理后由触发该操作的页面或服务调用 `jobsApi.poll(jobId)` 按需轮询，提示“任务已开始”，待任务完成后再刷新视图
 
 ### 刷新目标
 
-- **[项目约定]** 统一使用 `refreshTargets` 描述异步任务完成后的刷新目标
-- **[项目约定]** 目录目标使用 `{ type: 'directory', directoryId }`
-- **[项目约定]** 回收站目标使用 `{ type: 'recycleBin' }`
 - **[当前契约]** 异步上传刷新当前目录
 - **[当前契约]** 批量移动至少刷新源目录与目标目录
 - **[当前契约]** 批量复制至少刷新目标目录
 - **[当前契约]** 批量删除刷新当前或源目录
 - **[当前契约]** 回收站还原、彻底删除、清空回收站刷新回收站
 
-### 任务面板与轮询
+### 页面内任务展示与轮询
 
-- **[项目约定]** 任务面板默认桌面端为底部可折叠面板，平板和移动端可退化为底部抽屉
-- **[项目约定]** 任务描述优先使用前端本地上下文，缺失时再回退到后端字段
-- **[当前契约]** 任务面板支持 `currentAccount` 与 `allAccounts` 两种账号范围
-- **[当前契约]** `currentAccount` 仅查看当前账号任务，`allAccounts` 查看全部账号任务
-- **[当前契约]** 后端始终返回 `cloudAccountUid`，任务项展示需保留账号上下文
-- **[项目约定]** 轮询在无运行中任务、面板收起、页面不可见时降频或暂停
+- **[当前契约]** 全局 `Task_Panel` / `JobStore` 不在当前前端迭代范围
+- **[当前契约]** 云下载任务仅在云下载页面内展示，由 `OfflineStore` 维护列表、配额、统计与 10 秒刷新
+- **[项目约定]** 按需后台任务轮询在任务进入 `completed` 或 `failed` 终态后必须停止
+- **[项目约定]** 页面不可见时应暂停或降低页面内自动刷新频率
 
 ---
 
@@ -268,9 +257,9 @@ trigger: manual
 
 - **[项目约定]** 至少覆盖单元测试、组件测试、属性测试、端到端测试四类测试层级
 - **[项目约定]** 单元测试优先覆盖：文件名校验、排序/筛选函数、临时资源自动重试、核心 Store 状态流转、快捷键服务
-- **[项目约定]** 组件测试优先覆盖：文件浏览、搜索、上传队列与任务面板联动、图片/视频/文档预览的加载态与错误态
+- **[项目约定]** 组件测试优先覆盖：文件浏览、搜索、上传队列、云下载页面任务刷新、图片/视频/文档预览的加载态与错误态
 - **[项目约定]** 属性测试优先覆盖稳定不变量，如文件夹优先排序、非法文件名拒绝、临时资源只自动重试一次、请求去重、已加载范围全选等
-- **[当前契约]** E2E 需要覆盖：OAuth 成功/失败、多账号切换、上传/下载/预览主路径、转码中视频、第三方预览失败与临时地址重试
+- **[当前契约]** E2E 需要覆盖：Cookie 有效/失效、登录引导、上传/下载/预览主路径、转码中视频、第三方预览失败与临时地址重试
 
 ---
 
@@ -278,10 +267,10 @@ trigger: manual
 
 通用前端基线由 `frontend-general-standards.md` 提供，本文档只在以下场景补充 115 专用规则：
 
-- **[项目约定]** Cloud Drive 授权、多账号与 `CloudAccountUid` 传递
-- **[项目约定]** 当前文件列表、搜索、回收站、上传、预览、转码与任务面板口径
-- **[项目约定]** 115 特有的同步/异步双态操作与 `refreshTargets` 约束
-- **[项目约定]** 预览资源边界、`SVG` 安全排除、任务面板账号范围等产品细节
+- **[项目约定]** Cloud Drive Cookie 会话、单账号与后端托管账号上下文
+- **[项目约定]** 当前文件列表、搜索、回收站、上传、预览、转码与云下载页面任务口径
+- **[项目约定]** 115 特有的同步/异步双态操作与按需 `jobsApi.poll(jobId)` 约束
+- **[项目约定]** 预览资源边界、`SVG` 安全排除、页面内云下载任务等产品细节
 
 ---
 

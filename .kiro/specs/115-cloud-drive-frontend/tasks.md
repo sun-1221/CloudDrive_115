@@ -7,6 +7,7 @@
 ## 架构原则
 
 - **认证**：Cookie-based（后端注入），单账号模型，前端仅通过 `GET /api/auth/check` 查询登录态
+- **Cookie 安全与 CSRF**：后端负责 `Set-Cookie` 的 `HttpOnly` / `Secure` / `SameSite` 与状态变更请求 CSRF 防护；前端不读写会话 Cookie，仅按 OpenAPI 契约携带 CSRF 凭据
 - **DTO 契约**：前端从后端 `/openapi/v1.json` 自动生成 TypeScript 类型，字段 camelCase
 - **错误处理**：统一消费 `application/problem+json` ProblemDetails
 - **请求取消**：使用 `AbortController` / `AbortSignal`，不使用已废弃的 `CancelToken`
@@ -20,6 +21,13 @@
     - 测试：`vitest`、`@vue/test-utils`、`fast-check`、`@fast-check/vitest`、`@playwright/test`
     - _需求: 19.1_
     - _设计: §2.3 技术栈_
+
+  - [ ] 1.1.1 迁移旧前端入口与架构口径
+    - 删除旧 `/cloud-drive` 嵌套路由口径，统一为 design §3.3 的 `/files`、`/recycle`、`/offline`、`/share`、`/user`、`/login`
+    - 删除旧 `AuthCallbackPage`、OAuth/PKCE 回调路由与多账号入口
+    - 保留可复用 UI 组件时同步改名到 design 目录结构
+    - _需求: 19.2, 19.4_
+    - _设计: §现有 `web/` 代码迁移边界, §3.3 路由设计_
 
   - [ ] 1.2 配置 Tailwind CSS（Vite 插件方案）
     - 在 `vite.config.ts` 注册 `@tailwindcss/vite`
@@ -49,9 +57,10 @@
     - _设计: §6.2 前端 DTO 与后端契约对齐_
 
   - [ ] 2.2 定义业务扩展类型
-    - `src/types/index.ts` 导出 design §6.1 所有 DTO：`CloudDriveFileDto`、`CloudDriveBreadcrumbDto`、`CloudDriveFileListDto`、`CloudDriveRecycleItemDto`、`CloudDriveVideoPlayDto`、`CloudDriveSubtitleDto`、`CloudDriveOfflineTaskDto`、`CloudDriveOfflineQuotaDto`、`TaskStats`、`CloudDriveShareDto`、`CloudDriveUserInfoDto`、`CloudDriveVipInfoDto`、`CloudDriveBalanceDto`、`CloudDriveStorageDetailsDto`、`CloudDriveUserProfileDto`、`ProblemDetails`、`JobStatusDto`
-    - 业务扩展：`SortField`、`SortOption`、`FileFilter`、`SearchFilters`、`TaskStatusFilter`、`VideoDefinition`、`AuthCheckResult`、`SpaceSummary`
-    - _需求: 2.2, 2.3, 2.6, 4.7, 5.5, 5.6, 8.5, 15.4, 16.3, 17.3, 18.1, 18.2_
+    - `src/types/generated.ts` 作为后端 OpenAPI 生成 DTO 的唯一来源
+    - `src/types/index.ts` 仅导出前端业务扩展：`SortField`、`SortOption`、`FileFilter`、`SearchFilters`、`TaskStatusFilter`、`VideoDefinition`、`AuthCheckResult`、`SpaceSummary`
+    - 删除旧手写 DTO 中与 OpenAPI 生成字段冲突的 `name/isDirectory/thumbnailUrl/cloudAccountUid` 等旧口径
+    - _需求: 2.2, 2.3, 2.6, 4.7, 5.5, 5.6, 8.5, 15.4, 16.3, 17.3, 18.1, 18.2, 19.5, 19.6_
     - _设计: §6.1 共享 DTO_
 
 - [ ] 3. 主题系统与样式
@@ -99,15 +108,24 @@
 - [ ] 4. API 层（design §3.1 `api/`）
   - [ ] 4.1 Axios 实例 + 拦截器 + ProblemDetails 解析
     - `src/api/http.ts`
+    - baseURL 使用后端 integration `/api/*` 口径，不再使用旧 `/api/cloud-drive`
     - 响应拦截器：检测 `content-type: application/problem+json` → 委托 `ErrorHandlerService.handle()`
     - `AbortController` 取消的请求静默结束
     - Axios `timeout = 30000`
-    - _需求: 14.3, 14.5, 14.7, 18.1, 18.2_
+    - _需求: 14.3, 14.5, 14.7, 18.1, 18.2, 19.2, 19.3, 19.6_
     - _设计: §ErrorHandlerService_
+
+  - [ ] 4.1.1 会话 Cookie 与 CSRF 契约边界
+    - `src/api/http.ts` 禁止通过 `document.cookie` 读取/写入会话 Cookie，禁止把 Cookie、UID、CID、USSID 放入 query、header、`localStorage`、`sessionStorage` 或日志
+    - 对 `POST`、`PUT`、`PATCH`、`DELETE` 请求只按 OpenAPI 暴露的 CSRF header/token 契约自动附加；若 OpenAPI 未声明该契约，联调检查标记为后端阻塞项，不在前端自造 token
+    - 契约或 E2E 覆盖：缺失或错误 CSRF 凭据的状态变更请求由后端返回 `403` ProblemDetails，前端按统一错误处理展示
+    - _需求: 19.7, 19.8, 18.2_
+    - _设计: §2.2 架构决策, §6.2 前端 DTO 与后端契约对齐_
 
   - [ ] 4.2 authApi
     - `src/api/authApi.ts`：`check()` → `GET /api/auth/check`
-    - _需求: 1.1_
+    - 删除旧 `createPkceSession()`、`getAuthorizationUrl()`、`exchangeCode()`、`listAccounts()`、`disconnect()` API
+    - _需求: 1.1, 19.4_
     - _设计: §AuthStore_
 
   - [ ] 4.3 fileApi
@@ -168,6 +186,10 @@
     - _设计: §5.7 后台任务轮询（大文件上传、清空回收站）, §JobStatusDto（后台任务轮询）_
 
 - [ ] 5. 检查点 — 基础层验证
+  - 运行类型检查，确认基础路由、API 入口和 OpenAPI 类型生成脚本可解析
+  - 运行基础单元测试，确认现有可复用工具未被迁移破坏
+  - _需求: 19.1, 19.2, 19.5, 19.6_
+  - _设计: §2.3 技术栈, §6.2 前端 DTO 与后端契约对齐_
 
 - [ ] 6. 服务层（design §3.1 `services/`）
   - [ ] 6.1 ClipboardService
@@ -208,13 +230,21 @@
     - _需求: 14.5, 18.1, 18.2, 18.3, 18.4, 18.5, 18.6, 18.7, 18.8, 18.9, 18.10, 18.11_
     - _设计: §ErrorHandlerService_
 
+  - [ ] 6.4.1 ForegroundOperationGuard
+    - `src/services/foregroundOperationGuard.ts`
+    - 跟踪同步上传等前台进行中操作数量
+    - 操作进行中注册 `beforeunload` 与路由离开确认，完成后清理监听
+    - _需求: 14.8, 14.9_
+    - _设计: §ForegroundOperationGuard_
+
   - [ ] 6.5 FileOperationService（依赖后端 API 就绪）
     - `src/services/fileOperationService.ts`
     - 封装 `createFolder`、`rename`、`move`、`copy`、`delete`、`download`、`toggleStar` 调度
     - 202 Accepted `{ jobId }` → `jobsApi.poll(jobId, { intervalMs: 2000 })` 轮询终态
+    - 多文件下载逐个顺序触发
     - 检测浏览器阻止连续下载时，Toast 提示允许连续下载或改为手动下载
     - 文件名前端校验：拒绝空白、拒绝 `/\:*?"<>|`
-    - _需求: 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.10, 3.11, 4.2_
+    - _需求: 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 3.10, 3.11, 4.2_
     - _设计: §FileOperationService_
 
   - [ ] 6.5.1 属性测试：文件名校验
@@ -254,7 +284,8 @@
     - 状态：`isAuthenticated`、`user: CloudDriveUserInfoDto | null`、`spaceSummary: SpaceSummary | null`、`bootstrapStatus: 'idle'|'checking'|'ready'|'unauthenticated'`
     - Actions：`bootstrap()`（顺序调 checkAuth → fetchUserInfo → fetchSpaceSummary）、`checkAuth`、`fetchUserInfo`、`fetchSpaceSummary`、`clearSession`
     - Cookie 认证模型，无账号切换、无 OAuth、无 PKCE
-    - _需求: 1.1, 1.2, 1.4, 1.5_
+    - 删除旧 `currentAccountUid/accounts/authStatus/redirectToAuth/handleCallback/switchAccount` 状态与动作
+    - _需求: 1.1, 1.2, 1.4, 1.5, 19.4_
     - _设计: §AuthStore_
 
   - [ ] 8.2 FileStore
@@ -325,6 +356,10 @@
     - _设计: §UIStore 焦点与视图状态_
 
 - [ ] 9. 检查点 — 服务层与状态层验证
+  - 运行 AuthStore、FileStore、SearchStore 相关单元测试
+  - 确认旧 OAuth/PKCE、多账号状态与全局 JobStore 引用已清理或不再参与新架构入口
+  - _需求: 19.3, 19.4, 19.6_
+  - _设计: §现有 `web/` 代码迁移边界, §AuthStore_
 
 - [ ] 10. 通用组件
   - [ ] 10.1 SkeletonLoader
@@ -466,7 +501,8 @@
     - 下载：`download()` 触发浏览器下载，过期自动重试一次
     - 多文件下载：逐个调用
     - 大文件/批量 202 Accepted → `jobsApi.poll()` → 刷新
-    - _需求: 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.10, 3.11_
+    - 操作执行中更新前台进度指示，并接入 ForegroundOperationGuard
+    - _需求: 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 3.10, 3.11, 14.8_
     - _设计: §FileOperationService, §ConfirmDialog, §FolderPickerDialog_
 
   - [ ] 13.3 FolderPickerDialog
@@ -622,6 +658,10 @@
     - _设计: §DocViewer 组件_
 
 - [ ] 20. 检查点 — 预览组件验证
+  - 运行图片、视频、文档预览组件测试
+  - 手动验证临时资源一次重试和二次失败恢复入口
+  - _需求: 7.8, 7.9, 8.11, 9.5, 9.6_
+  - _设计: §ImageViewer 组件, §VideoPlayer 组件, §DocViewer 组件, §TemporaryResourceService（视频/图片共用）_
 
 - [ ] 21. 键盘快捷键集成（R13）
   - [ ] 21.1 FileBrowser 作用域快捷键
@@ -742,8 +782,9 @@
     - `NetworkStatusBanner` 监听 `navigator.onLine`
     - 页面切换保留搜索关键词、视图模式、排序方式（localStorage）
     - 前台操作（同步上传）注册 `beforeunload` 提示
-    - _需求: 14.2, 14.3, 14.4, 14.5, 14.6, 14.7, 14.9_
-    - _设计: §AuthGuard 组件（布局层）, §ErrorHandlerService, §NetworkStatusBanner 组件, §UIStore 焦点与视图状态_
+    - 文件操作执行中展示进度指示
+    - _需求: 14.2, 14.3, 14.4, 14.5, 14.6, 14.7, 14.8, 14.9_
+    - _设计: §AuthGuard 组件（布局层）, §ErrorHandlerService, §NetworkStatusBanner 组件, §ForegroundOperationGuard, §UIStore 焦点与视图状态_
 
   - [ ] 26.2 AbortController 取消请求
     - 搜索、无限滚动使用 `AbortController`
@@ -768,6 +809,13 @@
     - 终态（`completed`/`failed`）触发刷新或错误提示
     - _需求: 3.8, 6.5, 15.8_
     - _设计: §5.7 后台任务轮询（大文件上传、清空回收站）, §JobStatusDto（后台任务轮询）_
+
+  - [ ] 27.2 删除旧全局任务面板实现
+    - 删除 `JobStore`、`jobPollingService`、`TaskPanel` 及布局/移动导航入口
+    - 将异步任务完成后的刷新逻辑迁移到调用方的 `jobsApi.poll()` 回调中
+    - 确认云下载页面的 `OfflineStore`/`OfflineDownloadView` 保留页面内任务展示，不依赖全局任务面板
+    - _需求: 19.4_
+    - _设计: §现有 `web/` 代码迁移边界, §5.7 后台任务轮询（大文件上传、清空回收站）_
 
 - [ ] 28. 测试
   - [ ] 28.1 单元测试（Vitest）
@@ -806,6 +854,8 @@
   - 确保所有模块集成完毕，路由导航正常，文件操作、预览、搜索、回收站、云下载、分享、用户中心、键盘快捷键、响应式布局均可正常工作
   - 可访问性审核：WCAG AA 对比度
   - 性能审核：首屏加载、无限滚动流畅度、视频起播延迟
+  - _需求: 1.1, 2.1, 3.7, 5.2, 6.1, 7.1, 8.1, 9.1, 11.1, 12.1, 13.1, 14.1, 15.1, 16.1, 17.1, 18.1, 19.1_
+  - _设计: §9. 需求 ↔ 设计覆盖度检查, §8. 测试策略_
 
 ## 备注
 

@@ -149,7 +149,7 @@
     - 不依赖真实 115 API 即可验证 Cookie 加密/解密、失效冷却、名称校验、缓存命中/失效、缓存真实性、隔离维度与限流逻辑
     - 领域层仅包含实体、枚举、异常、仓储接口、领域事件和文件名验证器，无基础设施依赖
 
-- [ ] 4. 基础设施层 - HTTP 客户端、仓储与数据库
+- [x] 4. 基础设施层 - HTTP 客户端、仓储与数据库
   - [x] 4.1 创建 115 网页端 API 响应模型
     - 创建 `CloudDrive115WebResponse<T>` 通用响应包装类（`State`, `Data`, `Message`/`Msg`/`Error`, `Code`/`Errno`/`ErrCode`/`ErrNo`）；其中 `State` 属性使用 `BoolOrNumberJsonConverter` 兼容 bool(true/false) 与 number(0/1)；具体错误字段的选择由 `IErrorFieldAdapter` 按 URL 路径决定，响应模型本身仅以联合字段呈现
     - 创建各 API 端点的具体响应模型（文件列表、文件详情、下载地址、视频播放、字幕、回收站、云下载任务、分享列表、用户中心多源）
@@ -163,7 +163,7 @@
     - 构造函数注入 `CookieSessionManager`、`IErrorFieldAdapter`、`ICookieSignatureStrategy`、`ICloudDriveRateLimiter`、`IOptions<CloudDriveAppConfig>`、`ILogger<CloudDriveApiClient>`
     - _需求: 2, 17, 25_ _设计: §ICloudDriveOpenApiGateway / CloudDriveApiClient_
 
-  - [ ] 4.3 实现网页端与用户中心请求封装
+  - [x] 4.3 实现网页端与用户中心请求封装
     - 实现 `SendWebApiRequestAsync`：默认走 `WebApiBaseUrl`；按 `CloudDriveApiContext` 组装 query string 与 form/json body；通过 `CookieSessionManager.GetValidCookieHeaderAsync` 获取当前 Cookie 并注入请求头；调用 `ICloudDriveRateLimiter.AcquireAsync` 按场景限流
     - 实现 `SendUserCenterRequestAsync`：按 `context.TargetDomain` 路由到 `my.115.com` / `vip.115.com` / `pay.115.com`；注入 Cookie；对 VIP 响应中 `00_balance` 等数字开头字段归一化为 `Balance`
     - 实现 `LoginCheckHandler` / `LoginStatusProbe` 辅助：通过 `GET webapi.115.com/files?cid=0&limit=1` 的业务成功/失败结果判定登录态；失败结果进一步由 `IErrorFieldAdapter` 解析判断是否为 `login_required`
@@ -171,14 +171,14 @@
     - 对 `errNo=login_required` / HTTP 401 / HTTP 403 场景同步调用 `CookieSessionManager.MarkInvalidatedAsync` 进入冷却期并抛出 `CloudDriveCookieInvalidatedException`
     - _需求: 1, 3, 4, 5, 23, 25_ _设计: §ICloudDriveOpenApiGateway / CloudDriveApiClient, §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）, §CookieSessionManager_
 
-  - [ ] 4.4 实现云下载签名与上传请求封装
+  - [x] 4.4 实现云下载签名与上传请求封装
     - 实现 `SendOfflineApiRequestAsync`：默认走 `OfflineApiBaseUrl`；调用 `ICookieSignatureStrategy.GenerateAsync` 生成 `{ sign, time, uid }` 三元组，合并到 form body；在请求 URL 上追加 `?ct=lixian&ac={操作符}` 必需查询参数
     - 在 `ICookieSignatureStrategy` 未提供有效实现（默认 `NotImplementedCookieSignatureStrategy`）时抛出 `CloudDriveConfigurationException`，带 `offline_signature_not_available` 错误码
     - 实现 `UploadFileAsync`：对网页端上传链路返回的 OSS / multipart 上传凭证 URL 发送 `multipart/form-data`；不直接注入 Cookie（仅依赖上传接口返回的临时凭证）
     - 为后台任务恢复保留必要的上下文字段（`TempFilePath` 和官方返回的 `pick_code`）
     - _需求: 5, 20, 21, 26_ _设计: §6. 云下载模块 (Offline), §ICookieSignatureStrategy（云下载签名预留扩展点）, §ICloudDriveOpenApiGateway / CloudDriveApiClient_
 
-  - [ ] 4.5 实现错误映射、脱敏日志与 Polly 韧性策略
+  - [x] 4.5 实现错误映射、脱敏日志与 Polly 韧性策略
     - 复用框架层 Polly 配置基础，为各 Named HttpClient 配置幂等请求的有限重试、超时、熔断策略
     - 读请求（GET）应用重试 + 超时 + 熔断；写请求（POST/PUT/DELETE）仅超时 + 熔断，不自动重试
     - 同时处理 HTTP 错误和 HTTP 200 但业务错误码失败的场景；错误解析统一委托 `IErrorFieldAdapter.TryParse`
@@ -187,14 +187,14 @@
     - 实现 115 错误码到业务异常的映射逻辑：`login_required` → `CloudDriveCookieInvalidatedException`；频控错误码 → `CloudDriveRateLimitException`（同时回调 `ICloudDriveRateLimiter.RecordThrottleSignal`）；404 → `CloudDriveFileNotFoundException`；其他业务失败 → `CloudDriveApiException`
     - _需求: 1, 17, 25, 26_ _设计: §错误码映射, §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
 
-  - [ ] 4.6 实现 `ErrorFieldAdapter` 注册表与默认规则
+  - [x] 4.6 实现 `ErrorFieldAdapter` 注册表与默认规则
     - 实现 `IErrorFieldAdapter`；内部维护不可变 `IReadOnlyDictionary<string, ErrorFieldDescriptor>`，注册 `requirements.md:454-470` 覆盖的全部错误字段变体
     - 必须注册的 URL 模式（至少）：`/files/search`（`errCode` number + `errMsg`）、`/movies/subtitle`（大写 `errNo` + `error`）、`/user/vip_limit`（`code` string + `msg`）、`/user/index_info`（`code` string）、`pay.115.com/`（`msg` 非 `message`）、`/share/send`（`errNo` + fallback `errno`）、`/share/receive`（`errNo` + fallback `errno`）、`/share/slist`（`errNo`）、`115.com/web/lixian/`（`errcode` + `error_msg`）、`/rb` 回收站（`errNo` + `error`）、`/files`（`errNo` + `error`）以及 `/files/add`、`/files/edit` 等写入端点
     - 默认规则（未命中任一 URL 模式时）：读 `state` + `code` / `errno` + `message` / `error`；全部字段均缺失时仅以 HTTP 状态码判定成败，且标注 `unknown_error_shape` 错误码
     - 注册为 Singleton 生命周期，保证线程安全
     - _需求: 25_ _设计: §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
 
-  - [ ] 4.7 编写属性测试 - 错误码映射完整性
+  - [x] 4.7 编写属性测试 - 错误码映射完整性
     - **属性 P6: 错误码映射完整性**
     - 验证 `ErrorFieldAdapter` 对 12 种错误字段变体（`errNo` / `errCode` / `errno` / `code` / `msg` / `message` / `Message` / `err` / `error` / 大小写混用等）按 URL 路径正确解析
     - 验证 HTTP 401/403/404/429/500 与业务错误码均映射为正确的 `CloudDrive*Exception`
@@ -204,20 +204,20 @@
     - 验证未命中任何 URL 模式时返回带 `unknown_error_shape` 错误码的 `CloudDriveApiException` 并保留脱敏摘要
     - _需求: 1, 17, 25_
 
-  - [ ] 4.8 实现 SqlSugar CodeFirst 建表与实体映射
+  - [x] 4.8 实现 SqlSugar CodeFirst 建表与实体映射
     - 在应用启动时调用 `db.CodeFirst.InitTables<CookieSession>()` 和 `db.CodeFirst.InitTables<CloudDriveJob>()` 自动创建或更新表
     - 通过 `[SugarTable]`、`[SugarColumn(IsPrimaryKey = true)]`、`[SugarColumn(Length = ...)]` 等特性配置表名、主键、字段长度与索引
     - `CookieSession` 需为 `UserId + CloudAccountUid` 建立唯一索引；`EncryptedCookiePayload` 使用足够长度的 TEXT 列以容纳加密密文
     - _需求: 1, 21_ _设计: §CookieSession（聚合根 - 领域层）, §CloudDriveJob（聚合根 - 领域层）_
 
-  - [ ] 4.9 实现仓储类
+  - [x] 4.9 实现仓储类
     - 实现 `CookieSessionRepository`，独立实现 `ICookieSessionRepository` 接口（不继承框架 `Repository<,>` 基类，因其为 `internal sealed` 且未注入 `IDomainEventSource`），直接注入 `ISqlSugarClient` 和 `IDomainEventSource`，封装 CRUD 操作并扩展 `GetByAccountAsync`、`ListByUserAsync` 查询方法
     - 实现 `CloudDriveJobRepository`，独立实现 `ICloudDriveJobRepository` 接口，直接注入 `ISqlSugarClient` 和 `IDomainEventSource`，封装 CRUD 操作并扩展按 UserId 查询、按 Id 查询、按 Status 扫描方法
     - 仓储的 Insert/Update 操作后需调用 `IDomainEventSource.Track(entity)` 将实体注册到领域事件追踪集合，以便 `DomainEventDispatchBehavior` 在事务提交前自动分发领域事件
     - 注册为 Scoped 生命周期
     - _需求: 1, 21_ _设计: §CookieSession（聚合根 - 领域层）, §CloudDriveJob（聚合根 - 领域层）_
 
-  - [ ] 4.10 注册基础设施层依赖注入
+  - [x] 4.10 注册基础设施层依赖注入
     - 创建 `IServiceCollection` 扩展方法 `AddCloudDriveInfrastructure()`
     - 注册各 Named HttpClient（`Cloud115Web`、`Cloud115My`、`Cloud115Vip`、`Cloud115Pay`、`Cloud115Offline`）与 Polly 策略
     - 注册 `ICloudDriveOpenApiGateway` → `CloudDriveApiClient`
@@ -233,14 +233,14 @@
     - 确保 Data Protection key ring 在同一部署内可持久化复用，以保证服务重启后仍可解密既有 Cookie 和签名密钥
     - _需求: 1, 2, 17, 20, 25, 26_ _设计: §9. 基础设施组件_
 
-  - [ ] 4.11 实现 `CloudDriveRateLimiter` 基础设施类
+  - [x] 4.11 实现 `CloudDriveRateLimiter` 基础设施类
     - 实现 `ICloudDriveRateLimiter` 接口，基于令牌桶算法，注册为 Singleton
     - 内部通过 `ConcurrentDictionary<string, TokenBucket>` 按 `UserId + CloudAccountUid + Category` 维度键持有令牌桶实例，确保跨请求共享限流状态
     - 按用户 + 115 账号 + 场景维度限流，支持 Queue / Reject 超限策略与最大队列长度
     - 暴露 `RecordThrottleSignal` 接收 115 官方频控信号并触发退避
     - _需求: 17, 24_ _设计: §CloudDriveRateLimiter_
 
-  - [ ] 4.12 实现 `CloudDriveMetadataCache` 基础设施类
+  - [x] 4.12 实现 `CloudDriveMetadataCache` 基础设施类
     - 实现 `ICloudDriveMetadataCache` 接口，内部使用 `IDistributedCache` + `DistributedCacheExtensions`
     - 实现 `GetOrSetAsync`：缓存优先获取，未命中时调用 factory 并写入缓存
     - 实现 `InvalidateDirectoryAsync`：按用户 + 115 账号 + 目录维度使缓存失效
@@ -250,22 +250,22 @@
     - 支持通过 `CloudDriveAppConfig.CacheTtlSeconds` 配置 TTL
     - _需求: 20, 27_ _设计: §CloudDriveMetadataCache_
 
-  - [ ] 4.13 实现 `CloudDriveSensitiveFieldsFilter` 日志脱敏过滤器
+  - [x] 4.13 实现 `CloudDriveSensitiveFieldsFilter` 日志脱敏过滤器
     - 实现 `ILogFilter` 或 `ILoggerProvider` 包装器，在日志输出阶段统一替换 Cookie / UID / CID / USSID / 签名密钥 / `ExtraFields` 值为 `[REDACTED]`
     - 识别字段名（大小写不敏感）：`cookie`, `uid`, `cid`, `ussid`, `sign`, `signkey`, `password`, `encryptedcookiepayload` 以及 `CloudDriveAppConfig.CookieEncryptionKeyName` / `SignatureKeyName` 对应的密钥名
     - 对 HTTP 请求头 / 响应体 / 异常堆栈中的匹配位置均执行脱敏；保留用于定位问题的元数据（状态码、时间戳、请求 ID）
     - 对外响应与审计日志同样套用该过滤器，确保敏感字段不会泄漏到 ProblemDetails 响应
     - _需求: 26_ _设计: §P1: Cookie 安全性, §1. 认证与会话管理模块 (Auth)_
 
-- [ ] 5. 检查点 - 基础设施层完成验证
+- [x] 5. 检查点 - 基础设施层完成验证
   - 当前阶段通过条件：
     - 关键请求封装（网页端/用户中心/云下载/上传）、错误适配器、脱敏日志与 Polly 韧性策略的必做测试通过
     - SqlSugar CodeFirst 建表可正常执行（`CookieSession`、`CloudDriveJob`）
     - `ICloudDriveOpenApiGateway`、`IErrorFieldAdapter`、`ICookieInvalidationNotifier`、`ICookieSignatureStrategy`、仓储与 `CloudDriveAppConfig` 装配完成，可供应用层直接使用
     - `CloudDriveMetadataCache`、`CloudDriveRateLimiter`、`CloudDriveSensitiveFieldsFilter` 基础设施实现已完成并注册
 
-- [ ] 6. 应用层 - DTO 定义与手动映射
-  - [ ] 6.1 创建应用层 DTO
+- [x] 6. 应用层 - DTO 定义与手动映射
+  - [x] 6.1 创建应用层 DTO
     - 创建公共 DTO：`CloudDriveOperationResultDto`、`CloudDriveAccountScopedInput`
     - 创建分页与列表包装 DTO：`PagedResultDto<T>`、`ListResultDto<T>`（若框架基础设施未提供则在此创建）
     - 创建文件相关 DTO：`CloudDriveFileDto`、`CloudDriveFileDetailDto`、`CloudDrivePathNodeDto`、`CloudDriveFileLabelDto`、`CloudDriveSearchResultDto`、`CloudDriveDownloadDto`、`CloudDriveFolderDto`、`CloudDriveUploadSessionDto`、`CloudDriveUploadedFileDto`、`CloudDriveUploadExecutionDto`、`CloudDriveRecycleBinItemDto`
@@ -278,7 +278,7 @@
     - 不再创建 `CloudDriveTokenDto` 与 `CloudDrivePkceAuthorizationDto`（OAuth 方案遗留 DTO，Cookie 方案不使用）
     - _需求: 1, 3, 19, 20, 21, 22, 23_ _设计: §DTO 定义_
 
-  - [ ] 6.2 创建应用层输入 DTO 与 FluentValidation 验证器
+  - [x] 6.2 创建应用层输入 DTO 与 FluentValidation 验证器
     - 创建基础 Input：`CloudDriveAccountScopedInput`
     - 创建 Cookie 会话管理 Input：`UpsertCookieSessionInput`（`CloudAccountUid`、`Uid`、`Cid`、`Ussid`、`ExtraFields?`）、`EnterCookieCooldownInput`（继承 `CloudDriveAccountScopedInput`，含 `Reason`、`CooldownSeconds?`）、`RevokeCookieSessionInput`（继承 `CloudDriveAccountScopedInput`）
     - 创建文件 Input：`GetFileListInput`、`GetFileInput`、`CreateFolderInput`、`InitUploadInput`、`UploadFileInput`、`GetDownloadUrlInput`、`MoveFilesInput`、`CopyFilesInput`、`DeleteFilesInput`、`RenameFileInput`、`ClearRecycleBinInput`、`SearchFileInput`、`GetRecycleBinListInput`、`RecycleBinOperationInput`、`RefreshDirectoryInput`、`ToggleStarInput`
@@ -290,12 +290,12 @@
     - 为每个输入 DTO 创建对应的 `AbstractValidator<T>` 验证器，由框架 `ValidationBehavior` 自动拦截
     - _需求: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23_ _设计: §DTO 定义, §关键输入 DTO（节选）_
 
-  - [ ] 6.3 编写属性测试 - 临时资源标识
+  - [x] 6.3 编写属性测试 - 临时资源标识
     - **属性 P9: 临时资源标识**
     - 验证所有返回临时资源的 DTO（下载地址、预览地址、播放地址）在构造与映射为对外响应后均保持 `IsTemporary = true`
     - _需求: 6, 14, 15, 16_
 
-  - [ ] 6.4 创建手动映射扩展方法
+  - [x] 6.4 创建手动映射扩展方法
     - 为 115 网页端 API 响应模型 → 领域对象 → DTO 创建静态扩展方法 `ToDto()` / `ToEntity()`
     - 编译期可检查类型安全，无反射开销
     - 按模块组织映射扩展方法（`CookieMapping`、`FileMapping`、`PreviewMapping`、`VideoMapping`、`OfflineMapping`、`ShareMapping`、`UserAggregationMapping`、`JobMapping`）
@@ -304,7 +304,7 @@
     - **严禁使用 AutoMapper**（CD0004）
     - _需求: 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23_ _设计: §DTO 定义_
 
-  - [ ] 6.5 补充视频播放进度 DTO、输入 DTO 与验证器
+  - [x] 6.5 补充视频播放进度 DTO、输入 DTO 与验证器
     - 创建 `CloudDriveVideoPlayProgressDto`（含 `AddTime` 官方 add_time 时间戳）
     - 创建 `GetVideoPlayProgressInput` 与 `RememberVideoPlayProgressInput`
     - 创建 `GetVideoPlayProgressInputValidator` 与 `RememberVideoPlayProgressInputValidator`
@@ -313,8 +313,8 @@
     - 为 `CloudDriveRecycleBinItemDto` 补充 `RecycleBinItemId`（网页端 `id`，用于 `tid` 参数）和 `RestoreStatus`（网页端 `status`：-1=还原中, 0=正常），注意回收站 `type` 值域（1=文件,2=目录）与文件列表 `fc` 值域（0=文件夹,1=文件）反转
     - _需求: 11, 14, 15_ _设计: §视频相关 DTO, §DTO 定义_
 
-- [ ] 7. 应用层 - Cookie 会话管理 Command/Query Handler
-  - [ ] 7.1 实现运行时配置保护与 `UpsertCookieSessionCommandHandler`（运维端点）
+- [x] 7. 应用层 - Cookie 会话管理 Command/Query Handler
+  - [x] 7.1 实现运行时配置保护与 `UpsertCookieSessionCommandHandler`（运维端点）
     - 所有 Handler 入口处通过 `IOptions<CloudDriveAppConfig>` 检查 `CloudDriveFeatureEnabled`；为 `false` 时抛出 `CloudDriveConfigurationException`
     - 实现 `UpsertCookieSessionCommandHandler`：接收 `UpsertCookieSessionInput`（UID/CID/USSID + 可选 ExtraFields），委托 `CookieSessionManager.UpsertSessionAsync` 加密持久化
     - 成功后发布 `CookieSessionUpserted` 领域事件（由仓储 `Track(entity)` + `DomainEventDispatchBehavior` 自动分发）；Handler 内部不手动调用 `IMediator.Publish()`
@@ -322,7 +322,7 @@
     - 同步清理该账号上下文的元数据缓存（调用 `ICloudDriveMetadataCache.InvalidateDirectoryAsync` 清空根目录）与限流桶
     - _需求: 1, 2_ _设计: §1. 认证与会话管理模块 (Auth)_
 
-  - [ ] 7.2 实现 `GetLoginStatusQueryHandler`（登录态探测）
+  - [x] 7.2 实现 `GetLoginStatusQueryHandler`（登录态探测）
     - 通过调用 `GET webapi.115.com/files?cid=0&limit=1` 探测 Cookie 是否仍然可用
     - 判定规则：(1) 业务成功响应 → `IsLoggedIn = true`；(2) `IErrorFieldAdapter` 返回 `login_required` 或 HTTP 401/403 → `IsLoggedIn = false` 并触发 `EnterCookieCooldownCommand`；(3) 网络异常或未分类错误 → `IsLoggedIn = null`（未知状态），不触发冷却
     - 若当前 `CookieSession.Status == Invalidated` 且 `IsInCooldown()`，直接返回冷却状态快照，不发起官方探测请求
@@ -331,14 +331,14 @@
     - Query Handler 不触发写副作用（CD0007）；但状态更新通过内部调用 `EnterCookieCooldownCommand` 实现隔离（侧面触发副作用）
     - _需求: 3_ _设计: §1. 认证与会话管理模块 (Auth), §LoginCheckHandler（需求 3 登录态检测）_
 
-  - [ ] 7.3 实现 `EnterCookieCooldownCommandHandler`
+  - [x] 7.3 实现 `EnterCookieCooldownCommandHandler`
     - 接收 `EnterCookieCooldownInput`（含 `CloudAccountUid`、`Reason`、`CooldownSeconds?`）
     - 委托 `CookieSessionManager.EnterCooldownAsync`：调用聚合根 `EnterCooldown(cooldownSeconds)`，触发仓储 Update 以便 `CookieInvalidated` 领域事件经 `DomainEventDispatchBehavior` 自动分发
     - 冷却时长优先使用输入参数 `CooldownSeconds`，否则使用 `CloudDriveAppConfig.CookieCooldownSeconds`（默认 60 秒）
     - 用于 `CloudDriveApiClient` 侧面检测到 Cookie 失效时的内部状态同步，以及运维手动标记失效的入口
     - _需求: 1, 3_ _设计: §CookieSessionManager_
 
-  - [ ] 7.4 实现 `GetBoundAccountsQueryHandler`、`GetUserInfoQueryHandler` 与 `RevokeCookieSessionCommandHandler`
+  - [x] 7.4 实现 `GetBoundAccountsQueryHandler`、`GetUserInfoQueryHandler` 与 `RevokeCookieSessionCommandHandler`
     - 实现 `GetBoundAccountsQueryHandler`：基于当前用户的 `CookieSession` 记录返回已绑定 115 账号摘要列表（仅 `CloudAccountUid`、`Status`、`CreationTime`、`LastModificationTime`、`CooldownUntil`；**绝不包含 Cookie 原文**）
     - 实现 `GetUserInfoQueryHandler`：获取指定 `CloudAccountUid` 的 115 账号信息；委托 `UserAggregationService.AggregateUserInfoAsync` 并行调用 `webapi.115.com/user/info` + `webapi.115.com/user/vip_limit` + 其他多源接口
     - 实现 `RevokeCookieSessionCommandHandler`：接收 `RevokeCookieSessionInput`；委托 `CookieSessionManager.RevokeAsync`，标记 `CookieSession.Revoke()` 并清理关联缓存与限流桶；**不调用远程登出接口**（网页端无对应接口）
@@ -346,14 +346,14 @@
     - 若当前 `CookieSession.Status != Active`，`GetUserInfoQueryHandler` 返回明确的 `cookie_not_active` 业务错误，提示由运维重新注入 Cookie
     - _需求: 1, 3, 19, 23_ _设计: §CookieSessionManager, §8. 用户中心聚合模块 (UserAggregator)_
 
-  - [ ] 7.5 编写属性测试 - 配置完整性校验
+  - [x] 7.5 编写属性测试 - 配置完整性校验
     - **属性 P8: 配置完整性校验**
     - 验证 `CookieEncryptionKeyName`、`WebApiBaseUrl` 或（如启用云下载）`SignatureKeyName` 任一缺失时，`CloudDriveFeatureEnabled` 为 `false`
     - 验证 `CloudDriveFeatureEnabled == false` 时所有 Handler 方法抛出 `CloudDriveConfigurationException`
     - 验证正确配置下 `CloudDriveFeatureEnabled == true` 且 Handler 正常执行
     - _需求: 2_
 
-  - [ ] 7.6 编写 Cookie 会话多账号上下文单元测试
+  - [x] 7.6 编写 Cookie 会话多账号上下文单元测试
     - 验证 `UpsertCookieSessionCommandHandler` 写入 `CookieSession` 后 `CloudAccountUid` 与 `UserId` 双维度隔离，同一用户下不同账号互不影响
     - 验证 `RevokeCookieSessionCommandHandler` 仅影响指定 `CloudAccountUid` 的记录与缓存/限流桶，不波及其他账号
     - 验证 `GetBoundAccountsQueryHandler` 仅返回当前用户的 `CookieSession` 记录，不跨用户泄漏
@@ -389,29 +389,29 @@
     - 任务完成后失效源目录与目标目录缓存
     - _需求: 8, 9, 10, 11, 21, 27_ _设计: §5. 后台任务模块 (Quartz.NET Job), §CloudDriveJob（聚合根 - 领域层）_
 
-  - [ ] 8.4 实现 `CloudDriveClearRecycleBinJob` (Quartz IJob - Infrastructure 层)
+  - [x] 8.4 实现 `CloudDriveClearRecycleBinJob` (Quartz IJob - Infrastructure 层)
     - 实现 `IJob.Execute()`，处理清空回收站任务（通过 `webapi.115.com/rb/clean` 或需求采集中确认的等效端点）。Job 类定义在 Infrastructure 层
     - 记录任务状态与错误摘要
     - 任务完成后统一触发相关缓存失效
     - _需求: 11, 21, 27_ _设计: §5. 后台任务模块 (Quartz.NET Job)_
 
-  - [ ] 8.5 实现 `CloudDriveTranscodeJob` (Quartz IJob - Infrastructure 层)
+  - [x] 8.5 实现 `CloudDriveTranscodeJob` (Quartz IJob - Infrastructure 层)
     - 实现 `IJob.Execute()`，处理视频转码任务与状态回写：通过重复调用 `GET webapi.115.com/files/video?pickcode={pickcode}&share_id=0` 探测可播放性判断转码完成状态。Job 类定义在 Infrastructure 层
     - 记录任务状态、进度与错误摘要
     - 为播放接口返回 `Transcoding` 状态提供数据来源
     - _需求: 15, 21_ _设计: §5. 后台任务模块 (Quartz.NET Job), §4. 视频模块 (Video)_
 
-  - [ ] 8.6 实现 `GetJobStatusQueryHandler` 与 `GetJobListQueryHandler`
+  - [x] 8.6 实现 `GetJobStatusQueryHandler` 与 `GetJobListQueryHandler`
     - 实现 `GetJobStatusQueryHandler`：通过 `GetJobStatusInput` 查询任务状态，并校验 `jobId` 归属当前用户与账号上下文
     - 实现 `GetJobListQueryHandler`：获取任务列表；`cloudAccountUid` 为空时查询当前用户下全部账号任务，非空时按账号过滤
     - _需求: 21, 28_ _设计: §5. 后台任务模块 (Quartz.NET Job)_
 
-  - [ ] 8.7 实现后台任务审计与脱敏日志
+  - [x] 8.7 实现后台任务审计与脱敏日志
     - 记录任务创建、状态流转、错误、检查点摘要等可审计信息
     - 确保日志中不包含 Cookie / UID / CID / USSID / 云下载签名密钥等敏感信息明文（通过 `CloudDriveSensitiveFieldsFilter` 统一脱敏）
     - _需求: 26, 28_ _设计: §1. 认证与会话管理模块 (Auth), §5. 后台任务模块 (Quartz.NET Job)_
 
-  - [ ] 8.8 实现后台任务启动恢复协调服务
+  - [x] 8.8 实现后台任务启动恢复协调服务
     - 应用启动时扫描 `CloudDriveJob` 中处于 `Pending` / `Running` 状态的任务记录
     - 对具备 `PayloadJson` + `CheckpointData` 或明确安全重试条件的任务重新调度到 Quartz
     - 对不可恢复任务标记为 `Failed` 并记录失败原因，避免任务永久悬挂

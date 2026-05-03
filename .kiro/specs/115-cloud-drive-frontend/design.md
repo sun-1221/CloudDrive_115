@@ -8,6 +8,8 @@
 
 > **架构决策**：前端**不直连 115 网页端 API**，不涉及 Cookie 注入、签名生成、数据归一化、错误字段适配、频控重试等底层细节。所有这些责任由后端 integration 服务（.NET 10 DDD + CQRS）承担。前端仅消费标准化 ProblemDetails 错误响应与归一化 DTO。
 
+> **Cookie 安全边界**：Cookie-based 不是自动安全机制。后端负责 `Set-Cookie` 安全属性（`HttpOnly`、`Secure`、`SameSite`）与状态变更请求 CSRF 防护；前端不读取或写入会话 Cookie，只按 OpenAPI 契约携带后端要求的 CSRF header/token。
+
 > **设计权威边界**：本设计的所有组件、数据模型、接口调用必须能追溯到 `requirements.md` 中的具体需求条目。前端 API 契约 SHALL 与后端 OpenAPI 规范（`/openapi/v1.json`）自动生成的 TypeScript 类型对齐。
 
 > **数据源权威性**：前端消费的是**后端归一化后的 DTO**（`CloudDriveFileDto`、`CloudDriveVideoPlayDto` 等），字段名使用 camelCase（`fileId`、`pickCode`），无需处理网页端短字段名或字段名大小写差异。
@@ -59,6 +61,7 @@ flowchart TB
 | 决策 | 方案 | 覆盖需求 |
 |------|------|----------|
 | 认证方式 | Cookie 由后端管理，前端仅通过 `GET /api/auth/check` 查询登录态 | _覆盖需求: 19.2, 19.3, 1.1_ |
+| Cookie 与 CSRF 安全边界 | 后端设置会话 Cookie 安全属性并校验状态变更请求的 CSRF 防护；前端不管理 Cookie，仅按 OpenAPI 契约携带 CSRF 凭据 | _覆盖需求: 19.7, 19.8_ |
 | 多账号 | **不支持**，单账号模型（后端维护） | _覆盖需求: 19.4_ |
 | 业务逻辑位置 | **后端承担所有 115 API 交互**（Cookie、签名、归一化、频控、错误适配）；前端纯消费 | _覆盖需求: 19.2, 19.3_ |
 | 签名生成 | 后端 `SignatureService` 负责，前端**不涉及** | _覆盖需求: 19.3_ |
@@ -82,6 +85,8 @@ flowchart TB
 | 文档 | PDF.js | 4.9 | 显式配置 worker |
 | 构建 | Vite | 6.2 | ESM + HMR |
 | 类型生成 | `openapi-typescript` | 7.x | 从后端 `/openapi/v1.json` 生成类型 |
+
+_覆盖需求: 19.1_
 
 ---
 
@@ -174,11 +179,23 @@ _覆盖需求: 1.3, 1.6_
 | 已删除 | 原因 | 覆盖需求 |
 |--------|------|----------|
 | `authStore.currentAccountUid` / 多账号逻辑 | 单账号模型（后端维护） | _覆盖需求: 19.4_ |
-| `jobStore.ts` + `jobPollingService.ts` | 任务面板已移除，改为按需调用 `/api/jobs/{jobId}` | _覆盖需求: 10 [已删除]_ |
+| `jobStore.ts` + `jobPollingService.ts` | 全局任务面板已移除，改为按需调用 `/api/jobs/{jobId}`；该删除属于 R10 架构决策，不作为有效需求追溯编号 |
 | `proxyConfig.ts` / `server/` 代理层 | 代理层移至后端 integration 服务 | _覆盖需求: 19.2, 19.3_ |
 | OAuth / PKCE 相关代码 | Cookie 认证由后端处理 | _覆盖需求: 19.4_ |
 | Cookie 注入、签名生成相关代码 | 由后端承担 | _覆盖需求: 19.3_ |
 | per-endpoint 错误字段适配器 | 后端已归一化为 ProblemDetails | _覆盖需求: 18.1, 18.2, 18.3, 18.4, 18.5, 18.6, 18.7, 18.8, 18.9, 18.10, 18.11_ |
+
+#### 现有 `web/` 代码迁移边界
+
+当前仓库 `web/` 仍存在旧版 OAuth/PKCE、多账号、`CloudAccountUid`、全局 `JobStore`/`TaskPanel` 与 `/api/cloud-drive` API 前缀实现。本 spec 以 Cookie 单账号与后端 integration `/api/*` 归一化契约为目标架构，因此执行阶段必须先完成以下迁移：
+
+- 删除 `AuthCallbackPage`、OAuth/PKCE 回调、`createPkceSession()`、`exchangeCode()`、`listAccounts()`、`switchAccount()` 与 `currentAccountUid` 状态
+- 将 `AuthStore` 收敛为 `isAuthenticated/user/spaceSummary/bootstrapStatus`，登录态仅通过 `GET /api/auth/check` 与用户信息端点恢复
+- 将 API baseURL 从旧 `/api/cloud-drive` 口径迁移为后端 integration 的 `/api/*` 端点口径
+- 删除全局 `JobStore`、`jobPollingService`、`TaskPanel` 及布局/移动导航中的入口；202 Accepted 响应由调用方通过 `jobsApi.poll(jobId)` 按需轮询
+- 将手写 DTO 替换为 `openapi-typescript` 生成类型，并在 `types/index.ts` 仅保留前端扩展类型
+
+_覆盖需求: 19.2, 19.3, 19.4, 19.5, 19.6_
 
 ---
 
@@ -518,6 +535,12 @@ _覆盖需求: 1.3, 1.6_
 - **日志脱敏**：手机号、邮箱、Cookie、令牌严禁写入日志
 - **重试上限**：同一操作默认 1 次
 - **覆盖需求**：_覆盖需求: 14.4, 14.5, 14.7, 18.1, 18.2, 18.3, 18.4, 18.5, 18.6, 18.7, 18.8, 18.9, 18.10, 18.11_
+
+#### ForegroundOperationGuard
+- **职责**：跟踪同步上传等前台进行中操作，并在用户关闭标签页、刷新或离开路由前触发保护提示
+- **状态**：`activeOperationCount: number`、`operationLabels: string[]`
+- **行为**：有前台进行中操作时注册 `beforeunload`；操作完成或取消后移除监听；路由切换时通过 Router guard 触发确认
+- **覆盖需求**：_覆盖需求: 14.8, 14.9_
 
 #### NetworkStatusBanner 组件
 - **职责**：网络离线时顶部固定条
@@ -1172,10 +1195,12 @@ _覆盖需求: 3.8, 14.8_
 | 值域枚举 | 消费字符串枚举 | 将数值枚举（如 status -1/0/1/2）归一化为字符串 |
 | 签名生成 | **不涉及** | 生成云下载 `sign + time + uid` |
 | Cookie 注入 | **不涉及** | 注入 `UID/CID/USSID` |
+| 会话 Cookie 安全属性 | 不读取、不写入、不覆盖 | `Set-Cookie` 设置 `HttpOnly`、`Secure`、`SameSite=Lax` 或 `SameSite=Strict`；跨站例外才使用 `SameSite=None; Secure` |
+| CSRF 防护 | 仅按 OpenAPI 契约携带后端暴露的 CSRF header/token，不自造 token | 对状态变更请求校验 CSRF token 或等效 `Origin`/`Referer`/Fetch Metadata 防护，失败返回 `403` ProblemDetails |
 
 > **原则**：前端严格遵守「只消费、不解析」的契约边界。若发现后端 DTO 与后端 requirements 不一致，应提 issue 给 integration spec 修正，而非前端自行适配。
 
-_覆盖需求: 19.5, 19.6_
+_覆盖需求: 19.5, 19.6, 19.7, 19.8_
 
 ---
 
@@ -1310,7 +1335,7 @@ _覆盖需求: 19.5_
 | 16. 分享管理 | §4.15 ShareStore + ShareManagementView |
 | 17. 用户中心 | §4.16 UserCenterStore + UserCenterView |
 | 18. 通用错误处理 | §4.13 ErrorHandlerService + §7 错误处理策略 |
-| 19. 前端架构与契约边界 | §2.2 架构决策 + §3.2 数据流向 + §6.2 前端 DTO 与后端契约对齐 |
+| 19. 前端架构与契约边界 | §2.2 架构决策 + §2.3 技术栈 + §3.2 数据流向 + §3.4 现有代码迁移边界 + §6.2 前端 DTO 与后端契约对齐 |
 
 **覆盖度检查结果**：18 个有效需求模块 100% 覆盖（需求 10 为架构决策删除）。
 
@@ -1344,13 +1369,14 @@ _覆盖需求: 19.5_
 ## 11. 关键实现注意事项
 
 1. **前端不涉及 Cookie 管理**：Cookie 由后端 integration 服务注入 115 API 请求，前端仅通过 `GET /api/auth/check` 查询登录态
-2. **前端不涉及签名生成**：云下载签名 (`sign + time + uid`) 由后端 `SignatureService` 承担
-3. **前端不处理错误字段变体**：后端 `ExceptionHandlingMiddleware` 已将 9 种 115 错误格式统一转换为 ProblemDetails
-4. **OpenAPI 类型生成**：在 CI 中执行 `openapi-typescript http://localhost:5000/openapi/v1.json -o src/types/generated.ts`，确保前端类型与后端契约同步
-5. **敏感字段边界**：后端已过滤 34 个隐私字段（手机号、邮箱、住址、生日、职业、兴趣等），前端 SHALL **严禁**假设这些字段存在；开发环境若意外收到，记录警告并提 issue
-6. **视频 VIP 检测**：后端在 `CloudDriveVideoPlayDto` 中返回 `vipUpgradeRequired: true` 标志，前端据此展示升级引导
-7. **图片 `originalUrl` 时效性**：使用 `TemporaryResourceService` 做过期检测与一次重试；若 URL 过期，前端重新调用 `GET /api/files/{pickCode}/preview`
-8. **回收站数据结构**：后端已处理动态键（文件 ID 为键），前端直接消费 `CloudDriveRecycleItemDto[]`
-9. **大文件/批量操作 202 处理**：后端返回 `202 Accepted { jobId }` 时，前端调用 `jobsApi.poll(jobId)` 轮询 `GET /api/jobs/{jobId}`
-10. **分页硬上限由后端校验**：前端默认 `limit=50`，若超限后端返回 400 ProblemDetails，前端展示友好错误
-11. **DTO 契约边界原则**：前端严格遵守「只消费、不解析」。若发现后端 DTO 与 integration requirements 不一致，应提 issue 给后端修正，不在前端自行适配
+2. **Cookie 安全与 CSRF 属于后端契约**：后端必须设置会话 Cookie 的 `HttpOnly`、`Secure`、`SameSite` 属性，并保护状态变更请求；前端只按 OpenAPI 暴露的 CSRF header/token 契约发送请求
+3. **前端不涉及签名生成**：云下载签名 (`sign + time + uid`) 由后端 `SignatureService` 承担
+4. **前端不处理错误字段变体**：后端 `ExceptionHandlingMiddleware` 已将 9 种 115 错误格式统一转换为 ProblemDetails
+5. **OpenAPI 类型生成**：在 CI 中执行 `openapi-typescript http://localhost:5000/openapi/v1.json -o src/types/generated.ts`，确保前端类型与后端契约同步
+6. **敏感字段边界**：后端已过滤 34 个隐私字段（手机号、邮箱、住址、生日、职业、兴趣等），前端 SHALL **严禁**假设这些字段存在；开发环境若意外收到，记录警告并提 issue
+7. **视频 VIP 检测**：后端在 `CloudDriveVideoPlayDto` 中返回 `vipUpgradeRequired: true` 标志，前端据此展示升级引导
+8. **图片 `originalUrl` 时效性**：使用 `TemporaryResourceService` 做过期检测与一次重试；若 URL 过期，前端重新调用 `GET /api/files/{pickCode}/preview`
+9. **回收站数据结构**：后端已处理动态键（文件 ID 为键），前端直接消费 `CloudDriveRecycleItemDto[]`
+10. **大文件/批量操作 202 处理**：后端返回 `202 Accepted { jobId }` 时，前端调用 `jobsApi.poll(jobId)` 轮询 `GET /api/jobs/{jobId}`
+11. **分页硬上限由后端校验**：前端默认 `limit=50`，若超限后端返回 400 ProblemDetails，前端展示友好错误
+12. **DTO 契约边界原则**：前端严格遵守「只消费、不解析」。若发现后端 DTO 与 integration requirements 不一致，应提 issue 给后端修正，不在前端自行适配

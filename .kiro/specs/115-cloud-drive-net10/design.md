@@ -65,7 +65,7 @@
 _覆盖需求: 1_
 
 ```
-src/
+Server/src/
 ├── Domain/                          # 领域层
 │   ├── Entities/                    # 实体基类与聚合根
 │   ├── Enums/                       # 领域枚举
@@ -192,7 +192,7 @@ sequenceDiagram
         Transaction->>Handler: 执行 Handler
         Handler->>Domain: 调用领域服务
         Domain->>Repo: 持久化
-        Domain->>Events: 发布领域事件
+        Domain->>Events: 收集纯领域事件
         Transaction-->>MediatR: 提交事务
     else Query（读操作）
         MediatR->>Handler: 执行 Handler
@@ -246,7 +246,7 @@ _覆盖需求: 5_
 _覆盖需求: 6_
 
 - 使用 `AddQuartz()` + `AddQuartzHostedService()` 注册
-- `UseMicrosoftDependencyInjectionJobFactory()` 确保每个 Job 在独立 DI Scope 中执行
+- 使用 Quartz.Extensions.DependencyInjection 默认启用的 Microsoft DI JobFactory 或等效机制，确保每个 Job 可通过 DI 在独立 Scope 中解析依赖
 - Job 通过 `JobDataMap` 传递 `JobId`，从数据库加载业务载荷
 - 首期使用内存 JobStore；生产环境推荐配置 AdoJobStore 持久化
 - `JobDataMap` 仅携带最小调度标识（如 `JobId`）；具体业务载荷与恢复检查点由 Job 通过持久化存储加载
@@ -260,7 +260,7 @@ _覆盖需求: 7_
 - 提供 `DistributedCacheExtensions` 封装 JSON 序列化/反序列化
 - 封装 `GetOrSetAsync<T>()` 方法：缓存命中直接返回，未命中调用 factory 并写入
 - 支持配置默认 TTL
-- 开发环境使用 `AddDistributedMemoryCache()`，生产环境使用 `AddStackExchangeRedisCache()`
+- 开发环境使用 `AddDistributedMemoryCache()`；生产环境可按部署需要另行引入 Redis 等 `IDistributedCache` 提供程序
 - 业务模块应通过 Application 层抽象封装缓存访问，避免在 Application 层直接依赖 `IDistributedCache`
 
 ### 4. FluentValidation + MediatR 集成
@@ -302,12 +302,44 @@ _覆盖需求: 11_
 
 _覆盖需求: 12_
 
-- `Program.cs` 通过 `AddInfrastructure()`、业务模块扩展方法与 `AddJwtAuthentication()` 等扩展方法集中完成服务注册
-- 全局异常中间件 `UseExceptionHandling()` 最先注册，开发环境再启用 Swagger
+- `Program.cs` 通过 `AddApplicationServices()`、`AddSqlSugar()`、`AddRepositories()`、`AddCaching()`、`AddQuartzJobs()`、`AddSecretsProtection()`、业务模块扩展方法与 `AddJwtAuthentication()` 等扩展方法集中完成服务注册
+- 全局异常中间件 `UseExceptionHandling()` 最先注册，开发环境再启用 `MapOpenApi()`
 - 需要用户上下文的 API 应启用 `UseAuthentication()` / `UseAuthorization()`，并由受保护端点显式声明认证要求
 - 若业务模块需要持久化保护 AccessToken、RefreshToken、AppSecret 等机密值，基础设施应支持基于 ASP.NET Core Data Protection 的 Protect / Unprotect，并保证 key ring 可持久化复用
 
 ---
+
+## 数据模型
+
+_覆盖需求: 1, 2, 4, 5, 7, 8, 10, 11, 12_
+
+本框架层 spec 的数据模型以基础类型、接口和约定为主，具体业务实体由后续业务 spec 定义。
+
+- Domain 层定义 `Entity<TId>` / `AggregateRoot<TId>` 基类，实体通过 `AddDomainEvent()` 收集纯领域事件，并通过 `DomainEvents` 只读集合暴露给应用层管道
+- Domain 层定义 `DomainEvent` 抽象基类；Application 层通过 `DomainEventNotification<TDomainEvent>` 将纯领域事件包装为 MediatR 通知
+- Domain 层定义 `Result` / `Result<T>` / `Error` 作为 Handler 统一返回模型
+- Domain 层定义 `IRepository<TEntity, TId>` 仓储接口；Infrastructure 层通过 `Repository<TEntity, TId>` 基类实现常用 CRUD
+- Application 层定义 `ICommand` / `ICommand<TResponse>` / `IQuery<TResponse>` 以及对应 Handler 接口，统一接入 MediatR Pipeline
+- Infrastructure 层定义 `DistributedCacheExtensions`、`SqlSugarSetup`、`QuartzSetup`、`HttpClientSetup`、`ValidationSetup`、`SecretsSetup` 等基础设施扩展点
+
+## 错误处理
+
+_覆盖需求: 8, 10_
+
+- `ValidationBehavior` 在 Handler 执行前抛出 `ValidationException`，由 `ExceptionHandlingMiddleware` 映射为 HTTP 400 + 字段级错误详情
+- 业务异常由 `ExceptionHandlingMiddleware` 按异常类型映射为 400/401/404/429/502/503 等状态码
+- 未知异常统一映射为 HTTP 500；生产环境隐藏内部异常详情，仅写入日志
+- `Result.Failure(...)` 由 WebApi 适配层转换为非 2xx `ProblemDetails` 响应，不允许以 HTTP 200 表示失败
+
+## 测试策略
+
+_覆盖需求: 3, 4, 5, 7, 8, 10, 11_
+
+- Domain 层使用属性测试验证实体领域事件收集、清空与领域基类行为
+- Application 层使用属性测试验证 LoggingBehavior、ValidationBehavior、TransactionBehavior 与 DomainEventDispatchBehavior
+- Infrastructure 层使用属性测试验证 Repository CRUD 往返、缓存序列化往返与 HTTP 请求构造约定
+- WebApi 层使用属性测试验证异常状态码映射、日志记录与 `Result.Failure(...)` 到 `ProblemDetails` 的非 2xx 映射
+- 检查点任务要求在关键里程碑运行构建与测试，确保增量变更可验证
 
 ## 依赖
 
@@ -319,11 +351,13 @@ _覆盖需求: 12_
 | Quartz.NET | 后台任务调度 |
 | Quartz.Extensions.DependencyInjection | Quartz DI 集成 |
 | Quartz.Extensions.Hosting | Quartz HostedService |
-| FluentValidation.AspNetCore | 输入验证 |
+| FluentValidation | 输入验证规则 |
 | FluentValidation.DependencyInjectionExtensions | 验证器自动注册 |
-| Microsoft.Extensions.Caching.StackExchangeRedis | Redis 分布式缓存（生产） |
-| Microsoft.Extensions.Http.Polly | HTTP 韧性策略 |
-| Polly | 重试/超时/熔断 |
+| Microsoft.Extensions.Caching.Abstractions | 分布式缓存抽象 |
+| Microsoft.Extensions.Caching.Memory | 开发环境内存缓存实现 |
+| Microsoft.Extensions.Http.Resilience | HTTP 韧性管道集成 |
+| Polly | 重试、超时、熔断策略 |
+| Microsoft.AspNetCore.OpenApi | 开发环境 OpenAPI 文档 |
 | System.Text.Json | JSON 序列化（内置） |
 | ASP.NET Core Data Protection | 机密值保护与 key ring 管理 |
 

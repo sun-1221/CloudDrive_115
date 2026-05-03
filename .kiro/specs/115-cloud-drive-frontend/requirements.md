@@ -8,6 +8,8 @@
 
 > **鉴权说明：** 采用 Cookie-based 认证（由后端统一注入），前端**无需处理** Cookie、UID、CID、USSID、签名等敏感参数。登录态通过 `GET /api/auth/check` 端点查询。单账号模型，无多账号切换。
 
+> **Cookie 安全边界：** Cookie-based 仅说明会话承载方式，不代表自动具备安全防护。后端 integration 服务 SHALL 对会话 Cookie 设置 `HttpOnly`、`Secure` 与明确的 `SameSite` 策略，并对状态变更请求实施 CSRF 防护；前端不得读取、写入或覆盖会话 Cookie。
+
 > **API 契约权威性：** 本 spec 依赖的后端 `/api/*` 端点契约以 `.kiro/specs/115-cloud-drive-integration/requirements.md`（版本基线：2026-04-08 采集）为准。前端 DTO SHALL 与 OpenAPI 规范（`/openapi/v1.json`）同步生成 TypeScript 类型。
 
 > **文档版本基线：** 本需求文档对齐后端 integration spec 的 30 条需求。后续增量审核以此基线为锚。
@@ -149,8 +151,8 @@
 6. THE Search_Bar SHALL 支持按日期范围筛选，对应后端 `date` 参数（`YYYY-MM-DD` 格式）
 7. THE Search_Bar SHALL 支持在当前目录或全局搜索切换，对应后端 `cid` 参数
 8. WHEN 用户输入关键词长度 ≥2 字符时，THE Search_Bar SHALL 在 200ms 防抖后展示匹配的搜索历史记录与建议，历史记录存储于 localStorage 最多保留 20 条
-9. IF 搜索关键词为空，THEN 提示"请输入搜索关键词"并阻止提交
-10. IF 后端返回 HTTP 400（offset+limit 超限或关键词空白），THEN 通过 Toast_Notification 展示错误
+9. IF 搜索关键词为空，THEN THE Search_Bar SHALL 提示"请输入搜索关键词"并阻止提交
+10. IF 后端返回 HTTP 400（offset+limit 超限或关键词空白），THEN THE Frontend_App SHALL 通过 Toast_Notification 展示错误
 11. WHEN 点击"返回浏览"时，THE File_Browser SHALL 恢复搜索前的目录状态
 
 ### 6. 回收站管理
@@ -167,7 +169,7 @@
 4. WHEN 用户单击彻底删除时，THE Confirm_Dialog SHALL 要求确认后调用 `DELETE /api/recycle/{id}` _（待后端 API 就绪）_
 5. WHEN 用户单击清空回收站时，THE Confirm_Dialog SHALL 要求确认后调用 `DELETE /api/recycle` _（待后端 API 就绪；响应约定：HTTP 202 Accepted + `{ jobId }` 用于后续轮询）_
 6. THE Recycle_Bin_View SHALL 支持分页加载（`offset` + `limit`，最大 200）
-7. IF 操作失败，THEN 通过 Toast_Notification 展示 ProblemDetails `detail` 字段
+7. IF 操作失败，THEN THE Frontend_App SHALL 通过 Toast_Notification 展示 ProblemDetails `detail` 字段
 
 ### 7. 图片预览
 
@@ -182,8 +184,8 @@
 5. THE Image_Preview SHALL 在顶部展示当前图片索引（如 "3 / 15"）和文件名
 6. WHEN 按 Esc 或点击背景时，THE Image_Preview SHALL 关闭
 7. WHEN 按 Space 键时，THE Image_Preview SHALL 切换全屏模式
-8. IF 图片加载失败，THEN 自动重试一次（因 URL 可能过期）
-9. IF 重试后仍失败，展示错误占位图和"重试"按钮
+8. IF 图片加载失败，THEN THE Image_Preview SHALL 自动重试一次（因 URL 可能过期）
+9. IF 重试后仍失败，THEN THE Image_Preview SHALL 展示错误占位图和"重试"按钮
 
 ### 8. 视频播放器
 
@@ -198,10 +200,10 @@
 5. THE Video_Player SHALL 根据 `availableDefinitions` 提供清晰度选择菜单；枚举：SD=1/HD=2/FHD=3/FullHD=4/UHD4K=5/Original=100
 6. WHEN 切换清晰度时，THE Video_Player SHALL 保持播放进度
 7. THE Video_Player SHALL 调用 `GET /api/videos/{pickCode}/subtitles` 获取字幕列表，展示 `language/title`；支持切换
-8. IF 无可用字幕，THEN 隐藏字幕控件或展示"无字幕"，不视为错误
-9. IF 后端返回 `status: 'transcoding'`，THEN 展示"视频转码中，请稍后刷新"提示和"刷新状态"按钮
-10. IF 后端返回 `vipUpgradeRequired: true`，THEN 展示"升级 VIP 以观看此清晰度"引导
-11. WHEN 按 Esc 或关闭时，停止播放并关闭
+8. IF 无可用字幕，THEN THE Video_Player SHALL 隐藏字幕控件或展示"无字幕"，不视为错误
+9. IF 后端返回 `status: 'transcoding'`，THEN THE Video_Player SHALL 展示"视频转码中，请稍后刷新"提示和"刷新状态"按钮
+10. IF 后端返回 `vipUpgradeRequired: true`，THEN THE Video_Player SHALL 展示"升级 VIP 以观看此清晰度"引导
+11. WHEN 用户按 Esc 或关闭播放器时，THE Video_Player SHALL 停止播放并关闭
 12. WHEN `GET /api/videos/{pickCode}/history` 返回有效播放进度时，THE Video_Player SHALL 从上次位置继续观看 _（待后端 API 就绪）_
 13. IF 无播放历史记录或 API 返回 404，THEN THE Video_Player SHALL 从 00:00 开始播放
 14. THE Frontend_App SHALL 每 30 秒调用 `POST /api/videos/{pickCode}/history` 保存播放进度 _（待后端 API 就绪）_
@@ -213,11 +215,11 @@
 #### 验收标准
 
 1. WHEN 用户点击 PDF 或 TXT 文件时，THE Document_Preview SHALL 调用 `GET /api/documents/{pickCode}/preview` 获取预览地址
-2. IF 响应 `renderMode: 'Direct'`（PDF/TXT），THEN 前端使用 `<iframe>` 或内置 PDF.js 渲染
-3. IF 响应 `renderMode: 'ThirdParty'`（Office 格式），THEN 前端集成第三方渲染库（待配置）
-4. IF 响应 `renderMode: 'NotAvailable'`，THEN 展示"预览服务未配置，请下载后查看"
-5. IF 文档加载失败，THEN 自动重试一次
-6. IF 重试后仍失败，展示"重试"和"下载"按钮
+2. IF 响应 `renderMode: 'Direct'`（PDF/TXT），THEN THE Document_Preview SHALL 使用 `<iframe>` 或内置 PDF.js 渲染
+3. IF 响应 `renderMode: 'ThirdParty'`（Office 格式），THEN THE Document_Preview SHALL 集成第三方渲染库（待配置）
+4. IF 响应 `renderMode: 'NotAvailable'`，THEN THE Document_Preview SHALL 展示"预览服务未配置，请下载后查看"
+5. IF 文档加载失败，THEN THE Document_Preview SHALL 自动重试一次
+6. IF 重试后仍失败，THEN THE Document_Preview SHALL 展示"重试"和"下载"按钮
 
 ### 10. [已删除] 全局任务面板
 
@@ -235,7 +237,7 @@
 4. THE Frontend_App SHALL 在交互元素上使用平滑过渡动画（不超过 300ms）
 5. THE Theme_Controller SHALL 支持主题切换（暗色/亮色），偏好保存至 localStorage
 6. THE Frontend_App SHALL 对文件类型使用差异化颜色编码图标
-7. IF 用户启用减少动态效果偏好（`prefers-reduced-motion`），THEN 降级或禁用非必要动画
+7. IF 用户启用减少动态效果偏好（`prefers-reduced-motion`），THEN THE Frontend_App SHALL 降级或禁用非必要动画
 
 ### 12. 响应式布局
 
@@ -261,8 +263,8 @@
 3. THE Keyboard_Manager SHALL 支持 Backspace 返回上级目录
 4. THE Image_Preview SHALL 支持左右方向键切换图片
 5. THE Video_Player SHALL 支持以下快捷键：Space 播放/暂停；左/右方向键快退/快进 10 秒；上/下方向键调节音量（每次 ±5%）
-6. IF 处于可编辑状态，THEN 暂停文件操作快捷键
-7. IF File_Browser 未获焦或焦点在输入控件内，THEN 禁用文件浏览器快捷键；Backspace 不触发浏览器后退
+6. IF 处于可编辑状态，THEN THE Keyboard_Manager SHALL 暂停文件操作快捷键
+7. IF File_Browser 未获焦或焦点在输入控件内，THEN THE Keyboard_Manager SHALL 禁用文件浏览器快捷键，并阻止 Backspace 触发浏览器后退
 
 ### 14. 加载状态与错误处理
 
@@ -273,12 +275,12 @@
 1. WHILE 数据加载中，THE Skeleton_Loader SHALL 展示骨架屏
 2. THE Frontend_App SHALL 使用 Toast_Notification 展示非阻断性提示（成功/错误/警告/信息）
 3. THE Frontend_App SHALL 支持取消请求（`AbortController`），切换页面或关闭组件时取消未完成请求
-4. IF API 返回 HTTP 5xx ProblemDetails，THEN 展示 Error_State 组件和"重试"按钮
+4. IF API 返回 HTTP 5xx ProblemDetails，THEN THE Frontend_App SHALL 展示 Error_State 组件和"重试"按钮
 5. IF 网络异常（请求超过 30 秒 / 30000ms 未响应、HTTP 无响应或 CORS 错误），THEN THE Frontend_App SHALL 展示"网络异常，请检查连接"并提供重试入口
 6. THE Frontend_App SHALL 在页面切换时保留搜索关键词、视图模式、排序方式等用户偏好
 7. THE Frontend_App SHALL 在登录态过期（HTTP 401）时全局拦截，跳转引导页并清除敏感内存状态
-8. WHILE 文件操作执行中，展示进度指示
-9. IF 有前台进行中操作（如上传），离开页面时给予保护提示
+8. WHILE 文件操作执行中，THE Frontend_App SHALL 展示进度指示
+9. IF 有前台进行中操作（如上传）且用户尝试离开页面，THEN THE Frontend_App SHALL 展示离开保护提示
 
 ### 15. 云下载管理
 
@@ -295,8 +297,8 @@
 7. WHEN 用户删除任务时，THE Frontend_App SHALL 调用 `DELETE /api/offline/tasks/{infoHash}` _（待后端 API 就绪）_
 8. WHEN 用户清空任务时，THE Frontend_App SHALL 调用 `POST /api/offline/tasks:clear`，后端返回 202 + jobId，前端轮询进度 _（待后端 API 就绪）_
 9. THE Offline_Task_Panel SHALL 在任务进行中时自动每 10 秒刷新列表
-10. WHEN 任务操作成功后，刷新任务列表和统计
-11. WHEN 任务列表为空时，展示空状态；接口失败时展示错误和重试入口
+10. WHEN 任务操作成功后，THE Offline_Task_Panel SHALL 刷新任务列表和统计
+11. THE Offline_Task_Panel SHALL 在任务列表为空时展示空状态，并在接口失败时展示错误和重试入口
 
 ### 16. 分享管理
 
@@ -308,9 +310,9 @@
 2. WHEN 用户切换 Tab 时，THE Frontend_App SHALL 调用 `GET /api/shares?tab={slist|send|receive}&offset&limit`
 3. THE Share_View SHALL 渲染 `CloudDriveShareDto[]`，展示分享名称、数量、创建时间、状态、有效期
 4. THE Share_View SHALL 支持分页加载（`offset` + `limit`）
-5. IF 后端返回 400 错误（tab 参数不支持等），THEN 参考 R18 通用错误处理策略展示 ProblemDetails `detail` 字段
-6. IF 返回可复制的 shareUrl 或提取码，提供复制操作
-7. 无数据时展示空状态；接口失败时展示错误和重试
+5. IF 后端返回 400 错误（tab 参数不支持等），THEN THE Share_View SHALL 参考 R18 通用错误处理策略展示 ProblemDetails `detail` 字段
+6. IF 返回可复制的 shareUrl 或提取码，THEN THE Share_View SHALL 提供复制操作
+7. THE Share_View SHALL 在无数据时展示空状态，并在接口失败时展示错误和重试入口
 
 ### 17. 用户中心
 
@@ -326,7 +328,7 @@
 6. THE User_Center_View SHALL 展示存储空间详情（已用/总空间/各类型占比）
 7. WHILE 展示空间占用时，THE User_Center_View SHALL 优先使用后端返回的格式化字段（如 `sizeFormat`）而非字节数值 `size` 自行格式化
 8. THE Frontend_App SHALL **严禁**在用户中心展示后端已过滤的敏感字段；若发现后端响应意外包含此类字段，前端 SHALL 在开发环境记录告警
-9. IF 聚合接口的任一子模块失败（后端返回对应字段为 `null`），THEN 对应区域展示错误提示和重试按钮，不影响其他区域展示
+9. IF 聚合接口的任一子模块失败（后端返回对应字段为 `null`），THEN THE User_Center_View SHALL 在对应区域展示错误提示和重试按钮，不影响其他区域展示
 
 ### 18. 通用错误处理策略
 
@@ -336,12 +338,12 @@
 
 1. THE Frontend_App SHALL 统一消费后端 `application/problem+json` ProblemDetails 格式响应
 2. THE Frontend_App SHALL 解析 ProblemDetails 字段：`title`（用于 Toast 标题）、`detail`（用于详细描述）、`status`（用于分级）、`extensions.upstreamCode`（开发环境调试）
-3. IF HTTP 401（登录态过期），THEN 跳转引导页，不展示 Toast（由 AuthGuard 统一处理）
-4. IF HTTP 404，THEN 展示"资源不存在"或具体 `detail` 信息
-5. IF HTTP 410 Gone（分享过期），THEN 展示"分享已失效"
-6. IF HTTP 429 Too Many Requests，THEN 展示"请求过于频繁，请稍后重试"
-7. IF HTTP 5xx，THEN 展示通用"服务异常，请稍后重试"，不暴露 `extensions.upstreamCode`
-8. IF 网络异常或 CORS 错误，THEN 展示"网络异常，请检查连接"
+3. IF HTTP 401（登录态过期），THEN THE Frontend_App SHALL 跳转引导页，不展示 Toast（由 AuthGuard 统一处理）
+4. IF HTTP 404，THEN THE Frontend_App SHALL 展示"资源不存在"或具体 `detail` 信息
+5. IF HTTP 410 Gone（分享过期），THEN THE Frontend_App SHALL 展示"分享已失效"
+6. IF HTTP 429 Too Many Requests，THEN THE Frontend_App SHALL 展示"请求过于频繁，请稍后重试"
+7. IF HTTP 5xx，THEN THE Frontend_App SHALL 展示通用"服务异常，请稍后重试"，不暴露 `extensions.upstreamCode`
+8. IF 网络异常或 CORS 错误，THEN THE Frontend_App SHALL 展示"网络异常，请检查连接"
 9. THE Frontend_App SHALL 对所有错误路径记录结构化日志（时间、接口、状态码、`extensions.upstreamCode`）
 10. THE Frontend_App SHALL 对结构化日志中涉及个人敏感信息（手机号、邮箱、Cookie、令牌）的字段严禁写入，即使开发环境也不例外
 11. THE Frontend_App SHALL 对同一业务操作的重试次数进行限制（默认 1 次），避免无限循环重试放大错误
@@ -358,6 +360,8 @@
 4. THE Frontend_App SHALL 使用单账号模型，不提供多账号切换、OAuth、PKCE 或前端代理层
 5. THE Frontend_App SHALL 以 `.kiro/specs/115-cloud-drive-integration/requirements.md` 与 `/openapi/v1.json` 作为 API 契约权威来源，并自动生成与之同步的 TypeScript 类型
 6. THE Frontend_App SHALL 仅消费后端归一化后的 camelCase DTO 与 ProblemDetails 错误响应，不解析 115 网页端短字段或错误格式变体
+7. THE Backend_API SHALL 对会话 Cookie 设置 `HttpOnly`、`Secure` 与 `SameSite=Lax` 或 `SameSite=Strict`；IF 后端因明确跨站部署场景使用 `SameSite=None`，THEN THE Backend_API SHALL 同时设置 `Secure` 并在 integration spec 中记录原因
+8. THE Backend_API SHALL 对 `POST`、`PUT`、`PATCH`、`DELETE` 等状态变更请求实施 CSRF 防护（如后端校验 CSRF Token、`Origin`/`Referer` 或 Fetch Metadata）；THE Frontend_App SHALL 仅按 `/openapi/v1.json` 暴露的 CSRF 契约携带凭据，不自造 CSRF Token 或读取会话 Cookie
 
 ## 范围排除
 

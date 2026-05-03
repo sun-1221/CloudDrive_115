@@ -12,6 +12,11 @@
 - **Application_Layer**：应用层，包含 Command/Query Handler、Pipeline Behavior、DTO、验证器和事件处理器
 - **Infrastructure_Layer**：基础设施层，包含仓储实现、缓存封装、HTTP 客户端配置、Quartz 调度和服务注册
 - **WebApi_Layer**：表现层，包含 API 控制器、中间件和应用入口
+- **CQRS**：Command Query Responsibility Segregation，命令查询职责分离模式
+- **DI**：Dependency Injection，依赖注入
+- **DTO**：Data Transfer Object，应用层与 WebApi 层之间传递数据的对象
+- **ORM**：Object Relational Mapping，对象关系映射工具，本 spec 使用 SqlSugar
+- **Result**：`Result` / `Result<T>` 业务结果模型，表示成功或失败；失败时携带 `Error`
 - **MediatR_Mediator**：MediatR 中介者，负责 Command/Query 分发和领域事件发布
 - **Pipeline_Behavior**：MediatR 管道行为，在 Handler 执行前后拦截请求
 - **ValidationBehavior**：验证管道行为，自动执行 FluentValidation 校验
@@ -100,7 +105,7 @@
 #### 验收标准
 
 1. THE Infrastructure_Layer SHALL 通过 `AddQuartz()` 和 `AddQuartzHostedService()` 注册 Quartz.NET 服务
-2. THE Infrastructure_Layer SHALL 配置 `UseMicrosoftDependencyInjectionJobFactory()` 确保每个 Job 在独立 DI Scope 中执行
+2. THE Infrastructure_Layer SHALL 使用 Quartz.Extensions.DependencyInjection 提供的 Microsoft DI JobFactory 或等效机制，确保每个 Job 可通过 DI 在独立 Scope 中解析依赖
 3. WHEN Job 执行时，THE Infrastructure_Layer SHALL 通过 `JobDataMap` 传递 `JobId`，由 Job 从数据库加载业务载荷
 4. THE Infrastructure_Layer SHALL 首期使用内存 JobStore 存储调度信息
 5. THE Infrastructure_Layer SHALL 约定 `JobDataMap` 仅携带最小调度标识（如 `JobId`），具体业务载荷与恢复检查点应由 Job 通过持久化存储加载
