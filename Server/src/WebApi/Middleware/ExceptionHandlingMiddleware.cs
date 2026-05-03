@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text.Json;
 
+using Application.Abstractions.CloudDrive;
+
 using Domain.Exceptions;
 
 using FluentValidation;
@@ -31,13 +33,15 @@ namespace WebApi.Middleware;
 public sealed class ExceptionHandlingMiddleware(
     RequestDelegate next,
     ILogger<ExceptionHandlingMiddleware> logger,
-    IHostEnvironment environment)
+    IHostEnvironment environment,
+    ICloudDriveSensitiveFieldsFilter? sensitiveFieldsFilter = null)
 {
     private static readonly JsonSerializerOptions ProblemSerializerOptions = new(JsonSerializerDefaults.Web);
 
     private readonly RequestDelegate _next = next ?? throw new ArgumentNullException(nameof(next));
     private readonly ILogger<ExceptionHandlingMiddleware> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly IHostEnvironment _environment = environment ?? throw new ArgumentNullException(nameof(environment));
+    private readonly ICloudDriveSensitiveFieldsFilter? _sensitiveFieldsFilter = sensitiveFieldsFilter;
 
     /// <summary>
     /// 中间件入口。捕获后续管道异常并写入 ProblemDetails 响应。
@@ -57,7 +61,7 @@ public sealed class ExceptionHandlingMiddleware(
                 "请求 {RequestPath} 处理失败：{ExceptionType} - {ExceptionMessage}",
                 context.Request.Path.Value,
                 ex.GetType().FullName,
-                ex.Message);
+                Redact(ex.Message));
 
             await WriteProblemResponseAsync(context, ex);
         }
@@ -121,23 +125,23 @@ public sealed class ExceptionHandlingMiddleware(
                 {
                     Status = (int)HttpStatusCode.InternalServerError,
                     Title = "Internal Server Error",
-                    Detail = _environment.IsDevelopment() ? exception.ToString() : "服务器内部错误",
+                    Detail = _environment.IsDevelopment() ? Redact(exception.ToString()) : "服务器内部错误",
                     Instance = instance,
                 };
         }
     }
 
-    private static ProblemDetails BuildDomainProblem(DomainException exception, string instance, int statusCode)
+    private ProblemDetails BuildDomainProblem(DomainException exception, string instance, int statusCode)
     {
         return new ProblemDetails
         {
             Status = statusCode,
             Title = ResolveTitle(statusCode),
-            Detail = exception.Message,
+            Detail = Redact(exception.Message),
             Instance = instance,
             Extensions =
             {
-                ["errorCode"] = exception.ErrorCode,
+                ["errorCode"] = Redact(exception.ErrorCode),
             },
         };
     }
@@ -172,4 +176,9 @@ public sealed class ExceptionHandlingMiddleware(
         503 => "Service Unavailable",
         _ => "Error",
     };
+
+    private string Redact(string? value)
+    {
+        return _sensitiveFieldsFilter?.Redact(value) ?? value ?? string.Empty;
+    }
 }

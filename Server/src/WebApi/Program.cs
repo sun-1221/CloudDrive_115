@@ -1,6 +1,5 @@
 using Application.Commands;
 
-using Infrastructure.Caching;
 using Infrastructure.DependencyInjection;
 using Infrastructure.Jobs;
 using Infrastructure.Persistence;
@@ -18,13 +17,13 @@ builder.Services.AddApplicationServices(typeof(ICommand).Assembly);
 string? connectionString = builder.Configuration.GetConnectionString("Default");
 if (!string.IsNullOrWhiteSpace(connectionString))
 {
+    // 只有配置数据库连接时才启用 SqlSugar 与 CodeFirst，便于无数据库环境执行轻量启动和部分测试。
     builder.Services.AddSqlSugar(
         connectionString,
         builder.Configuration["Database:Type"]);
-    builder.Services.AddRepositories();
 }
 
-builder.Services.AddCaching();
+builder.Services.AddCloudDriveInfrastructure(builder.Configuration);
 builder.Services.AddQuartzJobs();
 
 // Data Protection key ring：若指定路径则持久化，否则使用默认存储
