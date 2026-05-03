@@ -1,0 +1,7 @@
+node_modules/
+dist/
+output/runs/
+state/auth/
+*.env
+!.env.example
+*.tsbuildinfo
