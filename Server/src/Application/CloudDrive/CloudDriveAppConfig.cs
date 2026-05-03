@@ -106,6 +106,24 @@ public sealed class CloudDriveAppConfig
     /// 115 集成功能是否启用。启动期校验通过后设为 true，配置缺失时为 false。
     /// </summary>
     public bool CloudDriveFeatureEnabled { get; set; }
+
+    /// <summary>
+    /// 当云下载签名功能启用时，启动期配置校验要求提供 <see cref="SignatureKeyName"/>。
+    /// </summary>
+    public bool OfflineSignatureEnabled { get; set; }
+
+    /// <summary>
+    /// 应用启动期配置完整性校验。核心配置缺失时禁用 115 集成功能，但不阻止应用启动。
+    /// </summary>
+    public void ApplyStartupValidation()
+    {
+        if (string.IsNullOrWhiteSpace(CookieEncryptionKeyName)
+            || string.IsNullOrWhiteSpace(WebApiBaseUrl)
+            || (OfflineSignatureEnabled && string.IsNullOrWhiteSpace(SignatureKeyName)))
+        {
+            CloudDriveFeatureEnabled = false;
+        }
+    }
 }
 
 /// <summary>

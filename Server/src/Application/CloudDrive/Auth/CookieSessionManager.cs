@@ -168,7 +168,7 @@ public sealed class CookieSessionManager(
         int effectiveCooldown = cooldownSeconds ?? config.CookieCooldownSeconds;
 
         CookieSession session = await GetRequiredSessionAsync(userId, cloudAccountUid, cancellationToken);
-        session.EnterCooldown(effectiveCooldown);
+        session.EnterCooldown(reason, effectiveCooldown);
         await cookieSessionRepository.UpdateAsync(session, cancellationToken);
 
         await invalidationNotifier.NotifyAsync(userId, cloudAccountUid, reason, cancellationToken);
@@ -189,6 +189,17 @@ public sealed class CookieSessionManager(
         logger.LogInformation(
             "Cookie 会话已撤销 UserId={UserId}, CloudAccountUid={CloudAccountUid}",
             userId, cloudAccountUid);
+    }
+
+    /// <summary>
+    /// 撤销指定账号的 Cookie 会话（主动解绑）。
+    /// </summary>
+    public Task RevokeAsync(
+        Guid userId,
+        string cloudAccountUid,
+        CancellationToken cancellationToken = default)
+    {
+        return RevokeSessionAsync(userId, cloudAccountUid, cancellationToken);
     }
 
     /// <summary>

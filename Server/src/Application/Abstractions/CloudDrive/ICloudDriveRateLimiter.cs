@@ -24,4 +24,9 @@ public interface ICloudDriveRateLimiter
     /// 记录 API 返回的频控信号（如 HTTP 429），触发退避。
     /// </summary>
     void RecordThrottleSignal(Guid userId, string cloudAccountUid, string? category = null);
+
+    /// <summary>
+    /// 清理指定用户与 115 账号的限流桶。<paramref name="category"/> 为空时清理该账号全部场景。
+    /// </summary>
+    void Reset(Guid userId, string cloudAccountUid, string? category = null);
 }
