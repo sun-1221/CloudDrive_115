@@ -1,0 +1,37 @@
+import type { GlobalThemeOverrides } from 'naive-ui';
+
+export const themeOverrides: GlobalThemeOverrides = {
+  common: {
+    primaryColor: '#6366f1',
+    primaryColorHover: '#818cf8',
+    primaryColorPressed: '#4f46e5',
+    primaryColorSuppl: '#6366f1',
+    bodyColor: '#0a0a0f',
+    cardColor: 'rgba(255, 255, 255, 0.05)',
+    modalColor: 'rgba(255, 255, 255, 0.08)',
+    popoverColor: 'rgba(255, 255, 255, 0.10)',
+    borderColor: 'rgba(255, 255, 255, 0.10)',
+    textColorBase: '#e2e8f0',
+    textColor1: '#f1f5f9',
+    textColor2: '#e2e8f0',
+    textColor3: '#94a3b8',
+    successColor: '#22c55e',
+    successColorHover: '#4ade80',
+    successColorPressed: '#16a34a',
+    warningColor: '#f59e0b',
+    warningColorHover: '#fbbf24',
+    warningColorPressed: '#d97706',
+    errorColor: '#ef4444',
+    errorColorHover: '#f87171',
+    errorColorPressed: '#dc2626',
+    infoColor: '#3b82f6',
+    infoColorHover: '#60a5fa',
+    infoColorPressed: '#2563eb',
+  },
+  Button: {
+    colorPrimary: '#6366f1',
+    colorHoverPrimary: '#818cf8',
+    colorPressedPrimary: '#4f46e5',
+    textColorPrimary: '#ffffff',
+  },
+};

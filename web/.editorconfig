@@ -1,0 +1,9 @@
+# 继承根目录 .editorconfig 的通用规则
+# 前端项目覆盖：使用 2 空格缩进
+
+[*]
+indent_size = 2
+
+[*.{ts,tsx,js,jsx,vue,css,scss,html}]
+indent_size = 2
+max_line_length = 120
