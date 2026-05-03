@@ -28,7 +28,8 @@ public sealed class CookieSessionTests
         Assert.Equal(CookieSessionStatus.Invalidated, session.Status);
         Assert.Equal(reason, session.InvalidationReason);
         Assert.NotNull(session.CooldownUntil);
-        CookieInvalidated domainEvent = Assert.IsType<CookieInvalidated>(Assert.Single(session.DomainEvents));
+        CookieInvalidated domainEvent = Assert.IsType<CookieInvalidated>(
+            session.DomainEvents.Single(domainEvent => domainEvent is CookieInvalidated));
         Assert.Equal(TestCloudAccountUid, domainEvent.CloudAccountUid);
         Assert.Equal(reason, domainEvent.Reason);
         Assert.Equal(session.CooldownUntil, domainEvent.CooldownUntil);

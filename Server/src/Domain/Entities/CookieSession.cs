@@ -99,6 +99,12 @@ public sealed class CookieSession : AggregateRoot<Guid>
             Status = CookieSessionStatus.Active,
             CreationTime = DateTime.UtcNow
         };
+
+        session.AddDomainEvent(new CookieSessionUpserted(
+            userId,
+            cloudAccountUid,
+            session.CreationTime));
+
         return session;
     }
 
@@ -115,6 +121,11 @@ public sealed class CookieSession : AggregateRoot<Guid>
         InvalidationReason = null;
         CooldownUntil = null;
         LastModificationTime = DateTime.UtcNow;
+
+        AddDomainEvent(new CookieSessionUpserted(
+            UserId,
+            CloudAccountUid,
+            LastModificationTime.Value));
     }
 
     /// <summary>
@@ -146,14 +157,34 @@ public sealed class CookieSession : AggregateRoot<Guid>
     /// </summary>
     /// <param name="cooldownSeconds">冷却秒数。</param>
     public void EnterCooldown(int cooldownSeconds)
+        => EnterCooldown("cooldown_entered", cooldownSeconds);
+
+    /// <summary>
+    /// 标记 Cookie 失效并进入冷却期（可覆盖默认冷却时长）。
+    /// </summary>
+    /// <param name="reason">失效原因。</param>
+    /// <param name="cooldownSeconds">冷却秒数。</param>
+    public void EnterCooldown(string reason, int cooldownSeconds)
     {
-        CooldownUntil = DateTime.UtcNow.AddSeconds(cooldownSeconds);
-        LastModificationTime = DateTime.UtcNow;
+        if (Status == CookieSessionStatus.Revoked)
+        {
+            return;
+        }
+
+        DateTime utcNow = DateTime.UtcNow;
+        string effectiveReason = string.IsNullOrWhiteSpace(reason)
+            ? "cooldown_entered"
+            : reason;
+
+        Status = CookieSessionStatus.Invalidated;
+        InvalidationReason = effectiveReason;
+        CooldownUntil = utcNow.AddSeconds(cooldownSeconds);
+        LastModificationTime = utcNow;
 
         AddDomainEvent(new CookieInvalidated(
             CloudAccountUid,
-            InvalidationReason ?? "cooldown_entered",
-            DateTime.UtcNow,
+            effectiveReason,
+            utcNow,
             CooldownUntil));
     }
 
