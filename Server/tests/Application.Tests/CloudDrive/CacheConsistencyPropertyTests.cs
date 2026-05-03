@@ -108,6 +108,8 @@ public sealed class CacheConsistencyPropertyTests
 
         public void RecordThrottleSignal(Guid userId, string cloudAccountUid, string? category = null) { }
 
+        public void Reset(Guid userId, string cloudAccountUid, string? category = null) { }
+
         private sealed class NoOpDisposable : IDisposable
         {
             public void Dispose() { }

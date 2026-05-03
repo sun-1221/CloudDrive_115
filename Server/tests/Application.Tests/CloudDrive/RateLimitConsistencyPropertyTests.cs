@@ -110,6 +110,8 @@ public sealed class RateLimitConsistencyPropertyTests
             ThrottleSignals.Add((userId, cloudAccountUid, category));
         }
 
+        public void Reset(Guid userId, string cloudAccountUid, string? category = null) { }
+
         private sealed class NoOpDisposable : IDisposable
         {
             public void Dispose() { }

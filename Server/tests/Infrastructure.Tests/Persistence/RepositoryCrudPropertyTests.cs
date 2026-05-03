@@ -56,7 +56,7 @@ public sealed class RepositoryCrudPropertyTests : IDisposable
     [Property(MaxTest = 30)]
     public async Task<bool> InsertThenGetById_ReturnsEquivalentEntity(int nameSeed)
     {
-        // Arrange
+        // 准备
         _eventSource.Clear();
         string name = $"name-{nameSeed}";
         var entity = new TestPersistedEntity
@@ -65,11 +65,11 @@ public sealed class RepositoryCrudPropertyTests : IDisposable
             Name = name,
         };
 
-        // Act
+        // 执行
         int rows = await _repository.InsertAsync(entity, CancellationToken.None);
         TestPersistedEntity? loaded = await _repository.GetByIdAsync(entity.Id, CancellationToken.None);
 
-        // Assert - 插入 1 行、Get 非空、Id 与 Name 等价、实体被 Track
+        // 断言 - 插入 1 行、Get 非空、Id 与 Name 等价、实体被 Track
         return rows == 1
             && loaded is not null
             && loaded.Id == entity.Id
@@ -81,7 +81,7 @@ public sealed class RepositoryCrudPropertyTests : IDisposable
     [Fact]
     public async Task UpdateAsync_WhenEntityExists_ModifiesFieldAndTracksEntity()
     {
-        // Arrange
+        // 准备
         _eventSource.Clear();
         var entity = new TestPersistedEntity { Id = Guid.NewGuid(), Name = "original" };
         _ = await _repository.InsertAsync(entity, CancellationToken.None);
@@ -89,11 +89,11 @@ public sealed class RepositoryCrudPropertyTests : IDisposable
 
         entity.Name = "updated";
 
-        // Act
+        // 执行
         int rows = await _repository.UpdateAsync(entity, CancellationToken.None);
         TestPersistedEntity? loaded = await _repository.GetByIdAsync(entity.Id, CancellationToken.None);
 
-        // Assert
+        // 断言
         Assert.Equal(1, rows);
         Assert.NotNull(loaded);
         Assert.Equal("updated", loaded.Name);
@@ -103,17 +103,17 @@ public sealed class RepositoryCrudPropertyTests : IDisposable
     [Fact]
     public async Task DeleteAsync_WhenEntityExists_RemovesRowAndTracksEntity()
     {
-        // Arrange
+        // 准备
         _eventSource.Clear();
         var entity = new TestPersistedEntity { Id = Guid.NewGuid(), Name = "to-delete" };
         _ = await _repository.InsertAsync(entity, CancellationToken.None);
         _eventSource.Clear();
 
-        // Act
+        // 执行
         int rows = await _repository.DeleteAsync(entity, CancellationToken.None);
         TestPersistedEntity? loaded = await _repository.GetByIdAsync(entity.Id, CancellationToken.None);
 
-        // Assert
+        // 断言
         Assert.Equal(1, rows);
         Assert.Null(loaded);
         Assert.Single(_eventSource.Tracked);

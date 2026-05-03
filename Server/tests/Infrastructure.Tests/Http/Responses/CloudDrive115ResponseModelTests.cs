@@ -13,10 +13,14 @@ public sealed class CloudDrive115ResponseModelTests
     [InlineData("""{"state":0,"errNo":401,"error":"login required"}""", false)]
     public void CloudDrive115WebResponse_DeserializesBoolAndNumberState(string json, bool expectedState)
     {
+        // 准备
+
+        // 执行
         CloudDrive115WebResponse<JsonElement>? response = JsonSerializer.Deserialize<CloudDrive115WebResponse<JsonElement>>(
             json,
             CloudDrive115JsonSerializerOptions.Defaults);
 
+        // 断言
         Assert.NotNull(response);
         Assert.Equal(expectedState, response.State);
     }
@@ -24,6 +28,7 @@ public sealed class CloudDrive115ResponseModelTests
     [Fact]
     public void CloudDriveFileListResponse_NormalizesWebFileFields()
     {
+        // 准备
         const string json = """
             {
               "count": "2",
@@ -40,10 +45,12 @@ public sealed class CloudDrive115ResponseModelTests
             }
             """;
 
+        // 执行
         CloudDriveFileListResponse? response = JsonSerializer.Deserialize<CloudDriveFileListResponse>(
             json,
             CloudDrive115JsonSerializerOptions.Defaults);
 
+        // 断言
         Assert.NotNull(response);
         Assert.Equal(2, response.Count);
         Assert.Equal("0", response.Path.Single().DirectoryId);
@@ -65,6 +72,7 @@ public sealed class CloudDrive115ResponseModelTests
     [Fact]
     public void CloudDriveRecycleBinResponse_NormalizesDynamicDataObjectAndReverseTypeMapping()
     {
+        // 准备
         const string json = """
             {
               "count": "1",
@@ -87,10 +95,12 @@ public sealed class CloudDrive115ResponseModelTests
             }
             """;
 
+        // 执行
         CloudDriveRecycleBinResponse? response = JsonSerializer.Deserialize<CloudDriveRecycleBinResponse>(
             json,
             CloudDrive115JsonSerializerOptions.Defaults);
 
+        // 断言
         Assert.NotNull(response);
         Assert.Equal(1, response.Count);
 
@@ -105,6 +115,7 @@ public sealed class CloudDrive115ResponseModelTests
     [Fact]
     public void CloudDriveUploadInitResponse_DistinguishesInstantUploadAndOssCredentials()
     {
+        // 准备
         const string instantJson = """{"file_id":"3409","file_name":"a.txt","pick_code":"abc","sha1":"SHA","cid":"0"}""";
         const string ossJson = """
             {
@@ -118,6 +129,7 @@ public sealed class CloudDrive115ResponseModelTests
             }
             """;
 
+        // 执行
         CloudDriveUploadInitResponse? instant = JsonSerializer.Deserialize<CloudDriveUploadInitResponse>(
             instantJson,
             CloudDrive115JsonSerializerOptions.Defaults);
@@ -125,6 +137,7 @@ public sealed class CloudDrive115ResponseModelTests
             ossJson,
             CloudDrive115JsonSerializerOptions.Defaults);
 
+        // 断言
         Assert.NotNull(instant);
         Assert.True(instant.IsInstantUpload);
         Assert.False(instant.HasOssCredential);
@@ -138,6 +151,7 @@ public sealed class CloudDrive115ResponseModelTests
     [Fact]
     public void CloudDriveVipCardResponse_MapsNumericLeadingBalanceField()
     {
+        // 准备
         const string json = """
             {
               "num": 1,
@@ -150,10 +164,12 @@ public sealed class CloudDrive115ResponseModelTests
             }
             """;
 
+        // 执行
         CloudDriveVipCardResponse? response = JsonSerializer.Deserialize<CloudDriveVipCardResponse>(
             json,
             CloudDrive115JsonSerializerOptions.Defaults);
 
+        // 断言
         Assert.NotNull(response);
         Assert.Equal(700, response.Balance);
         Assert.Equal(5, response.SqCodeCount);
@@ -163,6 +179,7 @@ public sealed class CloudDrive115ResponseModelTests
     [Fact]
     public void CloudDriveOfflineTaskListResponse_NormalizesTaskObjectFields()
     {
+        // 准备
         const string json = """
             {
               "page": 1,
@@ -191,10 +208,12 @@ public sealed class CloudDrive115ResponseModelTests
             }
             """;
 
+        // 执行
         CloudDriveOfflineTaskListResponse? response = JsonSerializer.Deserialize<CloudDriveOfflineTaskListResponse>(
             json,
             CloudDrive115JsonSerializerOptions.Defaults);
 
+        // 断言
         Assert.NotNull(response);
         Assert.True(response.RealState);
 
