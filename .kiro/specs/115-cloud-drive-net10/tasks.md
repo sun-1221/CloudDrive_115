@@ -1,0 +1,218 @@
+# 实施计划：.NET 10 原生框架搭建（替代 ABP）
+
+## 概述
+
+基于设计文档和需求文档，将 DDD 四层架构框架搭建拆分为增量式编码任务。每个任务在前一个任务基础上构建，最终将所有组件连接到 WebApi 层的 Program.cs 中。使用 C# / .NET 10 实现。
+
+## 任务
+
+- [x] 1. 创建解决方案与四层项目结构
+  - [x] 1.1 创建解决方案文件和四个 .csproj 项目
+    - 创建 `src/Domain/Domain.csproj`（class library，net10.0）
+    - 创建 `src/Application/Application.csproj`（class library，net10.0）
+    - 创建 `src/Infrastructure/Infrastructure.csproj`（class library，net10.0）
+    - 创建 `src/WebApi/WebApi.csproj`（web 项目，net10.0）
+    - 创建解决方案文件并添加所有项目
+    - _需求: 1.1, 1.2, 1.3, 1.4_
+    - _设计: §分层架构_
+  - [x] 1.2 配置项目引用与依赖关系
+    - Application.csproj 引用 Domain.csproj
+    - Infrastructure.csproj 引用 Domain.csproj 和 Application.csproj
+    - WebApi.csproj 引用 Application.csproj 和 Infrastructure.csproj
+    - Domain.csproj 不引用任何其他项目
+    - 为各项目添加所需 NuGet 包引用（MediatR、SqlSugarCore、Quartz、FluentValidation、Polly 等）
+    - _需求: 1.1, 1.2, 1.3, 1.4, 1.5_
+    - _设计: §分层架构_
+
+- [x] 2. 实现 Domain 层基础组件
+  - [x] 2.1 创建实体基类与领域事件基类
+    - 创建 `Domain/Entities/Entity.cs`：包含 Id 属性、领域事件集合 `_domainEvents`、`AddDomainEvent()` 方法、`ClearDomainEvents()` 方法
+    - 创建 `Domain/Events/DomainEvent.cs`：不依赖 MediatR 或其他外部框架的抽象基类
+    - _需求: 4.1, 4.2_
+    - _设计: §领域事件_
+  - [x] 2.2 编写属性测试：实体领域事件收集
+    - **Property 6: 实体领域事件收集**
+    - 验证调用 `AddDomainEvent()` 后事件出现在集合中，集合长度增加 1
+    - _需求: 4.2_
+    - _设计: §Property 6: 实体领域事件收集_
+  - [x] 2.3 创建仓储接口
+    - 创建 `Domain/Repositories/IRepository.cs`：定义泛型仓储接口 `IRepository<TEntity, TId>`，包含 GetByIdAsync、GetListAsync、InsertAsync、UpdateAsync、DeleteAsync 等方法
+    - _需求: 5.6_
+    - _设计: §1. SqlSugar 配置与仓储_
+
+- [x] 3. 实现 Application 层 CQRS 基类与 Pipeline Behaviors
+  - [x] 3.1 创建 CQRS Command/Query 基类与标记接口
+    - 创建 `Application/Commands/ICommand.cs`：标记接口 `ICommand : IRequest<Result>` 与 `ICommand<TResponse> : IRequest<Result<TResponse>>`，用于标识写操作
+    - 创建 `Application/Commands/ICommandHandler.cs`：定义 `ICommandHandler<TCommand>` 与 `ICommandHandler<TCommand, TResponse>` 基接口
+    - 创建 `Application/Queries/IQuery.cs`：标记接口 `IQuery<TResponse> : IRequest<Result<TResponse>>`，用于标识读操作
+    - 创建 `Application/Queries/IQueryHandler.cs`：定义 `IQueryHandler<TQuery, TResponse>` 基接口
+    - TransactionBehavior 和 DomainEventDispatchBehavior 通过 `ICommand` / `ICommand<TResponse>` 标记接口区分 Command 与 Query
+    - _需求: 2.1, 2.2_
+    - _设计: §CQRS 架构_
+  - [x] 3.2 实现 LoggingBehavior
+    - 创建 `Application/Behaviors/LoggingBehavior.cs`：实现 `IPipelineBehavior<TRequest, TResponse>`
+    - 记录请求类型名称、参数信息和响应耗时
+    - 使用 `ILogger<LoggingBehavior<TRequest, TResponse>>` 输出日志
+    - _需求: 3.1_
+    - _设计: §MediatR Pipeline Behaviors_
+  - [x] 3.3 编写属性测试：LoggingBehavior 记录请求类型与耗时
+    - **Property 5: LoggingBehavior 记录请求类型与耗时**
+    - 验证任意请求经过 LoggingBehavior 后产生包含请求类型名称和耗时的日志
+    - _需求: 3.1_
+    - _设计: §Property 5: LoggingBehavior 记录请求类型与耗时_
+  - [x] 3.4 实现 ValidationBehavior
+    - 创建 `Application/Behaviors/ValidationBehavior.cs`：实现 `IPipelineBehavior<TRequest, TResponse>`
+    - 注入 `IEnumerable<IValidator<TRequest>>`，在 Handler 前执行所有验证器
+    - 校验失败时抛出 `ValidationException`，包含所有字段级错误
+    - 无验证器时直接放行
+    - _需求: 3.2, 3.3, 8.2, 8.3, 8.4_
+    - _设计: §MediatR Pipeline Behaviors_
+  - [x] 3.5 编写属性测试：ValidationBehavior 拦截无效输入
+    - **Property 1: ValidationBehavior 拦截无效输入并返回完整错误**
+    - 验证存在验证器且输入无效时抛出 ValidationException，Handler 不被执行
+    - _需求: 3.2, 3.3, 8.2, 8.3_
+    - _设计: §Property 1: ValidationBehavior 拦截无效输入并返回完整错误_
+  - [x] 3.6 编写属性测试：ValidationBehavior 对无验证器请求放行
+    - **Property 2: ValidationBehavior 对无验证器的请求直接放行**
+    - 验证无验证器时请求直接传递给下一个管道
+    - _需求: 8.4_
+    - _设计: §Property 2: ValidationBehavior 对无验证器的请求直接放行_
+  - [x] 3.7 实现 TransactionBehavior
+    - 创建 `Application/Behaviors/TransactionBehavior.cs`：实现 `IPipelineBehavior<TRequest, TResponse>`
+    - 通过 `ICommand` / `ICommand<TResponse>` 标记接口区分 Command 与 Query
+    - Command 请求开启 SqlSugar 事务，成功提交，异常回滚并重新抛出
+    - Query 请求跳过事务，直接执行后续管道
+    - _需求: 3.4, 3.5, 3.6, 3.7_
+    - _设计: §MediatR Pipeline Behaviors_
+  - [x] 3.8 编写属性测试：TransactionBehavior 按请求类型决定事务行为
+    - **Property 3: TransactionBehavior 按请求类型决定事务行为**
+    - 验证 Command 开启事务，Query 跳过事务
+    - _需求: 3.4, 3.5_
+    - _设计: §Property 3: TransactionBehavior 按请求类型决定事务行为_
+  - [x] 3.9 编写属性测试：TransactionBehavior 成功提交与异常回滚
+    - **Property 4: TransactionBehavior 成功提交与异常回滚**
+    - 验证 Handler 成功时事务提交，异常时事务回滚且异常重新抛出
+    - _需求: 3.6, 3.7_
+    - _设计: §Property 4: TransactionBehavior 成功提交与异常回滚_
+  - [x] 3.10 实现 DomainEventDispatchBehavior
+    - 创建 `Application/Behaviors/DomainEventDispatchBehavior.cs`：实现 `IPipelineBehavior<TRequest, TResponse>`
+    - 仅对 Command（实现 `ICommand` / `ICommand<TResponse>` 标记接口）生效，Query 跳过
+    - 定义 Application 层 MediatR 通知包装类型，用于包装 Domain 层纯领域事件
+    - 注入并使用 `IDomainEventSource`，在 Handler 执行后遍历被追踪实体收集的领域事件，包装为 MediatR 通知后通过 `IMediator.Publish()` 或 `IPublisher.Publish()` 逐一发布
+    - 发布完成后调用 `ClearDomainEvents()` 清空事件集合
+    - 普通 Command Handler 不手动调用 `IMediator.Publish()` 发布实体领域事件
+    - _需求: 3.9, 4.3, 4.5, 4.6_
+    - _设计: §MediatR Pipeline Behaviors, §领域事件_
+
+- [x] 4. 检查点 - 确保所有测试通过
+  - 确保所有测试通过，如有问题请向用户确认。
+
+- [x] 5. 实现 Infrastructure 层基础设施
+  - [x] 5.1 实现 SqlSugar 配置与仓储基类
+    - 创建 `Infrastructure/Persistence/SqlSugarSetup.cs`：配置 ISqlSugarClient 注册为 Scoped，IsAutoCloseConnection = true，InitKeyType = Attribute
+    - 创建 `Infrastructure/Persistence/Repository.cs`：实现 `IRepository<TEntity, TId>`，封装 GetByIdAsync、GetListAsync、InsertAsync、UpdateAsync、DeleteAsync
+    - 在 Insert/Update 等持久化成功后通过 `IDomainEventSource.Track(entity)` 追踪聚合，供 `DomainEventDispatchBehavior` 统一分发领域事件
+    - 提供应用启动时 `db.CodeFirst.InitTables<T>()` 自动建表的调用入口
+    - _需求: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7_
+    - _设计: §1. SqlSugar 配置与仓储_
+  - [x] 5.2 编写属性测试：Repository CRUD 往返一致性
+    - **Property 7: Repository CRUD 往返一致性**
+    - 验证 Insert 后 GetById 返回与原始实体等价的对象
+    - _需求: 5.5_
+    - _设计: §Property 7: Repository CRUD 往返一致性_
+  - [x] 5.3 实现 Quartz.NET 注册
+    - 创建 `Infrastructure/Jobs/QuartzSetup.cs`：通过 AddQuartz() + AddQuartzHostedService() 注册
+    - 配置 UseMicrosoftDependencyInjectionJobFactory()
+    - 首期使用内存 JobStore
+    - 约定 `JobDataMap` 仅传递最小调度标识（如 `JobId`），业务载荷与恢复检查点由 Job 通过持久化存储加载
+    - 约定 Quartz Job 不假设 MediatR Pipeline 自动生效；涉及事务、领域事件发布或恢复处理时需显式实现
+    - _需求: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6_
+    - _设计: §2. Quartz.NET 调度_
+  - [x] 5.4 实现 IDistributedCache 缓存封装
+    - 创建 `Infrastructure/Caching/DistributedCacheExtensions.cs`：封装 GetAsync<T>()、SetAsync<T>()、GetOrSetAsync<T>() 方法
+    - 使用 System.Text.Json 进行序列化/反序列化
+    - 支持配置默认 TTL
+    - 创建 `Infrastructure/Caching/CachingSetup.cs`：注册 AddDistributedMemoryCache()
+    - _需求: 7.1, 7.2, 7.3, 7.4, 7.5_
+    - _设计: §3. IDistributedCache 封装_
+  - [x] 5.5 编写属性测试：缓存序列化往返一致性
+    - **Property 8: 缓存序列化往返一致性**
+    - 验证 SetAsync<T>() 写入后 GetAsync<T>() 读取返回等价对象
+    - _需求: 7.1_
+    - _设计: §Property 8: 缓存序列化往返一致性_
+  - [x] 5.6 编写属性测试：GetOrSetAsync 缓存命中与未命中行为
+    - **Property 9: GetOrSetAsync 缓存命中与未命中行为**
+    - 验证首次调用 factory 被调用一次，再次调用 factory 不被调用
+    - _需求: 7.2_
+    - _设计: §Property 9: GetOrSetAsync 缓存命中与未命中行为_
+  - [x] 5.7 实现 IHttpClientFactory + Polly 配置
+    - 创建 `Infrastructure/Http/HttpClientSetup.cs`：通过 Named HttpClient 注册
+    - 读请求配置重试 + 超时 + 熔断策略
+    - 写请求仅配置超时 + 熔断策略
+    - 为业务模块保留 query string、`application/x-www-form-urlencoded`、`multipart/form-data` 与 JSON 四类请求构造扩展点
+    - _需求: 9.1, 9.2, 9.3, 9.4, 9.5_
+    - _设计: §5. IHttpClientFactory + Polly_
+  - [x] 5.8 实现 FluentValidation 注册
+    - 创建 `Infrastructure/DependencyInjection/ValidationSetup.cs`：通过 AddValidatorsFromAssembly() 自动注册 Application 层验证器
+    - _需求: 8.1_
+    - _设计: §4. FluentValidation + MediatR 集成_
+  - [x] 5.9 实现 DI 扩展方法汇总
+    - 创建 `Infrastructure/DependencyInjection/ServiceCollectionExtensions.cs`：提供 AddSqlSugar()、AddQuartzJobs()、AddCaching()、AddHttpClients()、AddApplicationServices()（注册 MediatR + Pipeline Behaviors + FluentValidation）等扩展方法
+    - Pipeline Behavior 按 LoggingBehavior → ValidationBehavior → TransactionBehavior → DomainEventDispatchBehavior 顺序注册
+    - 仓储实现注册为 Scoped
+    - 预留基于 ASP.NET Core Data Protection 的机密保护注册入口，并支持 key ring 持久化配置
+    - _需求: 3.8, 12.1, 12.3, 12.4, 12.5, 12.7_
+    - _设计: §MediatR Pipeline Behaviors, §8. WebApi 启动与认证_
+
+- [x] 6. 检查点 - 确保所有测试通过
+  - 确保所有测试通过，如有问题请向用户确认。
+
+- [x] 7. 实现 WebApi 层
+  - [x] 7.1 实现全局异常处理中间件
+    - 创建 `WebApi/Middleware/ExceptionHandlingMiddleware.cs`：捕获所有未处理异常
+    - ValidationException → 400 + 字段级错误详情
+    - 业务异常 → 对应 HTTP 状态码（401/404/429/502/503 等）
+    - 未知异常 → 500，隐藏内部详情
+    - 返回 `application/problem+json` 格式
+    - 记录日志：请求路径、异常类型、异常消息
+    - 为 WebApi 适配层提供统一的 `Result.Failure(...)` → 非 2xx `ProblemDetails` 映射约定
+    - _需求: 10.1, 10.2, 10.3, 10.4, 10.5, 10.6_
+    - _设计: §6. 全局异常处理中间件_
+  - [x] 7.2 编写属性测试：异常中间件状态码映射
+    - **Property 10: 异常中间件状态码映射**
+    - 验证不同异常类型映射为正确的 HTTP 状态码和 ProblemDetails 格式
+    - 验证 `Result.Failure(...)` 不会以 HTTP 200 返回，而会被映射为非 2xx ProblemDetails
+    - _需求: 10.1, 10.2, 10.3, 10.4, 10.6_
+    - _设计: §Property 10: 异常中间件状态码映射_
+  - [x] 7.3 编写属性测试：异常中间件日志记录
+    - **Property 11: 异常中间件日志记录**
+    - 验证异常处理后产生包含请求路径、异常类型和异常消息的日志
+    - _需求: 10.5_
+    - _设计: §Property 11: 异常中间件日志记录_
+  - [x] 7.4 配置 Program.cs 应用入口
+    - 在 `WebApi/Program.cs` 中调用所有 DI 扩展方法完成服务注册，并按需接入 `AddJwtAuthentication()` 等认证扩展
+    - 注册异常处理中间件到请求管道最前部
+    - 启用 `UseAuthentication()` 与 `UseAuthorization()`，供受保护 API 使用
+    - 配置 Controllers、Swagger 等基础中间件
+    - 在需要保护业务机密时接入 Data Protection key ring 配置
+    - _需求: 12.2, 12.6, 12.7_
+    - _设计: §8. WebApi 启动与认证_
+
+- [x] 8. 建立手动映射约定
+  - [x] 8.1 创建映射扩展方法约定与示例结构
+    - 创建 `Application/Mappings/` 目录，建立映射扩展方法的组织约定
+    - 提供示例映射扩展方法模板（`ToDto()` / `ToEntity()`），供业务模块参照
+    - 确保映射方法为静态扩展方法，编译期可检查，不使用反射
+    - _需求: 11.1, 11.2, 11.3_
+    - _设计: §7. 手动对象映射_
+
+- [x] 9. 最终检查点 - 确保所有测试通过
+  - 确保所有测试通过，如有问题请向用户确认。
+
+## 备注
+
+- 标记 `*` 的任务为可选任务，可跳过以加速 MVP 交付
+- 每个任务引用了具体的需求编号以确保可追溯性
+- 检查点任务确保增量验证
+- 属性测试验证设计文档中定义的正确性属性（Property 1-11）
+- 单元测试验证具体示例和边界情况
