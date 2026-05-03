@@ -5,10 +5,13 @@ using System.Text.Json.Serialization;
 namespace Infrastructure.Http.Json;
 
 /// <summary>
-/// Converts JSON string or number values to nullable <see cref="long"/>.
+/// 将 JSON 字符串或数字值转换为可空 <see cref="long"/>。
 /// </summary>
-public sealed class NullableStringOrNumberToLongJsonConverter : JsonConverter<long?>
+internal sealed class NullableStringOrNumberToLongJsonConverter : JsonConverter<long?>
 {
+    /// <summary>
+    /// 读取 JSON 并转换为目标响应模型。
+    /// </summary>
     public override long? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         return reader.TokenType switch
@@ -25,6 +28,9 @@ public sealed class NullableStringOrNumberToLongJsonConverter : JsonConverter<lo
         };
     }
 
+    /// <summary>
+    /// 将目标响应模型写入 JSON。
+    /// </summary>
     public override void Write(Utf8JsonWriter writer, long? value, JsonSerializerOptions options)
     {
         if (value.HasValue)

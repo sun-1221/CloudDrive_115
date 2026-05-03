@@ -5,8 +5,14 @@ using Infrastructure.Http.Json;
 
 namespace Infrastructure.Http.Responses;
 
+/// <summary>
+/// 将 115 回收站条目对象转换为统一条目模型。
+/// </summary>
 internal sealed class CloudDriveRecycleItemJsonConverter : JsonConverter<CloudDriveRecycleItemResponse>
 {
+    /// <summary>
+    /// 读取 JSON 并转换为目标响应模型。
+    /// </summary>
     public override CloudDriveRecycleItemResponse Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
@@ -16,6 +22,7 @@ internal sealed class CloudDriveRecycleItemJsonConverter : JsonConverter<CloudDr
         JsonElement root = document.RootElement;
         int? type = JsonElementReaders.GetInt32(root, "type");
 
+        // 回收站接口 type=2 表示目录，和文件列表 fc=0 的目录规则不同，不能复用文件列表判断。
         return new CloudDriveRecycleItemResponse
         {
             Id = JsonElementReaders.GetString(root, "id", "fid", "file_id") ?? string.Empty,
@@ -33,6 +40,9 @@ internal sealed class CloudDriveRecycleItemJsonConverter : JsonConverter<CloudDr
         };
     }
 
+    /// <summary>
+    /// 将目标响应模型写入 JSON。
+    /// </summary>
     public override void Write(Utf8JsonWriter writer, CloudDriveRecycleItemResponse value, JsonSerializerOptions options)
     {
         writer.WriteStartObject();

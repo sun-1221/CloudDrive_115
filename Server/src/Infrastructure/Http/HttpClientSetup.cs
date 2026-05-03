@@ -19,9 +19,21 @@ namespace Infrastructure.Http;
 /// </remarks>
 public static class HttpClientSetup
 {
+    /// <summary>
+    /// 获取读请求默认重试延迟。
+    /// </summary>
     private static readonly TimeSpan DefaultRetryDelay = TimeSpan.FromSeconds(1);
+    /// <summary>
+    /// 获取默认 HTTP 请求超时时间。
+    /// </summary>
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(10);
+    /// <summary>
+    /// 获取熔断器默认采样窗口。
+    /// </summary>
     private static readonly TimeSpan DefaultCircuitBreakSampling = TimeSpan.FromSeconds(30);
+    /// <summary>
+    /// 获取熔断器默认熔断持续时间。
+    /// </summary>
     private static readonly TimeSpan DefaultCircuitBreakDuration = TimeSpan.FromSeconds(30);
 
     /// <summary>
@@ -44,6 +56,7 @@ public static class HttpClientSetup
 
         builder.AddResilienceHandler($"{name}-read", pipeline =>
         {
+            // 读请求按幂等处理，允许指数退避重试来吸收 115 偶发 5xx 或网络抖动。
             pipeline.AddRetry(CreateRetryOptions());
             pipeline.AddCircuitBreaker(CreateCircuitBreakerOptions());
             pipeline.AddTimeout(DefaultTimeout);
@@ -73,6 +86,7 @@ public static class HttpClientSetup
 
         builder.AddResilienceHandler($"{name}-write", pipeline =>
         {
+            // 写请求不自动重试，避免创建、删除、云下载等非幂等操作被重复提交。
             pipeline.AddCircuitBreaker(CreateCircuitBreakerOptions());
             pipeline.AddTimeout(DefaultTimeout);
         });
@@ -80,6 +94,9 @@ public static class HttpClientSetup
         return builder;
     }
 
+    /// <summary>
+    /// 创建读请求重试策略选项。
+    /// </summary>
     private static HttpRetryStrategyOptions CreateRetryOptions() => new()
     {
         MaxRetryAttempts = 3,
@@ -88,6 +105,9 @@ public static class HttpClientSetup
         Delay = DefaultRetryDelay,
     };
 
+    /// <summary>
+    /// 创建 HTTP 熔断策略选项。
+    /// </summary>
     private static HttpCircuitBreakerStrategyOptions CreateCircuitBreakerOptions() => new()
     {
         // 采样窗口内失败率达到 100% 且至少 5 次请求 → 约等于 "连续 5 次失败"

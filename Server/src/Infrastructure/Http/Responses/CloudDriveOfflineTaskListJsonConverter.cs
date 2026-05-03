@@ -5,8 +5,14 @@ using Infrastructure.Http.Json;
 
 namespace Infrastructure.Http.Responses;
 
+/// <summary>
+/// 将 115 云下载任务数组或对象转换为统一列表。
+/// </summary>
 internal sealed class CloudDriveOfflineTaskListJsonConverter : JsonConverter<IReadOnlyList<CloudDriveOfflineTaskResponse>>
 {
+    /// <summary>
+    /// 读取 JSON 并转换为目标响应模型。
+    /// </summary>
     public override IReadOnlyList<CloudDriveOfflineTaskResponse> Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
@@ -24,6 +30,9 @@ internal sealed class CloudDriveOfflineTaskListJsonConverter : JsonConverter<IRe
         };
     }
 
+    /// <summary>
+    /// 将目标响应模型写入 JSON。
+    /// </summary>
     public override void Write(
         Utf8JsonWriter writer,
         IReadOnlyList<CloudDriveOfflineTaskResponse> value,
@@ -32,6 +41,9 @@ internal sealed class CloudDriveOfflineTaskListJsonConverter : JsonConverter<IRe
         JsonSerializer.Serialize(writer, value, CloudDrive115JsonSerializerOptions.Defaults);
     }
 
+    /// <summary>
+    /// 从 JSON 数组读取响应模型列表。
+    /// </summary>
     private static IReadOnlyList<CloudDriveOfflineTaskResponse> ReadArray(JsonElement root)
     {
         List<CloudDriveOfflineTaskResponse> items = [];
@@ -48,6 +60,9 @@ internal sealed class CloudDriveOfflineTaskListJsonConverter : JsonConverter<IRe
         return items;
     }
 
+    /// <summary>
+    /// 从 JSON 对象读取响应模型列表。
+    /// </summary>
     private static IReadOnlyList<CloudDriveOfflineTaskResponse> ReadObject(JsonElement root)
     {
         List<CloudDriveOfflineTaskResponse> items = [];

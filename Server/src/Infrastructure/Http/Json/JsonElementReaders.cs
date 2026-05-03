@@ -3,12 +3,19 @@ using System.Text.Json;
 
 namespace Infrastructure.Http.Json;
 
+/// <summary>
+/// 115 响应 JSON 字段读取辅助方法。
+/// </summary>
 internal static class JsonElementReaders
 {
-    public static string? GetString(JsonElement element, params string[] propertyNames)
+    /// <summary>
+    /// 按候选字段名读取字符串值。
+    /// </summary>
+    internal static string? GetString(JsonElement element, params string[] propertyNames)
     {
         foreach (string propertyName in propertyNames)
         {
+            // 115 同一含义字段在不同接口中可能使用缩写或旧名称，按候选顺序取第一个命中值。
             if (element.TryGetProperty(propertyName, out JsonElement property))
             {
                 return ReadString(property);
@@ -18,7 +25,10 @@ internal static class JsonElementReaders
         return null;
     }
 
-    public static int? GetInt32(JsonElement element, params string[] propertyNames)
+    /// <summary>
+    /// 按候选字段名读取 32 位整数值。
+    /// </summary>
+    internal static int? GetInt32(JsonElement element, params string[] propertyNames)
     {
         foreach (string propertyName in propertyNames)
         {
@@ -31,7 +41,10 @@ internal static class JsonElementReaders
         return null;
     }
 
-    public static long? GetInt64(JsonElement element, params string[] propertyNames)
+    /// <summary>
+    /// 按候选字段名读取 64 位整数值。
+    /// </summary>
+    internal static long? GetInt64(JsonElement element, params string[] propertyNames)
     {
         foreach (string propertyName in propertyNames)
         {
@@ -44,7 +57,10 @@ internal static class JsonElementReaders
         return null;
     }
 
-    public static bool? GetBoolean(JsonElement element, params string[] propertyNames)
+    /// <summary>
+    /// 按候选字段名读取布尔值。
+    /// </summary>
+    internal static bool? GetBoolean(JsonElement element, params string[] propertyNames)
     {
         foreach (string propertyName in propertyNames)
         {
@@ -57,8 +73,12 @@ internal static class JsonElementReaders
         return null;
     }
 
-    public static string? ReadString(JsonElement element)
+    /// <summary>
+    /// 读取字符串形式的值。
+    /// </summary>
+    internal static string? ReadString(JsonElement element)
     {
+        // 错误码和文件标识在 115 响应里经常混用数字/布尔/字符串，统一转成文本便于后续匹配。
         return element.ValueKind switch
         {
             JsonValueKind.Null or JsonValueKind.Undefined => null,
@@ -70,7 +90,10 @@ internal static class JsonElementReaders
         };
     }
 
-    public static int? ReadInt32(JsonElement element)
+    /// <summary>
+    /// 读取 JSON 元素中的 32 位整数值。
+    /// </summary>
+    internal static int? ReadInt32(JsonElement element)
     {
         return element.ValueKind switch
         {
@@ -86,7 +109,10 @@ internal static class JsonElementReaders
         };
     }
 
-    public static long? ReadInt64(JsonElement element)
+    /// <summary>
+    /// 读取 JSON 元素中的 64 位整数值。
+    /// </summary>
+    internal static long? ReadInt64(JsonElement element)
     {
         return element.ValueKind switch
         {
@@ -102,8 +128,12 @@ internal static class JsonElementReaders
         };
     }
 
-    public static bool? ReadBoolean(JsonElement element)
+    /// <summary>
+    /// 读取 JSON 元素中的布尔值。
+    /// </summary>
+    internal static bool? ReadBoolean(JsonElement element)
     {
+        // state、is_video 等字段既可能是 true/false，也可能是 0/1 或字符串数字。
         return element.ValueKind switch
         {
             JsonValueKind.Null or JsonValueKind.Undefined => null,

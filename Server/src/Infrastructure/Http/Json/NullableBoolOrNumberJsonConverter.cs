@@ -4,10 +4,13 @@ using System.Text.Json.Serialization;
 namespace Infrastructure.Http.Json;
 
 /// <summary>
-/// Nullable variant of <see cref="BoolOrNumberJsonConverter"/>.
+/// 支持空值的 <see cref="BoolOrNumberJsonConverter"/> 变体。
 /// </summary>
-public sealed class NullableBoolOrNumberJsonConverter : JsonConverter<bool?>
+internal sealed class NullableBoolOrNumberJsonConverter : JsonConverter<bool?>
 {
+    /// <summary>
+    /// 读取 JSON 并转换为目标响应模型。
+    /// </summary>
     public override bool? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         return reader.TokenType switch
@@ -23,6 +26,9 @@ public sealed class NullableBoolOrNumberJsonConverter : JsonConverter<bool?>
         };
     }
 
+    /// <summary>
+    /// 将目标响应模型写入 JSON。
+    /// </summary>
     public override void Write(Utf8JsonWriter writer, bool? value, JsonSerializerOptions options)
     {
         if (value.HasValue)

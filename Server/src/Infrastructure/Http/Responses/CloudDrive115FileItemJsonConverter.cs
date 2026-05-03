@@ -5,8 +5,14 @@ using Infrastructure.Http.Json;
 
 namespace Infrastructure.Http.Responses;
 
+/// <summary>
+/// 将 115 文件对象字段转换为统一文件条目模型。
+/// </summary>
 internal sealed class CloudDrive115FileItemJsonConverter : JsonConverter<CloudDrive115FileItem>
 {
+    /// <summary>
+    /// 读取 JSON 并转换为目标响应模型。
+    /// </summary>
     public override CloudDrive115FileItem Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
@@ -17,6 +23,7 @@ internal sealed class CloudDrive115FileItemJsonConverter : JsonConverter<CloudDr
 
         int? fileCategory = JsonElementReaders.GetInt32(root, "fc", "category");
 
+        // 文件列表接口历史字段名差异很大，按 115 缩写、新接口名称、通用名称依次兼容。
         return new CloudDrive115FileItem
         {
             FileId = JsonElementReaders.GetString(root, "fid", "file_id", "id") ?? string.Empty,
@@ -43,6 +50,9 @@ internal sealed class CloudDrive115FileItemJsonConverter : JsonConverter<CloudDr
         };
     }
 
+    /// <summary>
+    /// 将目标响应模型写入 JSON。
+    /// </summary>
     public override void Write(Utf8JsonWriter writer, CloudDrive115FileItem value, JsonSerializerOptions options)
     {
         writer.WriteStartObject();

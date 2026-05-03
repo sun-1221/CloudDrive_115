@@ -5,8 +5,14 @@ using Infrastructure.Http.Json;
 
 namespace Infrastructure.Http.Responses;
 
+/// <summary>
+/// 将 115 回收站条目数组或对象转换为统一列表。
+/// </summary>
 internal sealed class CloudDriveRecycleItemListJsonConverter : JsonConverter<IReadOnlyList<CloudDriveRecycleItemResponse>>
 {
+    /// <summary>
+    /// 读取 JSON 并转换为目标响应模型。
+    /// </summary>
     public override IReadOnlyList<CloudDriveRecycleItemResponse> Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
@@ -24,6 +30,9 @@ internal sealed class CloudDriveRecycleItemListJsonConverter : JsonConverter<IRe
         };
     }
 
+    /// <summary>
+    /// 将目标响应模型写入 JSON。
+    /// </summary>
     public override void Write(
         Utf8JsonWriter writer,
         IReadOnlyList<CloudDriveRecycleItemResponse> value,
@@ -32,6 +41,9 @@ internal sealed class CloudDriveRecycleItemListJsonConverter : JsonConverter<IRe
         JsonSerializer.Serialize(writer, value, CloudDrive115JsonSerializerOptions.Defaults);
     }
 
+    /// <summary>
+    /// 从 JSON 数组读取响应模型列表。
+    /// </summary>
     private static IReadOnlyList<CloudDriveRecycleItemResponse> ReadArray(JsonElement root)
     {
         List<CloudDriveRecycleItemResponse> items = [];
@@ -48,6 +60,9 @@ internal sealed class CloudDriveRecycleItemListJsonConverter : JsonConverter<IRe
         return items;
     }
 
+    /// <summary>
+    /// 从 JSON 对象读取响应模型列表。
+    /// </summary>
     private static IReadOnlyList<CloudDriveRecycleItemResponse> ReadObject(JsonElement root)
     {
         List<CloudDriveRecycleItemResponse> items = [];
@@ -67,6 +82,7 @@ internal sealed class CloudDriveRecycleItemListJsonConverter : JsonConverter<IRe
 
             if (string.IsNullOrWhiteSpace(item.Id))
             {
+                // 字典形态响应会把文件 ID 放在属性名里，条目对象本身可能不再重复 id 字段。
                 item = new CloudDriveRecycleItemResponse
                 {
                     Id = property.Name,

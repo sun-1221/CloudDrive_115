@@ -5,10 +5,13 @@ using System.Globalization;
 namespace Infrastructure.Http.Json;
 
 /// <summary>
-/// Keeps inconsistent 115 error-code fields as strings regardless of whether JSON uses a number or a string.
+/// 将 115 不一致的错误码字段统一保留为字符串，兼容 JSON 中的数字和字符串。
 /// </summary>
-public sealed class StringOrNumberJsonConverter : JsonConverter<string?>
+internal sealed class StringOrNumberJsonConverter : JsonConverter<string?>
 {
+    /// <summary>
+    /// 读取 JSON 并转换为目标响应模型。
+    /// </summary>
     public override string? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         return reader.TokenType switch
@@ -22,6 +25,9 @@ public sealed class StringOrNumberJsonConverter : JsonConverter<string?>
         };
     }
 
+    /// <summary>
+    /// 将目标响应模型写入 JSON。
+    /// </summary>
     public override void Write(Utf8JsonWriter writer, string? value, JsonSerializerOptions options)
     {
         if (value is null)
@@ -33,8 +39,12 @@ public sealed class StringOrNumberJsonConverter : JsonConverter<string?>
         writer.WriteStringValue(value);
     }
 
+    /// <summary>
+    /// 将 JSON 数字读取为字符串。
+    /// </summary>
     private static string ReadNumberAsString(ref Utf8JsonReader reader)
     {
+        // 先保留整数精度，再退回 decimal/double，避免大文件 ID 或错误码被科学计数法破坏。
         if (reader.TryGetInt64(out long longValue))
         {
             return longValue.ToString(CultureInfo.InvariantCulture);

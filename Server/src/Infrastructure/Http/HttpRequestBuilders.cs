@@ -87,6 +87,9 @@ public static class HttpRequestBuilders
         };
     }
 
+    /// <summary>
+    /// 将查询参数追加到请求端点。
+    /// </summary>
     private static string AppendQueryString(
         string requestUri,
         IReadOnlyDictionary<string, string?>? queryParameters)
@@ -99,6 +102,7 @@ public static class HttpRequestBuilders
         List<string> pairs = [];
         foreach (KeyValuePair<string, string?> kv in queryParameters)
         {
+            // 空值参数直接忽略，避免把可选参数序列化成 key= 后改变 115 默认行为。
             if (kv.Value is null)
             {
                 continue;

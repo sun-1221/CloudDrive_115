@@ -5,8 +5,14 @@ using Infrastructure.Http.Json;
 
 namespace Infrastructure.Http.Responses;
 
+/// <summary>
+/// 将 115 视频地址数组或对象转换为统一列表。
+/// </summary>
 internal sealed class CloudDriveVideoUrlVariantListJsonConverter : JsonConverter<IReadOnlyList<CloudDriveVideoUrlVariantResponse>>
 {
+    /// <summary>
+    /// 读取 JSON 并转换为目标响应模型。
+    /// </summary>
     public override IReadOnlyList<CloudDriveVideoUrlVariantResponse> Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
@@ -24,6 +30,9 @@ internal sealed class CloudDriveVideoUrlVariantListJsonConverter : JsonConverter
         };
     }
 
+    /// <summary>
+    /// 将目标响应模型写入 JSON。
+    /// </summary>
     public override void Write(
         Utf8JsonWriter writer,
         IReadOnlyList<CloudDriveVideoUrlVariantResponse> value,
@@ -32,6 +41,9 @@ internal sealed class CloudDriveVideoUrlVariantListJsonConverter : JsonConverter
         JsonSerializer.Serialize(writer, value, CloudDrive115JsonSerializerOptions.Defaults);
     }
 
+    /// <summary>
+    /// 从 JSON 数组读取响应模型列表。
+    /// </summary>
     private static IReadOnlyList<CloudDriveVideoUrlVariantResponse> ReadArray(JsonElement root)
     {
         List<CloudDriveVideoUrlVariantResponse> items = [];
@@ -48,6 +60,9 @@ internal sealed class CloudDriveVideoUrlVariantListJsonConverter : JsonConverter
         return items;
     }
 
+    /// <summary>
+    /// 从 JSON 对象读取响应模型列表。
+    /// </summary>
     private static IReadOnlyList<CloudDriveVideoUrlVariantResponse> ReadObject(JsonElement root)
     {
         List<CloudDriveVideoUrlVariantResponse> items = [];
@@ -56,6 +71,7 @@ internal sealed class CloudDriveVideoUrlVariantListJsonConverter : JsonConverter
             JsonElement value = property.Value;
             if (value.ValueKind is JsonValueKind.String)
             {
+                // 对象形态可能是 "高清":"url" 的轻量映射，属性名就是清晰度名称。
                 items.Add(new CloudDriveVideoUrlVariantResponse
                 {
                     DefinitionName = property.Name,
