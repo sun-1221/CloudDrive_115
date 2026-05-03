@@ -71,6 +71,8 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddRepositories(this IServiceCollection services)
     {
         services.AddScoped(typeof(IRepository<,>), typeof(Repository<,>));
+        services.AddScoped<ICookieSessionRepository, CookieSessionRepository>();
+        services.AddScoped<ICloudDriveJobRepository, CloudDriveJobRepository>();
         return services;
     }
 }

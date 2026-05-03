@@ -9,11 +9,11 @@ namespace Infrastructure.Security;
 /// 机密保护基础设施注册入口。
 /// </summary>
 /// <remarks>
-/// 按设计 §6. 机密保护 (Data Protection) 实现：<br/>
+/// 按设计 §8. WebApi 启动与认证的机密保护约定实现：<br/>
 /// - 注册 <see cref="IDataProtectionProvider"/>；<br/>
 /// - 设置统一的 <c>ApplicationName</c>，保证同一应用的多个实例可共享密钥；<br/>
-/// - 支持通过 <paramref name="keyStoragePath"/> 将密钥持久化到文件系统（R11.6）；<br/>
-/// - 注册 <see cref="ISecretProtector"/> 的单例实现（R11.5）。
+/// - 支持通过 <paramref name="keyStoragePath"/> 将密钥持久化到文件系统（R12.7）；<br/>
+/// - 注册 <see cref="ISecretProtector"/> 的单例实现（R12.7）。
 /// </remarks>
 public static class SecretsSetup
 {
@@ -39,6 +39,7 @@ public static class SecretsSetup
 
         if (!string.IsNullOrWhiteSpace(keyStoragePath))
         {
+            // 多实例或重启后要能解密历史密文，配置路径时必须持久化 Data Protection key ring。
             Directory.CreateDirectory(keyStoragePath);
             builder.PersistKeysToFileSystem(new DirectoryInfo(keyStoragePath));
         }

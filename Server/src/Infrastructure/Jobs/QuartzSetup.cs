@@ -1,3 +1,5 @@
+using Application.Abstractions.CloudDrive;
+
 using Microsoft.Extensions.DependencyInjection;
 
 using Quartz;
@@ -37,8 +39,24 @@ public static class QuartzSetup
         this IServiceCollection services,
         Action<IServiceCollectionQuartzConfigurator>? configure = null)
     {
+        services.AddScoped<ICloudDriveJobScheduler, QuartzCloudDriveJobScheduler>();
+        services.AddHostedService<CloudDriveJobRecoveryHostedService>();
+
         services.AddQuartz(q =>
         {
+            q.AddJob<CloudDriveUploadJob>(options => options
+                .WithIdentity("CloudDriveUploadJob", "cloud-drive")
+                .StoreDurably());
+            q.AddJob<CloudDriveBatchOperationJob>(options => options
+                .WithIdentity("CloudDriveBatchOperationJob", "cloud-drive")
+                .StoreDurably());
+            q.AddJob<CloudDriveClearRecycleBinJob>(options => options
+                .WithIdentity("CloudDriveClearRecycleBinJob", "cloud-drive")
+                .StoreDurably());
+            q.AddJob<CloudDriveTranscodeJob>(options => options
+                .WithIdentity("CloudDriveTranscodeJob", "cloud-drive")
+                .StoreDurably());
+
             // 业务模块通过 configure 回调注册 Job / Trigger
             configure?.Invoke(q);
         });

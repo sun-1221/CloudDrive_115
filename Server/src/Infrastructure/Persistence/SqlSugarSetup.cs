@@ -40,6 +40,8 @@ public static class SqlSugarSetup
                 IsAutoCloseConnection = true,
                 InitKeyType = InitKeyType.Attribute,
             };
+
+            // 先允许调用方设置连接信息，再叠加框架约定，避免调用方漏掉 DomainEvents 忽略规则。
             configureConnection(config);
             ApplyFrameworkConventions(config);
             return new SqlSugarClient(config);
@@ -120,17 +122,28 @@ public static class SqlSugarSetup
 
         ConfigureExternalServices? existing = config.ConfigureExternalServices;
         Action<PropertyInfo, EntityColumnInfo>? previousEntityService = existing?.EntityService;
+        Action<Type, EntityInfo>? previousEntityNameService = existing?.EntityNameService;
 
         config.ConfigureExternalServices = new ConfigureExternalServices
         {
             EntityService = (property, column) =>
             {
+                // 保留调用方已有映射回调，避免框架约定覆盖业务模块自定义列配置。
                 previousEntityService?.Invoke(property, column);
 
                 if (string.Equals(property.Name, nameof(IEntity.DomainEvents), StringComparison.Ordinal))
                 {
+                    // 领域事件是运行时状态，不属于持久化模型，必须从 CodeFirst 列映射中排除。
                     column.IsIgnore = true;
                 }
+
+                CloudDriveSqlSugarMapping.ApplyColumn(property, column);
+            },
+            EntityNameService = (entityType, entity) =>
+            {
+                // 表名回调同样先执行外部配置，再补充 115 云盘聚合的默认命名。
+                previousEntityNameService?.Invoke(entityType, entity);
+                CloudDriveSqlSugarMapping.ApplyEntityName(entityType, entity);
             },
         };
     }
@@ -139,6 +152,7 @@ public static class SqlSugarSetup
     {
         if (string.IsNullOrWhiteSpace(dbTypeName))
         {
+            // 本项目本地测试默认使用 SQLite，未配置数据库类型时保持最小可运行环境。
             return DbType.Sqlite;
         }
 
