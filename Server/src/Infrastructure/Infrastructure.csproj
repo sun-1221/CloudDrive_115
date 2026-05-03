@@ -1,0 +1,43 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Domain\Domain.csproj" />
+    <ProjectReference Include="..\Application\Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- SqlSugar ORM -->
+    <PackageReference Include="SqlSugarCore" />
+
+    <!-- Quartz.NET -->
+    <PackageReference Include="Quartz" />
+    <PackageReference Include="Quartz.Extensions.DependencyInjection" />
+    <PackageReference Include="Quartz.Extensions.Hosting" />
+
+    <!-- FluentValidation DI 集成 -->
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+
+    <!-- Polly + HTTP 韧性 (Polly v8 + Microsoft.Extensions.Http.Resilience) -->
+    <PackageReference Include="Polly" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+
+    <!-- 分布式缓存（开发环境使用内存实现） -->
+    <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
+
+    <!-- DI / 配置 -->
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+
+    <!-- ASP.NET Core Data Protection（机密保护） -->
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection" />
+  </ItemGroup>
+
+</Project>
