@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using Application.CloudDrive.Dtos;
 
 using Infrastructure.Http.Responses;
@@ -20,19 +22,50 @@ internal static class FileMapping
         };
     }
 
-    public static PagedResultDto<CloudDriveSearchResultDto> ToDto(this CloudDriveFileSearchResponse response)
+    public static CloudDriveSearchListDto ToDto(this CloudDriveFileSearchResponse response)
     {
         IReadOnlyList<CloudDriveSearchResultDto> items = response.Items
             .Concat(response.Folders)
-            .Select(item => item.ToDto(parentId: string.Empty))
+            .Select(item => item.ToSearchDto())
             .ToList();
 
-        return new PagedResultDto<CloudDriveSearchResultDto>
+        return new CloudDriveSearchListDto
         {
             Items = items,
-            TotalCount = response.Count,
-            SkipCount = response.Offset,
-            MaxResultCount = response.PageSize,
+            Count = response.Count,
+            PageSize = response.PageSize,
+            PageCount = response.PageCount ?? 0,
+            Offset = response.Offset,
+            IsAsc = response.IsAscending,
+            Order = response.Order,
+            Suffix = response.Suffix,
+            FcMix = response.FcMix,
+            Type = response.Type,
+            State = ReadBoolean(response.State),
+            Error = response.Error,
+            ErrCode = response.ErrCode,
+            ItemSchemaStatus = "available",
+        };
+    }
+
+    public static CloudDriveSearchListDto ToNotCollectedDto(this CloudDriveFileSearchResponse response)
+    {
+        return new CloudDriveSearchListDto
+        {
+            Items = [],
+            Count = response.Count,
+            PageSize = response.PageSize,
+            PageCount = response.PageCount ?? 0,
+            Offset = response.Offset,
+            IsAsc = response.IsAscending,
+            Order = response.Order,
+            Suffix = response.Suffix,
+            FcMix = response.FcMix,
+            Type = response.Type,
+            State = ReadBoolean(response.State),
+            Error = response.Error,
+            ErrCode = response.ErrCode,
+            ItemSchemaStatus = "not_collected",
         };
     }
 
@@ -91,27 +124,32 @@ internal static class FileMapping
         };
     }
 
-    public static CloudDriveSearchResultDto ToDto(this CloudDrive115FileItem item, string parentId)
+    public static CloudDriveSearchResultDto ToSearchDto(this CloudDrive115FileItem item)
     {
-        CloudDriveFileDto file = item.ToDto();
         return new CloudDriveSearchResultDto
         {
-            FileId = file.FileId,
-            Name = file.Name,
-            Size = file.Size,
-            FileType = file.FileType,
-            IsDirectory = file.IsDirectory,
-            ModifiedTime = file.ModifiedTime,
-            PickCode = file.PickCode,
-            Sha1 = file.Sha1,
-            IsStar = file.IsStar,
-            Labels = file.Labels,
-            IsVideo = file.IsVideo,
-            PlayLong = file.PlayLong,
-            VideoDefinition = file.VideoDefinition,
-            ThumbnailUrl = file.ThumbnailUrl,
-            OriginalImageUrl = file.OriginalImageUrl,
-            ParentId = parentId,
+            FileId = item.FileId,
+            Aid = ReadString(item.Raw, "aid") ?? string.Empty,
+            ParentId = ReadString(item.Raw, "cid") ?? string.Empty,
+            FileName = item.Name,
+            Size = item.Size,
+            PickCode = item.PickCode,
+            RawCategoryCode = item.FileCategory,
+            Category = "unknown",
+            Ico = item.Icon,
+            Sha1 = item.Sha1,
+            DirectoryName = ReadString(item.Raw, "dp"),
+            HighlightNameRaw = ReadString(item.Raw, "ns"),
+            Thumb = item.ThumbnailUrl ?? item.OriginalUrl ?? item.VideoImageUrl,
+            VideoImg = item.VideoImageUrl,
+            IsVideo = item.IsVideo,
+            IsStarred = item.IsStarred,
+            IsPrivate = item.IsPrivate,
+            UploadStatusRaw = item.UploadStatus,
+            UploadStatus = "unknown",
+            PlayDuration = item.PlayDuration,
+            Labels = [],
+            SchemaStatus = "available",
         };
     }
 
@@ -179,39 +217,54 @@ internal static class FileMapping
         };
     }
 
-    public static PagedResultDto<CloudDriveRecycleBinItemDto> ToDto(this CloudDriveRecycleBinResponse response)
+    public static CloudDriveRecycleListDto ToDto(this CloudDriveRecycleBinResponse response)
     {
-        return new PagedResultDto<CloudDriveRecycleBinItemDto>
+        return new CloudDriveRecycleListDto
         {
-            Items = response.Items.Select(item => item.ToDto()).ToList(),
-            TotalCount = response.Count,
-            SkipCount = response.Offset,
-            MaxResultCount = response.PageSize,
-        };
-    }
-
-    public static CloudDriveRecycleBinItemDto ToDto(this CloudDriveRecycleItemResponse item)
-    {
-        return new CloudDriveRecycleBinItemDto
-        {
-            FileId = item.Id,
-            RecycleBinItemId = item.Id,
-            Name = item.FileName,
-            Size = item.FileSize,
-            FileType = string.Empty,
-            IsDirectory = item.IsDirectory,
-            ModifiedTime = CloudDriveTimeMapping.FromUnixSeconds(item.DeletedTime),
-            PickCode = item.PickCode,
-            ThumbnailUrl = item.ThumbnailUrl,
-            RestoreStatus = item.RestoreStatus ?? 0,
-            DeletedTime = CloudDriveTimeMapping.FromUnixSeconds(item.DeletedTime),
-            OriginalParentId = item.OriginalParentId,
-            OriginalParentName = item.OriginalParentName,
+            Items = [],
+            Count = response.Count,
+            RbPass = response.RecycleBinPasswordEnabled ?? 0,
+            Offset = response.Offset,
+            PageSize = response.PageSize,
+            Order = response.Order,
+            IsAsc = response.IsAscending,
+            ItemSchemaStatus = "not_collected",
         };
     }
 
     private static int? ParseNullableInt(string? value)
     {
         return int.TryParse(value, out int result) ? result : null;
+    }
+
+    private static string? ReadString(JsonElement source, string propertyName)
+    {
+        if (source.ValueKind != JsonValueKind.Object
+            || !source.TryGetProperty(propertyName, out JsonElement value))
+        {
+            return null;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Number => value.GetRawText(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            _ => null,
+        };
+    }
+
+    private static bool? ReadBoolean(JsonElement value)
+    {
+        return value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Number when value.TryGetInt32(out int number) => number != 0,
+            JsonValueKind.String when bool.TryParse(value.GetString(), out bool parsed) => parsed,
+            JsonValueKind.String when int.TryParse(value.GetString(), out int number) => number != 0,
+            _ => null,
+        };
     }
 }

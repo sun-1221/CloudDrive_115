@@ -17,13 +17,9 @@ internal static class UserAggregationMapping
     {
         return new CloudDriveUserInfoDto
         {
-            CloudAccountUid = cloudAccountUid,
-            UserName = response.UserName ?? string.Empty,
-            AvatarSmallUrl = response.UserFaceSmall ?? response.UserFace,
-            AvatarMediumUrl = response.UserFaceMedium,
-            AvatarLargeUrl = response.UserFaceLarge,
-            SpaceInfo = spaceInfo,
-            VipInfo = vipInfo,
+            Uid = cloudAccountUid,
+            Nickname = response.UserName ?? string.Empty,
+            AvatarUrl = response.UserFace ?? response.UserFaceSmall,
         };
     }
 
@@ -31,12 +27,7 @@ internal static class UserAggregationMapping
     {
         return new CloudDriveSpaceInfoDto
         {
-            AllTotal = response.AllTotal ?? string.Empty,
-            AllUse = response.AllUse ?? string.Empty,
-            AllRemain = response.AllRemain ?? string.Empty,
-            AllTotalBytes = response.AllTotalBytes ?? 0,
-            AllUseBytes = response.AllUseBytes ?? 0,
-            AllRemainBytes = response.AllRemainBytes ?? 0,
+            SchemaStatus = "not_collected",
         };
     }
 

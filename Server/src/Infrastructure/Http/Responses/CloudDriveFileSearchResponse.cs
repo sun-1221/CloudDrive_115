@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 using Infrastructure.Http.Json;
@@ -62,6 +63,39 @@ internal sealed class CloudDriveFileSearchResponse
     /// </summary>
     [JsonPropertyName("suffix")]
     public string? Suffix { get; set; }
+
+    /// <summary>
+    /// 获取或设置官方 fc_mix 字段。
+    /// </summary>
+    [JsonConverter(typeof(NullableStringOrNumberToIntJsonConverter))]
+    [JsonPropertyName("fc_mix")]
+    public int? FcMix { get; set; }
+
+    /// <summary>
+    /// 获取或设置官方 type 字段。
+    /// </summary>
+    [JsonConverter(typeof(NullableStringOrNumberToIntJsonConverter))]
+    [JsonPropertyName("type")]
+    public int? Type { get; set; }
+
+    /// <summary>
+    /// 获取或设置官方 state 字段。
+    /// </summary>
+    [JsonPropertyName("state")]
+    public JsonElement State { get; set; }
+
+    /// <summary>
+    /// 获取或设置官方 error 字段。
+    /// </summary>
+    [JsonPropertyName("error")]
+    public string? Error { get; set; }
+
+    /// <summary>
+    /// 获取或设置官方 errCode 字段。
+    /// </summary>
+    [JsonConverter(typeof(NullableStringOrNumberToIntJsonConverter))]
+    [JsonPropertyName("errCode")]
+    public int? ErrCode { get; set; }
 
     /// <summary>
     /// 获取或设置目录结果列表。

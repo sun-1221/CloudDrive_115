@@ -1,3 +1,5 @@
+using Infrastructure.Diagnostics;
+
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
 
@@ -57,7 +59,7 @@ public static class HttpClientSetup
         builder.AddResilienceHandler($"{name}-read", pipeline =>
         {
             // 读请求按幂等处理，允许指数退避重试来吸收 115 偶发 5xx 或网络抖动。
-            pipeline.AddRetry(CreateRetryOptions());
+            pipeline.AddRetry(CreateRetryOptions(name));
             pipeline.AddCircuitBreaker(CreateCircuitBreakerOptions());
             pipeline.AddTimeout(DefaultTimeout);
         });
@@ -97,7 +99,7 @@ public static class HttpClientSetup
     /// <summary>
     /// 创建读请求重试策略选项。
     /// </summary>
-    private static HttpRetryStrategyOptions CreateRetryOptions()
+    private static HttpRetryStrategyOptions CreateRetryOptions(string clientName)
     {
         var options = new HttpRetryStrategyOptions
         {
@@ -105,6 +107,11 @@ public static class HttpClientSetup
             BackoffType = DelayBackoffType.Exponential,
             UseJitter = true,
             Delay = DefaultRetryDelay,
+            OnRetry = args =>
+            {
+                CloudDriveMetrics.RecordHttpRetry(clientName);
+                return default;
+            },
         };
 
         options.DisableForUnsafeHttpMethods();

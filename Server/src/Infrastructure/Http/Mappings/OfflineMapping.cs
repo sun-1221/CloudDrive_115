@@ -11,33 +11,21 @@ namespace Infrastructure.Http.Mappings;
 /// </summary>
 internal static class OfflineMapping
 {
-    public static PagedResultDto<CloudDriveOfflineTaskDto> ToDto(this CloudDriveOfflineTaskListResponse response)
+    public static CloudDriveOfflineTaskListDto ToDto(this CloudDriveOfflineTaskListResponse response)
     {
-        return new PagedResultDto<CloudDriveOfflineTaskDto>
+        return new CloudDriveOfflineTaskListDto
         {
-            Items = response.Tasks.Select(item => item.ToDto()).ToList(),
-            TotalCount = response.Count,
-            SkipCount = Math.Max(response.Page - 1, 0) * response.PageSize,
-            MaxResultCount = response.PageSize,
-        };
-    }
-
-    public static CloudDriveOfflineTaskDto ToDto(this CloudDriveOfflineTaskResponse response)
-    {
-        return new CloudDriveOfflineTaskDto
-        {
-            InfoHash = response.InfoHash,
-            Name = response.Name,
-            Size = response.Size,
-            AddTime = response.AddTime,
-            LastUpdate = response.LastUpdate,
-            PercentDone = response.PercentDone,
-            Url = response.Url,
-            FileId = response.FileId,
-            ParentId = response.ParentId,
-            VideoDefinition = response.VideoDefinition,
-            PlayDuration = response.PlayDuration,
-            Status = NormalizeStatus(response.Status),
+            Items = [],
+            Page = response.Page,
+            PageCount = response.PageCount,
+            PageRow = response.PageRow,
+            PageSize = response.PageSize,
+            Count = response.Count,
+            Quota = response.Quota,
+            Total = response.Total,
+            RealState = response.RealState,
+            ErrType = response.ErrorType,
+            ItemSchemaStatus = "not_collected",
         };
     }
 
@@ -52,22 +40,17 @@ internal static class OfflineMapping
             Surplus = quota.Surplus,
             MaxSize = quota.MaxSize,
             Used = quota.Used,
-            Total = stats?.TotalCount ?? 0,
-            Failed = stats?.FailedCount ?? 0,
-            Completed = stats?.FinishedCount ?? 0,
-            Active = stats?.DownloadingCount ?? 0,
         };
     }
 
-    private static string? NormalizeStatus(int? status)
+    public static CloudDriveOfflineStatsDto ToDto(this CloudDriveOfflineStatsResponse stats)
     {
-        return status switch
+        return new CloudDriveOfflineStatsDto
         {
-            -1 => "failed",
-            0 => "allocating",
-            1 => "downloading",
-            2 => "success",
-            _ => null,
+            Total = stats.TotalCount,
+            Failed = stats.FailedCount,
+            Completed = stats.FinishedCount,
+            Active = stats.DownloadingCount,
         };
     }
 

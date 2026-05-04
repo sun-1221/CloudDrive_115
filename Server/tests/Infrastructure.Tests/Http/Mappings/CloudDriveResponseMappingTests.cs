@@ -1,5 +1,7 @@
 using System.Text.Json;
 
+using Application.CloudDrive.Dtos;
+
 using Infrastructure.Http.Json;
 using Infrastructure.Http.Mappings;
 using Infrastructure.Http.Responses;
@@ -34,14 +36,14 @@ public sealed class CloudDriveResponseMappingTests
 
         Assert.Equal(2, dto.TotalCount);
         Assert.Equal(10, dto.SkipCount);
-        Assert.True(dto.Items.First().IsDirectory);
-        Assert.False(dto.Items.Last().IsDirectory);
+        Assert.Null(dto.Items.First().IsDirectory);
+        Assert.Null(dto.Items.Last().IsDirectory);
         Assert.True(dto.Items.Last().IsVideo);
         Assert.Equal("ABC", dto.Items.Last().Sha1);
     }
 
     [Fact]
-    public void RecycleBin_ToDto_UsesRecycleBinItemIdAndReverseTypeMapping()
+    public void RecycleBin_ToDto_MapsTopLevelFieldsAndLeavesItemsNotCollected()
     {
         const string json = """
             {
@@ -70,17 +72,33 @@ public sealed class CloudDriveResponseMappingTests
 
         var dto = response.ToDto();
 
-        var item = dto.Items.Single();
-        Assert.Equal("recycled-1", item.FileId);
-        Assert.Equal("recycled-1", item.RecycleBinItemId);
-        Assert.True(item.IsDirectory);
-        Assert.Equal(-1, item.RestoreStatus);
+        Assert.Empty(dto.Items);
+        Assert.Equal(1, dto.Count);
+        Assert.Equal(30, dto.PageSize);
+        Assert.Equal("not_collected", dto.ItemSchemaStatus);
     }
 
     [Fact]
-    public void OfflineQuota_ToDto_NormalizesStatsFields()
+    public void OfflineQuota_ToDto_NormalizesQuotaFields()
     {
         const string quotaJson = """{"package":{"vip":true},"count":10,"surplus":8,"max_size":"1024","used":"2"}""";
+
+        CloudDriveOfflineQuotaResponse quota = JsonSerializer.Deserialize<CloudDriveOfflineQuotaResponse>(
+            quotaJson,
+            CloudDrive115JsonSerializerOptions.Defaults)!;
+
+        var dto = quota.ToDto();
+
+        Assert.NotNull(dto.Package);
+        Assert.Equal(10, dto.Count);
+        Assert.Equal(8, dto.Surplus);
+        Assert.Equal(1024L, dto.MaxSize);
+        Assert.Equal(2L, dto.Used);
+    }
+
+    [Fact]
+    public void OfflineStats_ToDto_NormalizesStatsFields()
+    {
         const string statsJson = """
             {
               "total_count": 9,
@@ -90,24 +108,20 @@ public sealed class CloudDriveResponseMappingTests
             }
             """;
 
-        CloudDriveOfflineQuotaResponse quota = JsonSerializer.Deserialize<CloudDriveOfflineQuotaResponse>(
-            quotaJson,
-            CloudDrive115JsonSerializerOptions.Defaults)!;
         CloudDriveOfflineStatsResponse stats = JsonSerializer.Deserialize<CloudDriveOfflineStatsResponse>(
             statsJson,
             CloudDrive115JsonSerializerOptions.Defaults)!;
 
-        var dto = quota.ToDto(stats);
+        var dto = stats.ToDto();
 
         Assert.Equal(9, dto.Total);
         Assert.Equal(1, dto.Failed);
         Assert.Equal(6, dto.Completed);
         Assert.Equal(2, dto.Active);
-        Assert.NotNull(dto.Package);
     }
 
     [Fact]
-    public void VideoPlay_ToDto_MapsUserDefDefinitionNewAndAudioTracks()
+    public void VideoPlay_ToDto_WhenSchemaUncollected_DoesNotExposePlaybackFields()
     {
         const string json = """
             {
@@ -136,17 +150,18 @@ public sealed class CloudDriveResponseMappingTests
 
         var dto = response.ToDto();
 
+        Assert.Equal(VideoPlayStatus.SchemaNotCollected, dto.Status);
         Assert.True(dto.IsTemporary);
-        Assert.Equal(4, dto.UserDef);
-        Assert.Equal(2, dto.SelectedDefinition);
-        Assert.Equal(90, dto.UserRotate);
-        Assert.Equal(1, dto.UserTurn);
-        Assert.Equal("vip_required", dto.RestrictionReason);
+        Assert.Equal("not_collected", dto.PlaybackSchemaStatus);
         Assert.NotNull(dto.UsageRestrictionNotice);
-        Assert.Equal(1080, dto.QualityOptions.Single().DefinitionNew);
-        Assert.Equal(1080, dto.QualityOptions.Single().Height);
-        Assert.Equal(1920, dto.QualityOptions.Single().Width);
-        Assert.Equal(2, dto.AudioTracks.Count);
-        Assert.True(dto.AudioTracks.First().IsSelected);
+        Assert.Empty(dto.QualityOptions);
+        Assert.Empty(dto.AudioTracks);
+        Assert.Null(dto.Duration);
+        Assert.Null(dto.UserDef);
+        Assert.Null(dto.SelectedDefinition);
+        Assert.Null(dto.UserRotate);
+        Assert.Null(dto.UserTurn);
+        Assert.Null(dto.RestrictionReason);
+        Assert.Null(dto.PlaybackMetadata);
     }
 }

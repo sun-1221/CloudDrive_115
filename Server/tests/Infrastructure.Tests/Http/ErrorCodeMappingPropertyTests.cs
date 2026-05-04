@@ -210,7 +210,7 @@ public sealed class ErrorCodeMappingPropertyTests
         client.BaseAddress = new Uri("https://webapi.115.com/");
 
         // 执行
-        HttpResponseMessage response = await client.PostAsync("files/add", new StringContent(""), CancellationToken.None);
+        HttpResponseMessage response = await client.PostAsync("files/history", new StringContent(""), CancellationToken.None);
 
         // 断言
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
@@ -438,6 +438,18 @@ public sealed class ErrorCodeMappingPropertyTests
                 .Where(item => item.UserId == userId)
                 .ToList()
                 .AsReadOnly();
+            return Task.FromResult(sessions);
+        }
+
+        public Task<IReadOnlyList<CookieSession>> GetAvailableSessionsAsync(
+            CancellationToken cancellationToken = default)
+        {
+            IReadOnlyList<CookieSession> sessions = _store.Values
+                .Where(item => item.Status is Domain.Enums.CookieSessionStatus.Active
+                    or Domain.Enums.CookieSessionStatus.Invalidated)
+                .ToList()
+                .AsReadOnly();
+
             return Task.FromResult(sessions);
         }
     }

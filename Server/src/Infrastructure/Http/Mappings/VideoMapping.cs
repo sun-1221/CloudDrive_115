@@ -11,25 +11,14 @@ internal static class VideoMapping
 {
     public static CloudDriveVideoPlayDto ToDto(this CloudDriveVideoPlayResponse response)
     {
-        IReadOnlyList<VideoQualityOption> qualityOptions = response.VideoUrls
-            .Select(item => item.ToDto(response.AvailableDefinitions))
-            .ToList();
-
         return new CloudDriveVideoPlayDto
         {
-            Status = string.Equals(response.Status, "transcoding", StringComparison.OrdinalIgnoreCase)
-                ? VideoPlayStatus.Transcoding
-                : VideoPlayStatus.Ready,
-            QualityOptions = qualityOptions,
-            AudioTracks = response.AudioTracks.Select(track => track.ToDto()).ToList(),
-            Duration = checked((int)Math.Min(response.PlayDuration ?? 0, int.MaxValue)),
-            UserDef = response.UserDef ?? response.UserSelectedDefinition,
+            Status = VideoPlayStatus.SchemaNotCollected,
+            QualityOptions = [],
+            AudioTracks = [],
             IsTemporary = true,
-            SelectedDefinition = response.UserSelectedDefinition,
-            UserRotate = response.UserRotate,
-            UserTurn = response.UserTurn,
-            RestrictionReason = response.RestrictionReason,
-            UsageRestrictionNotice = "播放地址仅限当前已绑定用户在本系统内短时使用。",
+            PlaybackSchemaStatus = "not_collected",
+            UsageRestrictionNotice = "视频播放成功响应 schema 尚未采集，暂不返回播放地址。",
         };
     }
 
@@ -84,20 +73,9 @@ internal static class VideoMapping
     {
         return new CloudDriveSubtitleListDto
         {
-            AutoloadSubtitle = response.AutoLoad.FirstOrDefault()?.ToDto(),
-            Items = response.AutoLoad.Concat(response.Items).Select(item => item.ToDto()).ToList(),
-        };
-    }
-
-    public static CloudDriveSubtitleDto ToDto(this CloudDriveSubtitleItemResponse response)
-    {
-        return new CloudDriveSubtitleDto
-        {
-            SubtitleId = response.Id ?? string.Empty,
-            Language = response.Language ?? string.Empty,
-            Title = response.Title ?? response.FileName ?? string.Empty,
-            SubtitleUrl = response.Url ?? string.Empty,
-            FileName = response.FileName,
+            AutoloadSubtitle = null,
+            Items = [],
+            ItemSchemaStatus = "not_collected",
         };
     }
 }

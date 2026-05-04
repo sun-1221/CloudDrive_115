@@ -10,13 +10,6 @@ namespace Infrastructure.Http.Responses;
 internal sealed class CloudDriveRecycleBinResponse
 {
     /// <summary>
-    /// 获取或设置条目列表。
-    /// </summary>
-    [JsonConverter(typeof(CloudDriveRecycleItemListJsonConverter))]
-    [JsonPropertyName("data")]
-    public IReadOnlyList<CloudDriveRecycleItemResponse> Items { get; init; } = [];
-
-    /// <summary>
     /// 获取或设置总数量。
     /// </summary>
     [JsonConverter(typeof(StringOrNumberToIntJsonConverter))]
@@ -55,5 +48,5 @@ internal sealed class CloudDriveRecycleBinResponse
     /// </summary>
     [JsonConverter(typeof(StringOrNumberToIntJsonConverter))]
     [JsonPropertyName("is_asc")]
-    public int IsAscending { get; init; }
+    public int? IsAscending { get; init; }
 }

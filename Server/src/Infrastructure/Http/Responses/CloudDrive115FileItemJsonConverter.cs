@@ -21,16 +21,14 @@ internal sealed class CloudDrive115FileItemJsonConverter : JsonConverter<CloudDr
         using JsonDocument document = JsonDocument.ParseValue(ref reader);
         JsonElement root = document.RootElement;
 
-        int? fileCategory = JsonElementReaders.GetInt32(root, "fc", "category");
-
         // 文件列表接口历史字段名差异很大，按 115 缩写、新接口名称、通用名称依次兼容。
         return new CloudDrive115FileItem
         {
             FileId = JsonElementReaders.GetString(root, "fid", "file_id", "id") ?? string.Empty,
             Name = JsonElementReaders.GetString(root, "n", "name", "file_name") ?? string.Empty,
             Size = JsonElementReaders.GetInt64(root, "s", "size", "file_size") ?? 0L,
-            FileCategory = fileCategory,
-            IsDirectory = fileCategory == 0,
+            FileCategory = JsonElementReaders.GetInt32(root, "fc", "category"),
+            IsDirectory = JsonElementReaders.GetBoolean(root, "is_dir", "is_directory"),
             PickCode = JsonElementReaders.GetString(root, "pc", "pick_code", "pickCode"),
             ThumbnailUrl = JsonElementReaders.GetString(root, "tu", "thumb", "thumb_url"),
             OriginalUrl = JsonElementReaders.GetString(root, "u", "original_url", "url"),

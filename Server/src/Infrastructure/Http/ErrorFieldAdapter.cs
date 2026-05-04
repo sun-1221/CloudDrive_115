@@ -71,8 +71,6 @@ internal sealed class ErrorFieldAdapter : IErrorFieldAdapter
             ["vip.115.com/"] = new("/", "code", ErrorCodeType.Number, "message", null, "msg"),
             ["webapi.115.com/rb"] = new("/rb", "errNo", ErrorCodeType.Number, "error", "errno"),
             ["webapi.115.com/files"] = new("/files", "errNo", ErrorCodeType.Number, "error", "errno"),
-            ["webapi.115.com/files/add"] = new("/files/add", "errNo", ErrorCodeType.Number, "error", "errno"),
-            ["webapi.115.com/files/edit"] = new("/files/edit", "errNo", ErrorCodeType.Number, "error", "errno"),
             ["webapi.115.com/files/video"] = new("/files/video", "errno", ErrorCodeType.Number, "error", "errNo"),
             ["webapi.115.com/files/video_push"] = new("/files/video_push", "errNo", ErrorCodeType.Number, "error", "errno"),
             ["webapi.115.com/movies/transcode"] = new("/movies/transcode", "errNo", ErrorCodeType.Number, "error", "errno"),
@@ -94,7 +92,7 @@ internal sealed class ErrorFieldAdapter : IErrorFieldAdapter
 
         string exactKey = TrimTrailingSlash($"{host}{path}");
 
-        // 精确匹配优先于目录前缀匹配，避免 /files/add 被较宽泛的 /files 规则提前截获。
+        // 精确匹配优先于目录前缀匹配，避免更具体的已采集路径被较宽泛的 /files 规则提前截获。
         foreach (KeyValuePair<string, ErrorFieldDescriptor> descriptor in Descriptors)
         {
             string key = TrimTrailingSlash(descriptor.Key);

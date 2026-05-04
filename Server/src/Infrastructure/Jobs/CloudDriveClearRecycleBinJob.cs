@@ -23,14 +23,14 @@ namespace Infrastructure.Jobs;
 /// </summary>
 internal sealed class CloudDriveClearRecycleBinJob(
     ICloudDriveJobRepository jobRepository,
-    ICloudDriveOpenApiGateway openApiGateway,
-    ICloudDriveMetadataCache metadataCache,
     ITransactionManager transactionManager,
     IPublisher publisher,
     ICloudDriveJobAuditLogger auditLogger,
     ILogger<CloudDriveClearRecycleBinJob> logger) : IJob
 {
     private const string JobIdDataKey = "JobId";
+    private const string ApiNotCollectedCode = "cloud_drive_api_not_collected";
+    private const string ApiNotCollectedMessage = "清空回收站 115 网页端接口尚未采集，待补采集后再接入。";
     private static readonly JsonSerializerOptions PayloadJsonOptions = new(JsonSerializerDefaults.Web);
 
     /// <inheritdoc />
@@ -62,9 +62,7 @@ internal sealed class CloudDriveClearRecycleBinJob(
         try
         {
             await StartJobAsync(job, context.CancellationToken);
-            await ExecuteClearAsync(job, input, context.CancellationToken);
-            await UpdateCheckpointAsync(job, CreateCheckpoint(), 95, context.CancellationToken);
-            await CompleteJobAsync(job, context.CancellationToken);
+            await MarkFailedAsync(job, $"{ApiNotCollectedCode}: {ApiNotCollectedMessage}", context.CancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -100,56 +98,11 @@ internal sealed class CloudDriveClearRecycleBinJob(
         return JsonSerializer.Deserialize<ClearRecycleBinInput>(job.PayloadJson, PayloadJsonOptions);
     }
 
-    private async Task ExecuteClearAsync(
-        CloudDriveJob job,
-        ClearRecycleBinInput input,
-        CancellationToken cancellationToken)
-    {
-        string cloudAccountUid = string.IsNullOrWhiteSpace(input.CloudAccountUid)
-            ? job.CloudAccountUid
-            : input.CloudAccountUid;
-
-        var context = new CloudDriveApiContext
-        {
-            Category = "recycle-bin",
-            FormFields = new Dictionary<string, string>
-            {
-                ["format"] = "json",
-            },
-        };
-
-        await openApiGateway.SendWebApiRequestAsync<JsonElement>(
-            job.UserId,
-            cloudAccountUid,
-            HttpMethod.Post,
-            "rb/clean",
-            context,
-            cancellationToken);
-    }
-
     private async Task StartJobAsync(CloudDriveJob job, CancellationToken cancellationToken)
     {
         job.Start();
         job.UpdateProgress(1);
         await SaveAndPublishAsync(job, "started", cancellationToken);
-    }
-
-    private async Task UpdateCheckpointAsync(
-        CloudDriveJob job,
-        string checkpointData,
-        int progress,
-        CancellationToken cancellationToken)
-    {
-        job.UpdateCheckpoint(checkpointData);
-        job.UpdateProgress(progress);
-        await SaveAndPublishAsync(job, "checkpoint", cancellationToken);
-    }
-
-    private async Task CompleteJobAsync(CloudDriveJob job, CancellationToken cancellationToken)
-    {
-        job.Complete();
-        await SaveAndPublishAsync(job, "completed", cancellationToken);
-        await metadataCache.InvalidateDirectoryAsync(job.UserId, job.CloudAccountUid, "0");
     }
 
     private async Task MarkFailedAsync(
@@ -189,19 +142,10 @@ internal sealed class CloudDriveClearRecycleBinJob(
         job.ClearDomainEvents();
     }
 
-    private static string CreateCheckpoint()
-    {
-        return JsonSerializer.Serialize(
-            new ClearRecycleBinCheckpoint("rb/clean", DateTime.UtcNow),
-            PayloadJsonOptions);
-    }
-
     private static string CreateSafeErrorMessage(Exception exception)
     {
         return exception.Message.Length <= 500
             ? exception.Message
             : exception.Message[..500];
     }
-
-    private sealed record ClearRecycleBinCheckpoint(string Endpoint, DateTime CompletedAtUtc);
 }

@@ -8,6 +8,7 @@ using Application.CloudDrive.Dtos;
 
 using Domain.Exceptions;
 
+using Infrastructure.Diagnostics;
 using Infrastructure.Http.Json;
 using Infrastructure.Http.Mappings;
 using Infrastructure.Http.Responses;
@@ -252,6 +253,7 @@ internal sealed class CloudDriveApiClient(
         {
             // OSS 失败响应可能是 XML/HTML，先按 HTTP 状态映射，避免误走 115 JSON 业务错误解析。
             LogApiCallSummary(request, requestUri, (int)response.StatusCode, null, stopwatch.ElapsedMilliseconds);
+            RecordApiFailure(CloudDriveHttpClientNames.UploadDirect, requestUri, "upload_http");
 
             throw new CloudDriveUploadException(
                 $"115 OSS 直传失败 HTTP {(int)response.StatusCode}, Endpoint={requestUri.Host}",
@@ -279,6 +281,7 @@ internal sealed class CloudDriveApiClient(
                 (int)response.StatusCode,
                 apiError?.Code?.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 stopwatch.ElapsedMilliseconds);
+            RecordApiFailure(CloudDriveHttpClientNames.UploadDirect, requestUri, "upload_business");
 
             throw new CloudDriveUploadException(
                 apiError?.Message ?? $"115 OSS 直传返回业务失败 Endpoint={requestUri.Host}",
@@ -453,6 +456,7 @@ internal sealed class CloudDriveApiClient(
         }
         catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
+            RecordApiFailure(GetClientName(client), requestUri, "timeout");
             throw new CloudDriveNetworkException(
                 $"115 网页端 API 请求超时 Endpoint={requestUri.AbsolutePath}",
                 ex,
@@ -460,6 +464,7 @@ internal sealed class CloudDriveApiClient(
         }
         catch (HttpRequestException ex)
         {
+            RecordApiFailure(GetClientName(client), requestUri, "network");
             throw new CloudDriveNetworkException(
                 $"115 网页端 API 通信失败 Endpoint={requestUri.AbsolutePath}",
                 ex,
@@ -483,6 +488,7 @@ internal sealed class CloudDriveApiClient(
         if (statusCode is 401 or 403)
         {
             // 认证失败状态说明 Cookie 已不可继续使用，先持久化失效标记再抛领域异常。
+            RecordApiFailure(GetClientName(response.RequestMessage), requestUri, "cookie_invalidated");
             await cookieSessionManager.MarkInvalidatedAsync(
                 userId,
                 cloudAccountUid,
@@ -497,6 +503,7 @@ internal sealed class CloudDriveApiClient(
         if (statusCode == 429)
         {
             // 上游 HTTP 429 是强频控信号，反馈给限流器以便后续请求主动降速。
+            RecordApiFailure(GetClientName(response.RequestMessage), requestUri, "rate_limited");
             rateLimiter.RecordThrottleSignal(userId, cloudAccountUid, category);
             throw new CloudDriveRateLimitException(
                 $"115 网页端 API 触发频控 Endpoint={requestUri.AbsolutePath}",
@@ -505,12 +512,14 @@ internal sealed class CloudDriveApiClient(
 
         if (statusCode == 404)
         {
+            RecordApiFailure(GetClientName(response.RequestMessage), requestUri, "not_found");
             throw new CloudDriveFileNotFoundException(
                 $"115 网页端资源不存在 Endpoint={requestUri.AbsolutePath}");
         }
 
         if (!response.IsSuccessStatusCode)
         {
+            RecordApiFailure(GetClientName(response.RequestMessage), requestUri, "http");
             throw new CloudDriveApiException(
                 $"115 网页端 API 返回失败 HTTP {statusCode}, Endpoint={requestUri.AbsolutePath}");
         }
@@ -531,6 +540,7 @@ internal sealed class CloudDriveApiClient(
         if (IsLoginInvalidationError(apiError, responseJson))
         {
             // 有些接口用业务错误表达登录失效，同样需要落库失效，阻止后续继续复用旧 Cookie。
+            RecordApiFailure("authenticated", requestUri, "cookie_invalidated");
             await cookieSessionManager.MarkInvalidatedAsync(
                 userId,
                 cloudAccountUid,
@@ -545,6 +555,7 @@ internal sealed class CloudDriveApiClient(
         if (IsRateLimitError(apiError, responseJson))
         {
             // 业务响应中的 rate/limit 文案也代表上游频控，需要和 HTTP 429 使用同一反馈路径。
+            RecordApiFailure("authenticated", requestUri, "rate_limited");
             rateLimiter.RecordThrottleSignal(userId, cloudAccountUid, category);
             throw new CloudDriveRateLimitException(
                 $"115 网页端 API 触发频控 Endpoint={requestUri.AbsolutePath}",
@@ -553,6 +564,7 @@ internal sealed class CloudDriveApiClient(
 
         if (apiError?.Code == 404)
         {
+            RecordApiFailure("authenticated", requestUri, "not_found");
             throw new CloudDriveFileNotFoundException(
                 apiError.Message ?? $"115 网页端资源不存在 Endpoint={requestUri.AbsolutePath}");
         }
@@ -560,13 +572,18 @@ internal sealed class CloudDriveApiClient(
         if (apiError is null && !HasKnownErrorShape(responseJson))
         {
             // state=false 但没有任何已知错误字段时保留 unknown_error_shape，方便后续补充接口适配规则。
+            RecordApiFailure("authenticated", requestUri, "unknown_error_shape");
             throw new CloudDriveApiException(
                 $"115 网页端 API 返回未知错误结构 Endpoint={requestUri.AbsolutePath}",
                 "unknown_error_shape");
         }
 
+        RecordApiFailure("authenticated", requestUri, "business");
         throw new CloudDriveApiException(
-            apiError?.Message ?? $"115 网页端 API 返回业务失败 Endpoint={requestUri.AbsolutePath}");
+            apiError?.Message ?? $"115 网页端 API 返回业务失败 Endpoint={requestUri.AbsolutePath}",
+            "cloud_drive_api_error",
+            apiError?.Code?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? apiError?.RawField,
+            apiError?.Message);
     }
 
     /// <summary>
@@ -752,10 +769,12 @@ internal sealed class CloudDriveApiClient(
             return true;
         }
 
-        if (targetType == typeof(PagedResultDto<CloudDriveSearchResultDto>))
+        if (targetType == typeof(CloudDriveSearchListDto))
         {
             CloudDriveFileSearchResponse response = DeserializeInternal<CloudDriveFileSearchResponse>(responseContent, requestUri);
-            result = (T)(object)response.ToDto();
+            result = (T)(object)(IsCollectedSearchItemShape(responseContent)
+                ? response.ToDto()
+                : CreateSearchNotCollectedDto(response, requestUri));
             return true;
         }
 
@@ -780,7 +799,7 @@ internal sealed class CloudDriveApiClient(
             return true;
         }
 
-        if (targetType == typeof(PagedResultDto<CloudDriveRecycleBinItemDto>))
+        if (targetType == typeof(CloudDriveRecycleListDto))
         {
             CloudDriveRecycleBinResponse response = DeserializeInternal<CloudDriveRecycleBinResponse>(responseContent, requestUri);
             result = (T)(object)response.ToDto();
@@ -789,6 +808,25 @@ internal sealed class CloudDriveApiClient(
 
         result = default;
         return false;
+    }
+
+    private CloudDriveSearchListDto CreateSearchNotCollectedDto(
+        CloudDriveFileSearchResponse response,
+        Uri requestUri)
+    {
+        logger.LogWarning(
+            "115 文件搜索响应 item schema 未采集 Path={Path}",
+            sensitiveFieldsFilter.Redact(requestUri.AbsolutePath));
+
+        return response.ToNotCollectedDto();
+    }
+
+    private static bool IsCollectedSearchItemShape(string responseContent)
+    {
+        using JsonDocument document = JsonDocument.Parse(responseContent);
+        return document.RootElement.ValueKind == JsonValueKind.Object
+            && document.RootElement.TryGetProperty("data", out JsonElement data)
+            && data.ValueKind == JsonValueKind.Array;
     }
 
     private TResponse DeserializeInternal<TResponse>(string responseContent, Uri requestUri)
@@ -911,6 +949,51 @@ internal sealed class CloudDriveApiClient(
             statusCode,
             redactedUpstreamCode,
             latencyMs);
+    }
+
+    /// <summary>
+    /// 记录低基数的 115 API 失败指标。
+    /// </summary>
+    private static void RecordApiFailure(string clientName, Uri requestUri, string failureType)
+    {
+        CloudDriveMetrics.RecordApiFailure(clientName, requestUri.Host, failureType);
+    }
+
+    /// <summary>
+    /// 根据 HttpClient 基础地址推断命名客户端。
+    /// </summary>
+    private static string GetClientName(HttpClient client)
+    {
+        return client.BaseAddress is null
+            ? "unknown"
+            : GetClientName(client.BaseAddress.Host);
+    }
+
+    /// <summary>
+    /// 根据请求地址推断命名客户端。
+    /// </summary>
+    private static string GetClientName(HttpRequestMessage? request)
+    {
+        return request?.RequestUri is null
+            ? "unknown"
+            : GetClientName(request.RequestUri.Host);
+    }
+
+    /// <summary>
+    /// 根据 115 相关域名推断命名客户端。
+    /// </summary>
+    private static string GetClientName(string host)
+    {
+        return host.Trim().ToLowerInvariant() switch
+        {
+            "webapi.115.com" => CloudDriveHttpClientNames.Web,
+            "my.115.com" => CloudDriveHttpClientNames.My,
+            "vip.115.com" => CloudDriveHttpClientNames.Vip,
+            "pay.115.com" => CloudDriveHttpClientNames.Pay,
+            "115.com" => CloudDriveHttpClientNames.Offline,
+            "uplb.115.com" => CloudDriveHttpClientNames.Upload,
+            _ => "external",
+        };
     }
 
     /// <summary>

@@ -23,14 +23,14 @@ namespace Infrastructure.Jobs;
 /// </summary>
 internal sealed class CloudDriveBatchOperationJob(
     ICloudDriveJobRepository jobRepository,
-    ICloudDriveOpenApiGateway openApiGateway,
-    ICloudDriveMetadataCache metadataCache,
     ITransactionManager transactionManager,
     IPublisher publisher,
     ICloudDriveJobAuditLogger auditLogger,
     ILogger<CloudDriveBatchOperationJob> logger) : IJob
 {
     private const string JobIdDataKey = "JobId";
+    private const string ApiNotCollectedCode = "cloud_drive_api_not_collected";
+    private const string ApiNotCollectedMessage = "批量写操作 115 网页端接口尚未采集，待补采集后再接入。";
     private static readonly JsonSerializerOptions PayloadJsonOptions = new(JsonSerializerDefaults.Web);
 
     /// <inheritdoc />
@@ -56,9 +56,7 @@ internal sealed class CloudDriveBatchOperationJob(
         try
         {
             await StartJobAsync(job, context.CancellationToken);
-            await ExecuteOperationAsync(job, plan, context.CancellationToken);
-            await UpdateCheckpointAsync(job, CreateCheckpoint(plan), 95, context.CancellationToken);
-            await CompleteJobAsync(job, plan.AffectedDirectoryIds, context.CancellationToken);
+            await MarkFailedAsync(job, $"{ApiNotCollectedCode}: {ApiNotCollectedMessage}", context.CancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -98,22 +96,9 @@ internal sealed class CloudDriveBatchOperationJob(
             CloudDriveJobType.BatchMove => CreateMovePlan(job.PayloadJson),
             CloudDriveJobType.BatchDelete => CreateDeletePlan(job.PayloadJson),
             CloudDriveJobType.BatchRecycleBinRestore => CreateRecycleBinPlan(
-                job.PayloadJson,
-                "rb/revert",
-                new Dictionary<string, string>
-                {
-                    ["format"] = "json",
-                },
-                affectedDirectoryIds: ["0"]),
+                job.PayloadJson),
             CloudDriveJobType.BatchRecycleBinDelete => CreateRecycleBinPlan(
-                job.PayloadJson,
-                "rb/delete",
-                new Dictionary<string, string>
-                {
-                    ["format"] = "json",
-                    ["ignore_warn"] = "1",
-                },
-                affectedDirectoryIds: ["0"]),
+                job.PayloadJson),
             _ => null
         };
     }
@@ -126,16 +111,7 @@ internal sealed class CloudDriveBatchOperationJob(
             return null;
         }
 
-        return new BatchOperationPlan(
-            "files/copy",
-            new Dictionary<string, string>
-            {
-                ["format"] = "json",
-                ["fileIds"] = Join(input.FileIds),
-                ["targetDirectoryId"] = input.TargetDirectoryId,
-            },
-            input.FileIds,
-            [input.TargetDirectoryId]);
+        return new BatchOperationPlan(input.FileIds);
     }
 
     private static BatchOperationPlan? CreateMovePlan(string payloadJson)
@@ -146,16 +122,7 @@ internal sealed class CloudDriveBatchOperationJob(
             return null;
         }
 
-        return new BatchOperationPlan(
-            "files/move",
-            new Dictionary<string, string>
-            {
-                ["format"] = "json",
-                ["fileIds"] = Join(input.FileIds),
-                ["targetDirectoryId"] = input.TargetDirectoryId,
-            },
-            input.FileIds,
-            [input.TargetDirectoryId]);
+        return new BatchOperationPlan(input.FileIds);
     }
 
     private static BatchOperationPlan? CreateDeletePlan(string payloadJson)
@@ -166,23 +133,10 @@ internal sealed class CloudDriveBatchOperationJob(
             return null;
         }
 
-        return new BatchOperationPlan(
-            "rb/delete",
-            new Dictionary<string, string>
-            {
-                ["aid"] = "7",
-                ["format"] = "json",
-                ["fileIds"] = Join(input.FileIds),
-            },
-            input.FileIds,
-            ["0"]);
+        return new BatchOperationPlan(input.FileIds);
     }
 
-    private static BatchOperationPlan? CreateRecycleBinPlan(
-        string payloadJson,
-        string endpoint,
-        Dictionary<string, string> formFields,
-        IReadOnlyList<string> affectedDirectoryIds)
+    private static BatchOperationPlan? CreateRecycleBinPlan(string payloadJson)
     {
         RecycleBinOperationInput? input = JsonSerializer.Deserialize<RecycleBinOperationInput>(
             payloadJson,
@@ -192,28 +146,7 @@ internal sealed class CloudDriveBatchOperationJob(
             return null;
         }
 
-        formFields["tid"] = Join(input.RecycleBinItemIds);
-        return new BatchOperationPlan(endpoint, formFields, input.RecycleBinItemIds, affectedDirectoryIds);
-    }
-
-    private async Task ExecuteOperationAsync(
-        CloudDriveJob job,
-        BatchOperationPlan plan,
-        CancellationToken cancellationToken)
-    {
-        var context = new CloudDriveApiContext
-        {
-            Category = "batch",
-            FormFields = plan.FormFields,
-        };
-
-        await openApiGateway.SendWebApiRequestAsync<JsonElement>(
-            job.UserId,
-            job.CloudAccountUid,
-            HttpMethod.Post,
-            plan.Endpoint,
-            context,
-            cancellationToken);
+        return new BatchOperationPlan(input.RecycleBinItemIds);
     }
 
     private async Task StartJobAsync(CloudDriveJob job, CancellationToken cancellationToken)
@@ -221,31 +154,6 @@ internal sealed class CloudDriveBatchOperationJob(
         job.Start();
         job.UpdateProgress(1);
         await SaveAndPublishAsync(job, "started", cancellationToken);
-    }
-
-    private async Task UpdateCheckpointAsync(
-        CloudDriveJob job,
-        string checkpointData,
-        int progress,
-        CancellationToken cancellationToken)
-    {
-        job.UpdateCheckpoint(checkpointData);
-        job.UpdateProgress(progress);
-        await SaveAndPublishAsync(job, "checkpoint", cancellationToken);
-    }
-
-    private async Task CompleteJobAsync(
-        CloudDriveJob job,
-        IReadOnlyList<string> affectedDirectoryIds,
-        CancellationToken cancellationToken)
-    {
-        job.Complete();
-        await SaveAndPublishAsync(job, "completed", cancellationToken);
-
-        foreach (string directoryId in affectedDirectoryIds.Distinct(StringComparer.Ordinal))
-        {
-            await metadataCache.InvalidateDirectoryAsync(job.UserId, job.CloudAccountUid, directoryId);
-        }
     }
 
     private async Task MarkFailedAsync(
@@ -285,16 +193,6 @@ internal sealed class CloudDriveBatchOperationJob(
         job.ClearDomainEvents();
     }
 
-    private static string CreateCheckpoint(BatchOperationPlan plan)
-    {
-        return JsonSerializer.Serialize(
-            new BatchOperationCheckpoint(
-                plan.Endpoint,
-                plan.ItemIds.Count,
-                [.. plan.ItemIds]),
-            PayloadJsonOptions);
-    }
-
     private static string CreateSafeErrorMessage(Exception exception)
     {
         return exception.Message.Length <= 500
@@ -302,16 +200,5 @@ internal sealed class CloudDriveBatchOperationJob(
             : exception.Message[..500];
     }
 
-    private static string Join(IEnumerable<string> values) => string.Join(',', values);
-
-    private sealed record BatchOperationPlan(
-        string Endpoint,
-        Dictionary<string, string> FormFields,
-        IReadOnlyList<string> ItemIds,
-        IReadOnlyList<string> AffectedDirectoryIds);
-
-    private sealed record BatchOperationCheckpoint(
-        string Endpoint,
-        int CompletedCount,
-        IReadOnlyList<string> CompletedItemIds);
+    private sealed record BatchOperationPlan(IReadOnlyList<string> ItemIds);
 }

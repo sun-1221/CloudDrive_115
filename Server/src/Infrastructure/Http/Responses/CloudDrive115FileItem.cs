@@ -34,7 +34,7 @@ internal sealed class CloudDrive115FileItem
     /// <summary>
     /// 获取或设置当前条目是否为目录。
     /// </summary>
-    public bool IsDirectory { get; init; }
+    public bool? IsDirectory { get; init; }
 
     /// <summary>
     /// 获取或设置 115 文件提取码。

@@ -58,19 +58,19 @@ public sealed class CloudDrive115ResponseModelTests
         CloudDrive115FileItem folder = response.Items[0];
         Assert.Equal("folder-1", folder.FileId);
         Assert.Equal("Photos", folder.Name);
-        Assert.True(folder.IsDirectory);
+        Assert.Null(folder.IsDirectory);
         Assert.True(folder.IsStarred);
 
         CloudDrive115FileItem file = response.Items[1];
         Assert.Equal("file-1", file.FileId);
         Assert.Equal(42, file.Size);
-        Assert.False(file.IsDirectory);
+        Assert.Null(file.IsDirectory);
         Assert.True(file.IsVideo);
         Assert.Equal("ABC", file.Sha1);
     }
 
     [Fact]
-    public void CloudDriveRecycleBinResponse_NormalizesDynamicDataObjectAndReverseTypeMapping()
+    public void CloudDriveRecycleBinResponse_DeserializesTopLevelFieldsOnly()
     {
         // 准备
         const string json = """
@@ -104,12 +104,9 @@ public sealed class CloudDrive115ResponseModelTests
         Assert.NotNull(response);
         Assert.Equal(1, response.Count);
 
-        CloudDriveRecycleItemResponse item = response.Items.Single();
-        Assert.Equal("recycled-1", item.Id);
-        Assert.Equal("Deleted Folder", item.FileName);
-        Assert.True(item.IsDirectory);
-        Assert.Equal(64, item.FileSize);
-        Assert.Equal(-1, item.RestoreStatus);
+        Assert.Equal(0, response.RecycleBinPasswordEnabled);
+        Assert.Equal(30, response.PageSize);
+        Assert.Equal(0, response.IsAscending);
     }
 
     [Fact]

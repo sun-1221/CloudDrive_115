@@ -671,6 +671,18 @@ public sealed class CloudDriveApiClientRequestTests
                 .AsReadOnly();
             return Task.FromResult(sessions);
         }
+
+        public Task<IReadOnlyList<CookieSession>> GetAvailableSessionsAsync(
+            CancellationToken cancellationToken = default)
+        {
+            IReadOnlyList<CookieSession> sessions = _store.Values
+                .Where(item => item.Status is Domain.Enums.CookieSessionStatus.Active
+                    or Domain.Enums.CookieSessionStatus.Invalidated)
+                .ToList()
+                .AsReadOnly();
+
+            return Task.FromResult(sessions);
+        }
     }
 
     private sealed class NullDisposable : IDisposable
