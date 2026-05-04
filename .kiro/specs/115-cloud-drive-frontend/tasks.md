@@ -58,7 +58,7 @@
 
   - [ ] 2.2 定义业务扩展类型
     - `src/types/generated.ts` 作为后端 OpenAPI 生成 DTO 的唯一来源
-    - `src/types/index.ts` 仅导出前端业务扩展：`SortField`、`SortOption`、`FileFilter`、`SearchFilters`、`TaskStatusFilter`、`VideoDefinition`、`AuthCheckResult`、`SpaceSummary`
+    - `src/types/index.ts` 仅导出前端业务扩展：`SortField`、`SortOption`、`FileFilter`、`SearchFilters`、`TaskStatusFilter`、`AuthCheckResult`、`SpaceSummary`
     - 删除旧手写 DTO 中与 OpenAPI 生成字段冲突的 `name/isDirectory/thumbnailUrl/cloudAccountUid` 等旧口径
     - _需求: 2.2, 2.3, 2.6, 4.7, 5.5, 5.6, 8.5, 15.4, 16.3, 17.3, 18.1, 18.2, 19.5, 19.6_
     - _设计: §6.1 共享 DTO_
@@ -143,7 +143,7 @@
 
   - [ ] 4.5 recycleBinApi
     - `src/api/recycleBinApi.ts`
-    - `list({offset, limit})` → `GET /api/recycle`
+    - `list({offset, limit})` → `GET /api/recycle`，返回 `CloudDriveRecycleListDto`
     - 写操作占位：`restore`、`permanentDelete`、`clearAll`
     - _需求: 6.1, 6.3, 6.4, 6.5_
     - _设计: §RecycleBinStore_
@@ -228,7 +228,7 @@
     - 开发环境 `console.error` 输出完整 ProblemDetails
     - 重试上限 1 次
     - _需求: 14.5, 18.1, 18.2, 18.3, 18.4, 18.5, 18.6, 18.7, 18.8, 18.9, 18.10, 18.11_
-    - _设计: §ErrorHandlerService_
+    - _设计: §ErrorHandlerService, §7. 错误处理策略_
 
   - [ ] 6.4.1 ForegroundOperationGuard
     - `src/services/foregroundOperationGuard.ts`
@@ -283,6 +283,7 @@
     - `src/stores/authStore.ts`
     - 状态：`isAuthenticated`、`user: CloudDriveUserInfoDto | null`、`spaceSummary: SpaceSummary | null`、`bootstrapStatus: 'idle'|'checking'|'ready'|'unauthenticated'`
     - Actions：`bootstrap()`（顺序调 checkAuth → fetchUserInfo → fetchSpaceSummary）、`checkAuth`、`fetchUserInfo`、`fetchSpaceSummary`、`clearSession`
+    - `CloudDriveSpaceInfoDto.schemaStatus='not_collected'` 时 `spaceSummary` 保持 `null`，UI 展示"空间明细暂不可用"
     - Cookie 认证模型，无账号切换、无 OAuth、无 PKCE
     - 删除旧 `currentAccountUid/accounts/authStatus/redirectToAuth/handleCallback/switchAccount` 状态与动作
     - _需求: 1.1, 1.2, 1.4, 1.5, 19.4_
@@ -307,10 +308,10 @@
 
   - [ ] 8.3 SearchStore
     - `src/stores/searchStore.ts`
-    - 状态：`keyword`、`filters`、`results`、`paging`、`previousDirectoryId`、`history`、`suggestions`、`suggestionOpen`
+    - 状态：`keyword`、`filters`、`searchList`、`results`、`paging`、`previousDirectoryId`、`history`、`suggestions`、`suggestionOpen`
     - Actions：`search(keyword, filters)`、`loadMore`、`loadSuggestions`、`persistHistory`、`clearSearch`、`returnToBrowse`
     - 搜索前 `keyword.trim()` 非空校验
-    - _需求: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.10, 5.11_
+    - _需求: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.10, 5.11, 5.12_
     - _设计: §SearchStore_
 
   - [ ] 8.4 RecycleBinStore
@@ -323,11 +324,11 @@
 
   - [ ] 8.5 OfflineStore
     - `src/stores/offlineStore.ts`
-    - 状态：`tasks`、`quota`、`stats`、`filter: TaskStatusFilter`
-    - 状态枚举（后端归一化）：`'failed'|'allocating'|'downloading'|'success'`
+    - 状态：`taskList`、`quota`、`stats`、`filter: TaskStatusFilter`
+    - 任务明细 schema 未采集时保存 `taskList.itemSchemaStatus='not_collected'` 并展示空态；后续补采集后再启用状态枚举筛选
     - Actions：`loadTasks`、`loadQuota`、`loadStats`、`setFilter`
     - 写操作待后端 API 就绪
-    - 进行中任务 10 秒自动刷新
+    - 仅当 `itemSchemaStatus='available'` 且存在进行中任务时 10 秒自动刷新；`not_collected` 时不依据伪造状态轮询
     - _需求: 15.1, 15.2, 15.3, 15.4, 15.5, 15.6, 15.7, 15.8, 15.9, 15.10, 15.11_
     - _设计: §OfflineStore_
 
@@ -406,7 +407,7 @@
   - [ ] 11.2 Sidebar
     - `src/components/layout/Sidebar.vue`
     - 导航：文件浏览、回收站、云下载、分享、用户中心
-    - 展示 `AuthStore.spaceSummary`
+    - 仅当 `AuthStore.spaceSummary` 可用时展示空间摘要；不可用时展示"空间明细暂不可用"
     - 平板退化为 `n-drawer`
     - _需求: 1.5, 12.2, 12.3_
     - _设计: §AppLayout 组件_
@@ -441,7 +442,7 @@
     - `src/components/file/BreadcrumbNav.vue`
     - 数据源：`FileStore.breadcrumb`（后端归一化 `CloudDriveBreadcrumbDto[]`）
     - 每层可点击；搜索结果模式展示"搜索结果：[关键词]" + "返回浏览"
-    - _需求: 2.5, 5.3_
+    - _需求: 2.5, 5.3, 5.12_
     - _设计: §BreadcrumbNav_
 
   - [ ] 12.2 FileToolbar
@@ -485,13 +486,14 @@
     - _需求: 2.7, 14.3_
     - _设计: §useInfiniteScroll Composable_
 
-- [ ] 13. 文件操作（R3，大部分占位）
-  - [ ] 13.1 UploadZone（占位）
+- [ ] 13. 文件操作（R3，上传可实现，其他写操作待后端就绪）
+  - [ ] 13.1 UploadZone
     - `src/components/operation/UploadZone.vue`
     - 拖拽进入展示全屏半透明覆盖层
-    - 实现等待后端 `POST /api/files/upload` 就绪
+    - 调用 `POST /api/files/upload` 提交 `multipart/form-data`，包含 `file`、`directoryId`、`forceAsync`
+    - 同步上传期间展示进度与错误状态，并接入 ForegroundOperationGuard；大文件返回 202 + `jobId` 时交由 `jobsApi.poll()` 跟踪终态
     - _需求: 3.1, 3.2_
-    - _设计: §UploadZone 组件（占位）_
+    - _设计: §UploadZone 组件_
 
   - [ ] 13.2 FileOperationService 集成
     - 新建文件夹：行内编辑 → `createFolder()` → 刷新
@@ -550,25 +552,25 @@
     - _设计: §SearchStore, §SearchBar 组件_
 
   - [ ] 15.2 搜索结果视图（复用 FileBrowserView）
-    - 数据源切换为 `SearchStore.results`
-    - 每个结果项显示所在路径
-    - 空结果展示"未找到匹配文件"
-    - _需求: 5.2, 5.3, 5.4_
+    - 数据源切换为 `SearchStore.searchList`
+    - `itemSchemaStatus='available'` 时展示 2026-05-04 已采集字段：文件名、大小、目录显示名、图标、播放时长等；`not_collected` 时展示"搜索结果明细暂不可用"
+    - 不直接 `v-html` 渲染 `highlightNameRaw/ns`；需要高亮时使用安全分词或后端清洗结果；空结果展示"未找到匹配文件"
+    - _需求: 5.2, 5.3, 5.4, 5.5, 5.12_
     - _设计: §SearchStore, §FileBrowser 组件_
 
   - [ ] 15.2.1 属性测试：返回浏览恢复原目录
-    - _需求: 5.4_
+    - _需求: 5.12_
     - _设计: §SearchStore_
 
 - [ ] 16. 回收站（R6）
   - [ ] 16.1 RecycleBinView
     - `src/views/RecycleBinView.vue`
-    - 列表：文件名、大小、原始目录、删除时间（`fileName/fileSize/originalParentName/deletedTime`）
+    - 列表：当 `itemSchemaStatus='available'` 时展示文件名、大小、原始目录、删除时间；当 `itemSchemaStatus='not_collected'` 时展示“回收站明细暂不可用”空态
     - 加载 → SkeletonLoader；错误 → ErrorState
     - 单选/多选还原、彻底删除（占位）
     - 彻底删除 ConfirmDialog"文件将被永久删除且无法恢复"
     - 清空：ConfirmDialog → `DELETE /api/recycle` → 202 + `jobId` → `jobsApi.poll()` → 刷新
-    - 分页（`offset` + `limit`，最大 200）
+    - 分页（`offset` + `limit`，最大值以系统自有分页保护配置为准）
     - _需求: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7_
     - _设计: §RecycleBinView + RecycleItemCard 组件, §ConfirmDialog_
 
@@ -609,13 +611,14 @@
     - 全屏模态
     - 调用 `videoApi.getPlay(pickCode)` → `CloudDriveVideoPlayDto`
     - 控制栏：播放/暂停、进度、音量、全屏、速度（0.5x/1x/1.25x/1.5x/2x）
-    - 清晰度菜单：`availableDefinitions` 渲染（SD=1/HD=2/FHD=3/FullHD=4/UHD4K=5/Original=100）
+    - 仅当 `playbackSchemaStatus='available'` 且 `qualityOptions` 非空时渲染清晰度菜单；`not_collected` 时展示"播放地址暂不可用"
     - `status: 'transcoding'` → "视频转码中" + 刷新按钮
-    - `vipUpgradeRequired: true` → "升级 VIP 以观看此清晰度"
+    - `restrictionReason` 或 `usageRestrictionNotice` 非空 → 展示升级或权限提示
     - _需求: 8.1, 8.2, 8.3, 8.4, 8.5, 8.9, 8.10_
     - _设计: §VideoPlayer 组件_
 
-  - [ ] 18.2 清晰度切换保留进度
+  - [ ] 18.2 清晰度切换保留进度（schema available 后启用）
+    - 仅当 `playbackSchemaStatus='available'` 且 `qualityOptions` 非空时启用
     - 切换前记录 `currentTime` / `paused`
     - 切换 `src` 后 `loadedmetadata` 触发 `player.currentTime(savedTime)`
     - 切换前播放中则恢复 `player.play()`
@@ -626,7 +629,7 @@
   - [ ] 18.3 SubtitleSelector
     - `src/components/preview/SubtitleSelector.vue`
     - 调用 `videoApi.getSubtitles(pickCode)`
-    - 展示 `language/title`；空列表隐藏或展示"无字幕"
+    - `itemSchemaStatus='not_collected'` 时展示"字幕明细暂不可用"；仅当 schema 可用时展示 `language/title`
     - _需求: 8.7, 8.8_
     - _设计: §SubtitleSelector 组件_
 
@@ -641,7 +644,7 @@
     - _需求: 8.11, 13.5_
     - _设计: §VideoPlayer 组件, §KeyboardService_
 
-  - [ ] 18.5.1 属性测试：清晰度切换保持播放进度
+  - [ ] 18.5.1 属性测试：清晰度切换保持播放进度（schema available）
     - _需求: 8.6_
     - _设计: §VideoPlayer 组件_
 
@@ -702,14 +705,14 @@
     - `src/views/OfflineDownloadView.vue`
     - 组装 TaskListItem、QuotaSummaryCard、StatsBar
     - `loadTasks` / `loadQuota` / `loadStats`
-    - 进行中任务 10 秒自动刷新
-    - 状态筛选：全部/进行中/已完成/失败（active = `allocating`+`downloading`）
+    - 仅当 `itemSchemaStatus='available'` 且存在进行中任务时 10 秒自动刷新；`not_collected` 时不依据伪造状态轮询
+    - 状态筛选：仅在 `itemSchemaStatus='available'` 且后端返回任务状态后启用；当前显示“云下载任务明细暂不可用”
     - _需求: 15.1, 15.2, 15.3, 15.4, 15.9, 15.10, 15.11_
     - _设计: §OfflineDownloadView + TaskListItem + QuotaSummaryCard 组件_
 
   - [ ] 23.2 TaskListItem
     - `src/components/offline/TaskListItem.vue`
-    - 任务名、大小、进度、状态、添加时间、清晰度
+    - 仅当任务 item schema 可用时展示任务名、大小、进度、状态、添加时间、清晰度；`schemaStatus='not_collected'` 时不渲染伪造字段
     - 删除按钮（占位）
     - _需求: 15.4, 15.7_
     - _设计: §OfflineDownloadView + TaskListItem + QuotaSummaryCard 组件_
@@ -738,9 +741,9 @@
 
   - [ ] 24.2 ShareItemCard
     - `src/components/share/ShareItemCard.vue`
-    - 分享名称、数量、创建时间、状态、有效期
-    - 未返回字段占位符
-    - `shareUrl`/`receiveCode` 存在时渲染复制按钮（`navigator.clipboard.writeText()`，降级 `execCommand`）
+    - 仅当分享 item schema 可用时展示分享名称、数量、创建时间、状态、有效期；`itemSchemaStatus='not_collected'` 时展示“分享明细暂不可用”
+    - 未返回字段占位符；未采集字段不得伪造
+    - `shareUrl`/`receiveCode` 存在时渲染复制按钮（`navigator.clipboard.writeText()`，降级 `execCommand`）；未采集前不展示复制按钮
     - _需求: 16.3, 16.6, 16.7_
     - _设计: §ShareManagementView + ShareItemCard 组件_
 
@@ -770,8 +773,8 @@
     - _设计: §UserCenterView + UserProfileCard + VipStatusCard + BalanceCard + StorageDetailsCard 组件_
 
   - [ ] 25.5 StorageDetailsCard
-    - 已用/总空间/各类型占比
-    - 优先使用 `sizeFormat`
+    - `schemaStatus='available'` 时展示已用/总空间/各类型占比
+    - 当前 `schemaStatus='not_collected'` 时展示"空间明细暂不可用"，不得自行构造总量/已用/分类占比
     - _需求: 17.6, 17.7_
     - _设计: §UserCenterView + UserProfileCard + VipStatusCard + BalanceCard + StorageDetailsCard 组件_
 
@@ -837,12 +840,12 @@
   - [ ] 28.3 E2E 测试（Playwright）
     - `auth.spec.ts`：Cookie 有效/失效/网络异常 _需求: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6_
     - `file-browse.spec.ts`：目录切换、排序、筛选、分页 _需求: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11, 2.12, 2.13, 2.14_
-    - `search.spec.ts`：搜索、日期筛选、返回浏览 _需求: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.10, 5.11_
-    - `video.spec.ts`：播放、清晰度、字幕、VIP 提示 _需求: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, 8.12, 8.13, 8.14_
+    - `search.spec.ts`：搜索、日期筛选、返回浏览 _需求: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.10, 5.11, 5.12_
+    - `video.spec.ts`：播放不可用空态、schema available 时清晰度、字幕、VIP 提示 _需求: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, 8.12, 8.13, 8.14_
     - `offline.spec.ts`：任务列表、配额、筛选 _需求: 15.1, 15.2, 15.3, 15.4, 15.5, 15.6, 15.7, 15.8, 15.9, 15.10, 15.11_
     - `error-handling.spec.ts`：401、429、404、410、网络异常 _需求: 18.1, 18.2, 18.3, 18.4, 18.5, 18.6, 18.7, 18.8, 18.9, 18.10, 18.11_
     - `responsive.spec.ts`：桌面/平板/移动视口 _需求: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6_
-    - _需求: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11, 2.12, 2.13, 2.14, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.10, 5.11, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, 8.12, 8.13, 8.14, 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 15.1, 15.2, 15.3, 15.4, 15.5, 15.6, 15.7, 15.8, 15.9, 15.10, 15.11, 18.1, 18.2, 18.3, 18.4, 18.5, 18.6, 18.7, 18.8, 18.9, 18.10, 18.11_
+    - _需求: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11, 2.12, 2.13, 2.14, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.10, 5.11, 5.12, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, 8.12, 8.13, 8.14, 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 15.1, 15.2, 15.3, 15.4, 15.5, 15.6, 15.7, 15.8, 15.9, 15.10, 15.11, 18.1, 18.2, 18.3, 18.4, 18.5, 18.6, 18.7, 18.8, 18.9, 18.10, 18.11_
     - _设计: §AuthStore, §AuthGuard 组件（布局层）, §FileBrowser 组件, §SearchStore, §VideoPlayer 组件, §OfflineDownloadView + TaskListItem + QuotaSummaryCard 组件, §ErrorHandlerService, §断点系统_
 
   - [ ] 28.4 契约测试
@@ -863,4 +866,4 @@
 - 每个任务引用的需求编号已严格对齐 `requirements.md`（18 个模块，R10 已删除）
 - 每个组件/章节引用已严格对齐 `design.md` 中对应标题
 - 检查点任务用于阶段性验证，确保增量开发正确性
-- 依赖后端待补采集 API 的组件（文件增删改/下载/星标、回收站写操作、云下载写操作）已标注"占位"或"待后端就绪"；上传、视频播放、字幕、视频历史按 `docs/115-api-docs.md` 已采集契约处理
+- 依赖后端待补采集 API 的组件（文件增删改/下载/星标、回收站写操作、云下载写操作）已标注"占位"或"待后端就绪"；上传链路、`/files/video` 错误 schema、字幕顶层数组、视频历史读写端点按 `docs/115-api-docs.md` 已采集契约处理，成功播放 URL/清晰度/VIP 字段与字幕 item schema 未采集时仍按 `not_collected` 空态处理

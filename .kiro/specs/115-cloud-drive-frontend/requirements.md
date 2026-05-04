@@ -10,7 +10,7 @@
 
 > **Cookie 安全边界：** Cookie-based 仅说明会话承载方式，不代表自动具备安全防护。后端 integration 服务 SHALL 对会话 Cookie 设置 `HttpOnly`、`Secure` 与明确的 `SameSite` 策略，并对状态变更请求实施 CSRF 防护；前端不得读取、写入或覆盖会话 Cookie。
 
-> **API 契约权威性：** 本 spec 依赖的后端 `/api/*` 端点契约以 `.kiro/specs/115-cloud-drive-integration/requirements.md` 与后端 OpenAPI 规范（`/openapi/v1.json`）为准；integration 服务访问 115 的外部接口以 `docs/115-api-docs.md`（2026-04-08 自动采集 + 2026-04-18 手动补充）为依据。前端 DTO SHALL 与 OpenAPI 规范同步生成 TypeScript 类型。
+> **API 契约权威性：** 本 spec 依赖的后端 `/api/*` 端点契约以 `.kiro/specs/115-cloud-drive-integration/requirements.md` 与后端 OpenAPI 规范（`/openapi/v1.json`）为准；integration 服务访问 115 的外部接口以 `docs/115-api-docs.md`（2026-05-04 最新自动采集 + 2026-04-18 上传链路手动补充）为依据。前端 DTO SHALL 与 OpenAPI 规范同步生成 TypeScript 类型。
 
 > **文档版本基线：** 本需求文档对齐后端 integration spec 的 30 条需求。后续增量审核以此基线为锚。
 
@@ -48,13 +48,14 @@
 - **ProblemDetails**：后端返回的 RFC 7807 标准错误响应格式（`application/problem+json`），含 `type/title/status/detail/instance/extensions`
 - **CloudDriveFileDto**：文件/文件夹 DTO，含 `fileId/fileName/category/size/pickCode/thumb/originalUrl` 等
 - **CloudDriveFileListDto**：文件列表响应封装，含 `items/path/count/offset/limit/hasMore`
+- **CloudDriveSearchListDto**：搜索列表响应封装；2026-05-04 已采集有限搜索 item schema，正常返回 `items[]` + `itemSchemaStatus='available'`
 - **CloudDriveBreadcrumbDto**：面包屑节点，含 `cid/pid/name`
-- **CloudDriveRecycleItemDto**：回收站项目 DTO
-- **CloudDriveVideoPlayDto**：视频播放信息 DTO，含 `videoUrls/availableDefinitions/status/vipUpgradeRequired`
-- **CloudDriveSubtitleDto**：字幕信息 DTO（合并 `autoload` 与 `list`）
-- **CloudDriveOfflineTaskDto**：云下载任务 DTO（`status` 归一化为字符串枚举）
+- **CloudDriveRecycleBinItemDto**：回收站项目 DTO
+- **CloudDriveVideoPlayDto**：视频播放信息 DTO；当前成功播放 schema 未采集时后端返回 `video_play_schema_not_collected` ProblemDetails 或 `playbackSchemaStatus='not_collected'`
+- **CloudDriveSubtitleListDto**：字幕列表 DTO；字幕 item schema 未采集时 `items=[]` + `itemSchemaStatus='not_collected'`
+- **CloudDriveOfflineTaskListDto**：云下载任务列表 DTO；任务 item schema 未采集时 `items=[]` + `itemSchemaStatus='not_collected'`
 - **CloudDriveOfflineQuotaDto**：云下载配额 DTO
-- **CloudDriveShareDto**：分享信息 DTO
+- **CloudDriveShareListDto**：分享列表 DTO；分享 item schema 未采集时 `items=[]` + `itemSchemaStatus='not_collected'`
 - **CloudDriveUserProfileDto**：用户聚合信息 DTO，含 `userInfo/vip/balance/storage` 四子模块
 - **CloudDriveUserInfoDto**：用户基本信息 DTO（敏感字段已后端脱敏）
 - **JobStatusDto**：后台任务状态 DTO，含 `jobId/type/status/progress`
@@ -79,7 +80,7 @@
 2. IF 响应返回 `{ isAuthenticated: true }`，THEN THE Frontend_App SHALL 调用 `GET /api/user/info` 获取当前用户昵称、头像等信息，并在顶栏展示
 3. IF 响应返回 `{ isAuthenticated: false, failureReason: 'cookie_invalid' }` 或 `'network'`，THEN THE Frontend_App SHALL 展示引导页面，提示用户联系系统管理员更新 Cookie 或检查网络
 4. WHILE 用户已登录时，THE Frontend_App SHALL 在顶栏或侧边栏展示当前用户头像与昵称
-5. WHILE 用户已登录时，THE Frontend_App SHALL 展示存储空间用量摘要（已用/总空间），数值以 `GET /api/user/storage` 返回为准
+5. WHILE 用户已登录且 `GET /api/user/storage` 返回 `schemaStatus='available'` 时，THE Frontend_App SHALL 展示存储空间用量摘要；当前 `schemaStatus='not_collected'` 时不构造已用/总空间，展示"空间明细暂不可用"
 6. IF 任何 API 请求返回 HTTP 401 ProblemDetails，THEN THE Frontend_App SHALL 清除敏感内存状态并跳转引导页，不展示 Toast，由 AuthGuard 统一处理
 
 ### 2. 文件浏览器
@@ -144,31 +145,32 @@
 #### 验收标准
 
 1. THE Search_Bar SHALL 位于工具栏中，提供搜索输入框
-2. WHEN 用户输入关键词并回车时，THE Frontend_App SHALL 调用 `GET /api/files/search` 展示结果
+2. WHEN 用户输入关键词并回车时，THE Frontend_App SHALL 调用 `GET /api/files/search` 并消费 `CloudDriveSearchListDto`
 3. WHILE 展示搜索结果时，THE File_Browser SHALL 显示"搜索结果：[关键词]"标识和"返回浏览"按钮
-4. THE File_Browser SHALL 以与普通列表相同的视图模式展示搜索结果，每项额外显示文件所在路径
-5. THE Search_Bar SHALL 支持按文件类型筛选搜索结果；后端 `type` 参数透传（1=文档, 2=图片, 3=音乐, 4=视频, 5=压缩包）
-6. THE Search_Bar SHALL 支持按日期范围筛选，对应后端 `date` 参数（`YYYY-MM-DD` 格式）
-7. THE Search_Bar SHALL 支持在当前目录或全局搜索切换，对应后端 `cid` 参数
-8. WHEN 用户输入关键词长度 ≥2 字符时，THE Search_Bar SHALL 在 200ms 防抖后展示匹配的搜索历史记录与建议，历史记录存储于 localStorage 最多保留 20 条
-9. IF 搜索关键词为空，THEN THE Search_Bar SHALL 提示"请输入搜索关键词"并阻止提交
-10. IF 后端返回 HTTP 400（offset+limit 超限或关键词空白），THEN THE Frontend_App SHALL 通过 Toast_Notification 展示错误
-11. WHEN 点击"返回浏览"时，THE File_Browser SHALL 恢复搜索前的目录状态
+4. THE File_Browser SHALL 在 `itemSchemaStatus='available'` 且 `items` 非空时以与普通列表相同的视图模式展示搜索结果，使用后端归一化的 `fileName/size/pickCode/directoryName/ico/playDuration` 等已采集字段；IF `itemSchemaStatus='not_collected'`，THEN 展示"搜索结果明细暂不可用"空态
+5. THE File_Browser SHALL 不直接渲染搜索 item 的 `highlightNameRaw/ns` HTML 片段；若展示高亮，必须使用前端安全分词或后端清洗后的纯文本/安全片段
+6. THE Search_Bar SHALL 支持按文件类型筛选搜索结果；筛选值域以后端 OpenAPI 暴露的 `type` 选项为准，当前 `docs/115-api-docs.md` 未采集 `type` 值域时前端不得硬编码 1=文档、2=图片等枚举
+7. THE Search_Bar SHALL 支持按日期范围筛选，对应后端 `date` 参数（`YYYY-MM-DD` 格式）
+8. THE Search_Bar SHALL 支持在当前目录或全局搜索切换，对应后端 `cid` 参数
+9. WHEN 用户输入关键词长度 ≥2 字符时，THE Search_Bar SHALL 在 200ms 防抖后展示匹配的搜索历史记录与建议，历史记录存储于 localStorage 最多保留 20 条
+10. IF 搜索关键词为空，THEN THE Search_Bar SHALL 提示"请输入搜索关键词"并阻止提交
+11. IF 后端返回 HTTP 400（关键词空白或系统自有分页保护限制），THEN THE Frontend_App SHALL 通过 Toast_Notification 展示错误；前端不得将 `offset+limit≤10000` 视为 115 网页端官方限制
+12. WHEN 点击"返回浏览"时，THE File_Browser SHALL 恢复搜索前的目录状态
 
 ### 6. 回收站管理
 
 **用户故事：** 作为用户，我希望能够查看和管理回收站中的文件，以便按需还原误删项目或彻底清理。
 
-> **说明：** 回收站列表查询 API 已就绪；还原/彻底删除/清空操作依赖后端待补采集 API。
+> **说明：** 回收站列表顶层统计查询 API 已就绪；回收站项目明细字段、还原/彻底删除/清空操作依赖后端待补采集 API。
 
 #### 验收标准
 
-1. THE Recycle_Bin_View SHALL 调用 `GET /api/recycle` 展示回收站项目；响应为 `CloudDriveRecycleItemDto[]`
-2. THE Recycle_Bin_View SHALL 展示文件名、大小、原始目录、删除时间（对应 `fileName`/`fileSize`/`originalParentName`/`deletedTime`）
+1. THE Recycle_Bin_View SHALL 调用 `GET /api/recycle` 获取回收站顶层统计与项目列表；响应为 `CloudDriveRecycleListDto`
+2. THE Recycle_Bin_View SHALL 在 `itemSchemaStatus='available'` 且 `items` 非空时展示文件名、大小、原始目录、删除时间；当 `itemSchemaStatus='not_collected'` 时展示“回收站明细暂不可用”的空态，不伪造项目字段
 3. WHEN 用户单击还原时，THE Frontend_App SHALL 调用 `POST /api/recycle/restore` _（待后端 API 就绪）_
 4. WHEN 用户单击彻底删除时，THE Confirm_Dialog SHALL 要求确认后调用 `DELETE /api/recycle/{id}` _（待后端 API 就绪）_
 5. WHEN 用户单击清空回收站时，THE Confirm_Dialog SHALL 要求确认后调用 `DELETE /api/recycle` _（待后端 API 就绪；响应约定：HTTP 202 Accepted + `{ jobId }` 用于后续轮询）_
-6. THE Recycle_Bin_View SHALL 支持分页加载（`offset` + `limit`，最大 200）
+6. THE Recycle_Bin_View SHALL 支持分页加载（`offset` + `limit`），最大值以系统自有分页保护配置为准
 7. IF 操作失败，THEN THE Frontend_App SHALL 通过 Toast_Notification 展示 ProblemDetails `detail` 字段
 
 ### 7. 图片预览
@@ -196,13 +198,13 @@
 1. WHEN 用户点击视频文件时，THE Video_Player SHALL 以全屏模态展示播放器
 2. THE Video_Player SHALL 基于 Video.js 实现，优先复用内置 HLS 支持
 3. THE Video_Player SHALL 提供标准控制栏：播放/暂停、进度条、音量、全屏、播放速度（0.5x/1x/1.25x/1.5x/2x）
-4. THE Video_Player SHALL 调用 `GET /api/videos/{pickCode}/play` 获取 `CloudDriveVideoPlayDto`，含 `videoUrls` 数组和 `availableDefinitions`
-5. THE Video_Player SHALL 根据 `availableDefinitions` 提供清晰度选择菜单；枚举：SD=1/HD=2/FHD=3/FullHD=4/UHD4K=5/Original=100
+4. THE Video_Player SHALL 调用 `GET /api/videos/{pickCode}/play` 获取 `CloudDriveVideoPlayDto`；若后端返回 `video_play_schema_not_collected` ProblemDetails 或 `playbackSchemaStatus='not_collected'`，THEN 展示"播放地址暂不可用"空态并提供刷新按钮
+5. THE Video_Player SHALL 仅在后端返回 `playbackSchemaStatus='available'` 且 `qualityOptions` 非空时展示清晰度选择菜单；在成功播放 schema 未采集前不得硬编码 SD/HD/FHD/4K/原画枚举
 6. WHEN 切换清晰度时，THE Video_Player SHALL 保持播放进度
-7. THE Video_Player SHALL 调用 `GET /api/videos/{pickCode}/subtitles` 获取字幕列表，展示 `language/title`；支持切换
-8. IF 无可用字幕，THEN THE Video_Player SHALL 隐藏字幕控件或展示"无字幕"，不视为错误
+7. THE Video_Player SHALL 调用 `GET /api/videos/{pickCode}/subtitles` 获取 `CloudDriveSubtitleListDto`；当 `itemSchemaStatus='not_collected'` 时展示"字幕明细暂不可用"，不伪造 `language/title/url`
+8. IF 无可用字幕或字幕 item schema 未采集，THEN THE Video_Player SHALL 隐藏字幕控件或展示对应空态，不视为错误
 9. IF 后端返回 `status: 'transcoding'`，THEN THE Video_Player SHALL 展示"视频转码中，请稍后刷新"提示和"刷新状态"按钮
-10. IF 后端返回 `vipUpgradeRequired: true`，THEN THE Video_Player SHALL 展示"升级 VIP 以观看此清晰度"引导
+10. IF 后端返回 `restrictionReason` 或 `usageRestrictionNotice` 表示 VIP/权限限制，THEN THE Video_Player SHALL 展示对应升级或权限提示
 11. WHEN 用户按 Esc 或关闭播放器时，THE Video_Player SHALL 停止播放并关闭
 12. WHEN `GET /api/videos/{pickCode}/history` 返回有效播放进度时，THE Video_Player SHALL 从上次位置继续观看
 13. IF 无播放历史记录或 API 返回 404，THEN THE Video_Player SHALL 从 00:00 开始播放
@@ -291,12 +293,12 @@
 1. THE Offline_Task_Panel SHALL 调用 `GET /api/offline/tasks?page=1` 展示任务列表
 2. THE Offline_Task_Panel SHALL 调用 `GET /api/offline/quota` 展示配额信息（`count/surplus/maxSize/used`）
 3. THE Offline_Task_Panel SHALL 调用 `GET /api/offline/stats` 展示任务统计（`total/active/completed/failed`）
-4. THE Offline_Task_Panel SHALL 渲染 `CloudDriveOfflineTaskDto[]`，展示任务名、大小、进度、状态（后端已归一化为 `'failed'|'allocating'|'downloading'|'success'`）、添加时间、清晰度（视频任务）
+4. THE Offline_Task_Panel SHALL 渲染 `CloudDriveOfflineTaskListDto`；当 `itemSchemaStatus='available'` 且 `items` 非空时展示任务名、大小、进度、状态、添加时间、清晰度，当前 `itemSchemaStatus='not_collected'` 时展示"云下载任务明细暂不可用"空态
 5. WHEN 用户添加 URL 任务时，THE Frontend_App SHALL 调用 `POST /api/offline/tasks/urls`（请求体 `{ urls: string[], saveDirectoryId? }`）_（待后端 API 就绪）_
 6. WHEN 用户添加 BT 种子任务时，THE Frontend_App SHALL 先上传种子调用 `POST /api/offline/parse-torrent`，然后调用 `POST /api/offline/tasks/bt`（请求体 `{ infoHash, wanted, savePath, torrentSha1, pickCode, saveDirectoryId? }`）_（待后端 API 就绪）_
 7. WHEN 用户删除任务时，THE Frontend_App SHALL 调用 `DELETE /api/offline/tasks/{infoHash}` _（待后端 API 就绪）_
 8. WHEN 用户清空任务时，THE Frontend_App SHALL 调用 `POST /api/offline/tasks:clear`，后端返回 202 + jobId，前端轮询进度 _（待后端 API 就绪）_
-9. THE Offline_Task_Panel SHALL 在任务进行中时自动每 10 秒刷新列表
+9. THE Offline_Task_Panel SHALL 仅在 `CloudDriveOfflineTaskListDto.itemSchemaStatus='available'` 且可见列表中存在进行中任务时自动每 10 秒刷新列表；当 `itemSchemaStatus='not_collected'` 时不得基于伪造状态推断进行中任务
 10. WHEN 任务操作成功后，THE Offline_Task_Panel SHALL 刷新任务列表和统计
 11. THE Offline_Task_Panel SHALL 在任务列表为空时展示空状态，并在接口失败时展示错误和重试入口
 
@@ -308,10 +310,10 @@
 
 1. THE Share_View SHALL 提供三个 Tab：我的分享、已发送、已接收
 2. WHEN 用户切换 Tab 时，THE Frontend_App SHALL 调用 `GET /api/shares?tab={slist|send|receive}&offset&limit`
-3. THE Share_View SHALL 渲染 `CloudDriveShareDto[]`，展示分享名称、数量、创建时间、状态、有效期
+3. THE Share_View SHALL 渲染 `CloudDriveShareListDto`；当 `itemSchemaStatus='available'` 且 `items` 非空时展示分享名称、数量、创建时间、状态、有效期，当前 `itemSchemaStatus='not_collected'` 时展示"分享明细暂不可用"空态
 4. THE Share_View SHALL 支持分页加载（`offset` + `limit`）
 5. IF 后端返回 400 错误（tab 参数不支持等），THEN THE Share_View SHALL 参考 R18 通用错误处理策略展示 ProblemDetails `detail` 字段
-6. IF 返回可复制的 shareUrl 或提取码，THEN THE Share_View SHALL 提供复制操作
+6. IF 后端在补采集后返回可复制的 shareUrl 或提取码，THEN THE Share_View SHALL 提供复制操作；未采集前不得生成或展示伪造链接/提取码
 7. THE Share_View SHALL 在无数据时展示空状态，并在接口失败时展示错误和重试入口
 
 ### 17. 用户中心
@@ -325,8 +327,8 @@
 3. THE User_Center_View SHALL 展示用户基本信息（昵称、头像、UID、脱敏手机/邮箱），从 `CloudDriveUserInfoDto` 读取
 4. THE User_Center_View SHALL 展示 VIP 状态信息（VIP 等级、有效期、剩余空间）
 5. THE User_Center_View SHALL 展示账户余额（云币、优惠券等，从后端归一化结果读取）
-6. THE User_Center_View SHALL 展示存储空间详情（已用/总空间/各类型占比）
-7. WHILE 展示空间占用时，THE User_Center_View SHALL 优先使用后端返回的格式化字段（如 `sizeFormat`）而非字节数值 `size` 自行格式化
+6. THE User_Center_View SHALL 仅在 `CloudDriveSpaceInfoDto.schemaStatus='available'` 时展示存储空间详情（已用/总空间/各类型占比）
+7. WHILE 后端返回 `CloudDriveSpaceInfoDto.schemaStatus='not_collected'` 时，THE User_Center_View SHALL 展示"空间明细暂不可用"空态，不自行构造总量/已用/分类占比
 8. THE Frontend_App SHALL **严禁**在用户中心展示后端已过滤的敏感字段；若发现后端响应意外包含此类字段，前端 SHALL 在开发环境记录告警
 9. IF 聚合接口的任一子模块失败（后端返回对应字段为 `null`），THEN THE User_Center_View SHALL 在对应区域展示错误提示和重试按钮，不影响其他区域展示
 
@@ -373,7 +375,7 @@
 | 视频记忆清晰度/旋转/翻转 | 后端暂不存储用户偏好 |
 | 搜索按文件/文件夹筛选（`fc` 参数） | 后端 integration spec 未启用 |
 | 搜索按文件标签（`file_label`） | 标签功能整体列入后续迭代 |
-| 搜索 type=6 应用筛选 | 低频类型 |
+| 搜索特定 `type` 值专项筛选 | 低频类型；当前 `type` 值域未采集，不绑定具体数值 |
 | 标签管理 | 后端 `/label/list` 端点未纳入 integration spec |
 | 设置页 | M8 模块，后续迭代 |
 | 消息/活动/通讯录 | M9 模块，已在 integration spec 排除声明中显式排除 |

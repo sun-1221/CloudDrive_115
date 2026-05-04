@@ -39,7 +39,7 @@
 | 失败响应 | `Result.Failure` 统一映射为非 2xx `ProblemDetails`，异常交给全局异常中间件 | 兼容现有 `Result` 模式与 WebApi 基线，避免 `200 + failure body` |
 | HTTP 客户端 | IHttpClientFactory + Polly + Cookie Gateway 抽象 | 连接池管理、按幂等边界应用重试、超时、熔断并保持分层清晰 |
 | 图片/文档预览 | 通过下载地址 + 前端渲染 | 115 网页端无专门预览 API |
-| 视频播放 | 网页端 `webapi.115.com/movies` + 转码接口 | 115 网页端提供视频转码与播放地址获取能力 |
+| 视频播放 | 网页端 `webapi.115.com/files/video` + 转码接口 | 当前仅采集错误响应与转码提交接口；播放地址 schema 待补采集 |
 | 资源访问策略 | 临时直链优先，保留受控代理模式 | 满足临时资源、受限访问与合规要求 |
 
 ### 前置约束与边界
@@ -67,7 +67,7 @@
 - 文件列表、详情、搜索、用户信息查询等短请求采用同步执行
 - `UploadAsync` 使用 `CloudDriveUploadExecutionDto` 表达双态结果：同步完成时返回上传后的 `FileId`、名称与路径；后台受理时返回 `Accepted = true` 与 `JobId`
 - 批量复制/移动/删除与回收站还原/彻底删除使用 `CloudDriveOperationResultDto` 返回同步确认或后台任务受理信息；清空回收站当前统一通过后台任务执行并返回 `Accepted = true` 与 `JobId`；新建文件夹与重命名保持同步并返回资源详情
-- 视频播放请求在发现网页端尚未返回可播放转码流时，应自动提交转码任务，并以 `Transcoding` 状态响应客户端；后台转码任务通过重复调用 `GET webapi.115.com/files/video?pickcode={pickcode}&share_id=0` 等可播放性探测方式判断完成状态
+- 视频播放请求当前仅能按 `/files/video` 已采集错误响应 schema 处理；成功播放 schema 未采集前返回 `video_play_schema_not_collected`，不得用可播放性探测结果伪造播放 URL、清晰度或音轨字段。主动转码任务可调用已采集的 `files/video_push` / `movies/transcode` 端点提交，转码完成判定待成功播放 schema 补采集后启用。
 - 上传恢复检查点和后台任务检查点统一保存在任务记录中，便于从最近的安全检查点恢复；上传任务当前仅保存 `TempFilePath` 等本地恢复资源信息，不依赖远端分片偏移续传
 - 上传、移动、复制、删除、重命名、还原、清空回收站成功后，必须失效或刷新受影响目录缓存
 
@@ -221,9 +221,9 @@ _覆盖需求: 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 13a, 14_
 // --- Queries ---
 public sealed record GetFileListQuery(Guid UserId, GetFileListInput Input) : IQuery<PagedResultDto<CloudDriveFileDto>>;
 public sealed record GetFileDetailQuery(Guid UserId, GetFileInput Input) : IQuery<CloudDriveFileDetailDto>;
-public sealed record SearchFilesQuery(Guid UserId, SearchFileInput Input) : IQuery<PagedResultDto<CloudDriveSearchResultDto>>;
+public sealed record SearchFilesQuery(Guid UserId, SearchFileInput Input) : IQuery<CloudDriveSearchListDto>;
 public sealed record GetDownloadUrlQuery(Guid UserId, GetDownloadUrlInput Input) : IQuery<CloudDriveDownloadDto>;
-public sealed record GetRecycleBinListQuery(Guid UserId, GetRecycleBinListInput Input) : IQuery<PagedResultDto<CloudDriveRecycleBinItemDto>>;
+public sealed record GetRecycleBinListQuery(Guid UserId, GetRecycleBinListInput Input) : IQuery<CloudDriveRecycleListDto>;
 
 // --- Commands ---
 public sealed record CreateFolderCommand(Guid UserId, CreateFolderInput Input) : ICommand<CloudDriveFolderDto>;
@@ -263,7 +263,7 @@ public class CloudDriveFileManager
 }
 ```
 
-> 说明：文件名验证逻辑由 Domain 层的 `CloudDriveFileNameValidator` 静态类提供，`CloudDriveFileManager` 和 Handler 调用该静态方法完成名称校验。注意：网页端新建文件夹接口（对应需求 7）限制文件夹名最长 **255 字符**，而重命名接口（对应需求 12）限制文件名最多 **255 字节**（UTF-8 下中文字符占 3 字节）；具体限值依据需求采集中的网页端响应。因此验证器须提供 `ValidateNewFolderName`（255 字符）和 `ValidateRenameFileName`（255 字节）两种校验方法。
+> 说明：文件名验证逻辑由 Domain 层的 `CloudDriveFileNameValidator` 静态类提供，`CloudDriveFileManager` 和 Handler 调用该静态方法完成名称校验。注意：网页端新建文件夹接口（对应需求 9）限制文件夹名最长 **255 字符**，而重命名接口（对应需求 13）限制文件名最多 **255 字节**（UTF-8 下中文字符占 3 字节）；具体限值依据需求采集中的网页端响应。因此验证器须提供 `ValidateNewFolderName`（255 字符）和 `ValidateRenameFileName`（255 字节）两种校验方法。
 
 ### 3. 预览模块 (Preview)
 
@@ -298,7 +298,7 @@ public sealed record RememberVideoPlayProgressCommand(Guid UserId, RememberVideo
 ```
 
 > 说明：`GetVideoPlayUrlCommand` 使用 Command 而非 Query，因为在检测到视频尚未转码完成时需要触发转码提交副作用（创建后台任务），违反 Query 不允许副作用的 CD0007 约束。若本次调用成功创建后台转码任务，则必须返回 `JobId`，否则可保持为空。返回 `Transcoding` 状态时客户端应轮询任务进度.
-> 说明：115 网页端视频播放、字幕、转码与播放进度接口均以 `pickcode` 为核心定位参数（网页端字段名为 `pickcode`，应用层 DTO 使用 `PickCode`）；若上层仅持有 `FileId`，应用层应先解析出 `pickcode` 再调用 `webapi.115.com/files/video`（播放）、`webapi.115.com/movies/subtitle`（字幕）与相关播放进度接口；具体网页端接口名以 `requirements.md` 采集为准。4K / 原画可用性以网页端返回结果与用户会员等级限制为准；返回 `CloudDriveVideoPlayDto` 时必须显式设置 `IsTemporary = true`，并通过 `UsageRestrictionNotice` 明确该播放资源仅限当前已绑定用户在本系统内短时使用。若网页端提供 `multitrack_list` 的音轨列表，返回模型必须保留音轨索引信息以支持音轨切换。
+> 说明：115 网页端视频播放、字幕、转码与播放进度接口均以 `pickcode` 为核心定位参数（网页端字段名为 `pickcode`，应用层 DTO 使用 `PickCode`）；若上层仅持有 `FileId`，应用层应先解析出 `pickcode` 再调用 `webapi.115.com/files/video`（播放）、`webapi.115.com/movies/subtitle`（字幕）与相关播放进度接口；具体网页端接口名以 `requirements.md` 采集为准。当前 `docs/115-api-docs.md` 仅采集到 `/files/video` 的错误响应字段，成功播放 schema 未采集时必须返回 `video_play_schema_not_collected`，不得伪造播放地址、清晰度或音轨字段。字幕 `autoload/list` 数组 item schema 未采集时返回空列表与 `ItemSchemaStatus = "not_collected"`。
 
 ### 5. 后台任务模块 (Quartz.NET Job)
 
@@ -343,7 +343,7 @@ _覆盖需求: 20, 21_
 ```csharp
 // --- Queries ---
 /// 查询云下载任务列表（对应需求 20 AC1-AC3）
-public sealed record GetOfflineTaskListQuery(Guid UserId, GetOfflineTaskListInput Input) : IQuery<PagedResultDto<CloudDriveOfflineTaskDto>>;
+public sealed record GetOfflineTaskListQuery(Guid UserId, GetOfflineTaskListInput Input) : IQuery<CloudDriveOfflineTaskListDto>;
 
 /// 查询云下载空间配额与统计（对应需求 20 AC4-AC5）
 public sealed record GetOfflineQuotaQuery(Guid UserId) : IQuery<CloudDriveOfflineQuotaDto>;
@@ -364,7 +364,7 @@ public sealed record ClearOfflineTasksCommand(Guid UserId, ClearOfflineTasksInpu
 
 > 说明：`POST /api/offline/tasks/urls` 与 `POST /api/offline/tasks/bt` 均映射为 `AddOfflineTaskCommand`，由 `AddOfflineTaskInput.TaskKind` 区分 `Url` / `Bt`；`POST /api/offline/parse-torrent` 在当前 `docs/115-api-docs.md` 未采集，Controller 可返回 `cloud_drive_api_not_collected`，不得定义猜测型 115 path。
 > 说明：所有云下载写操作（Add/Cancel/Clear）均为非幂等，默认不自动重试；仅查询操作（Get*）允许瞬时错误重试。
-> 说明：任务列表响应字段归一化：`total_count → total`、`failed_count → failed`、`finished_count → completed`、`downloading_count → active`（见 `requirements.md:370`）。
+> 说明：云下载任务列表只映射 `task_lists` 顶层字段 `page/page_count/page_row/page_size/count/quota/total/state/real_state/errtype`；`tasks` 对象 item schema 未采集时返回 `Items = []` 与 `ItemSchemaStatus = "not_collected"`，不得采用开放平台任务字段或 `status -1/0/1/2` 推断。
 > 说明：任务添加时由 `ICookieSignatureStrategy` 生成签名；若签名实现尚未提供，`Result.Failure` 返回 `offline_signature_not_available` 业务错误而非抛出异常。
 
 ---
@@ -382,16 +382,16 @@ _覆盖需求: 22_
 ```csharp
 // --- Queries ---
 /// 查询我的分享列表（/share/slist）
-public sealed record GetMySharesQuery(Guid UserId, GetShareListInput Input) : IQuery<PagedResultDto<CloudDriveShareItemDto>>;
+public sealed record GetMySharesQuery(Guid UserId, GetShareListInput Input) : IQuery<CloudDriveShareListDto>;
 
 /// 查询分享发送记录（/share/send）
-public sealed record GetShareSendsQuery(Guid UserId, GetShareListInput Input) : IQuery<PagedResultDto<CloudDriveShareSendItemDto>>;
+public sealed record GetShareSendsQuery(Guid UserId, GetShareListInput Input) : IQuery<CloudDriveShareListDto>;
 
 /// 查询分享接收记录（/share/receive）
-public sealed record GetShareReceivesQuery(Guid UserId, GetShareListInput Input) : IQuery<PagedResultDto<CloudDriveShareReceiveItemDto>>;
+public sealed record GetShareReceivesQuery(Guid UserId, GetShareListInput Input) : IQuery<CloudDriveShareListDto>;
 ```
 
-> 说明：当前需求 22 采集样本均为失败响应（低置信度，见 `requirements.md:324-335`）；`ErrorFieldAdapter` 先以双写字段规则处理这些响应，Handler 遇到解析失败时返回明确的 `share_sample_unavailable` 业务错误。联调获得真实可用样本后需补齐字段映射。
+> 说明：当前 `/share/slist` 仅采集到顶层 `count/list/define_receive_code/bind_receive_code/state/error/errno` 且 `list` item shape 为 null；`/share/send` 与 `/share/receive` 当前仅采集到错误响应。Handler 应返回 `CloudDriveShareListDto { Items = [], ItemSchemaStatus = "not_collected" }`，不得伪造分享条目字段。联调获得真实可用样本后需补齐字段映射。
 > 说明：分享相关写操作（创建/撤销分享）暂不在需求范围内；本模块仅提供读视图。
 
 ---
@@ -410,7 +410,7 @@ _覆盖需求: 23_
 /// 获取用户聚合画像（对应需求 23 AC1）
 public sealed record GetUserProfileQuery(Guid UserId) : IQuery<CloudDriveUserProfileDto>;
 
-/// 获取用户空间详情（对应需求 23 AC3）
+/// 获取用户空间详情（对应需求 23 AC6, AC8）
 public sealed record GetUserSpaceQuery(Guid UserId) : IQuery<CloudDriveSpaceInfoDto>;
 
 /// 获取用户 VIP 详情与特权（对应需求 23 AC4, AC5）
@@ -446,7 +446,7 @@ _覆盖需求: 24, 25, 26, 27, 29_
 
 _覆盖需求: 25, 26, 29_
 
-应用层通过 `ICloudDriveOpenApiGateway` 抽象访问 115 网页端 API（定义在 Application 层 `Abstractions/` 目录），基础设施层由 `CloudDriveApiClient` 实现该接口并负责与 115 网页端 **7 个域名分组** 的通信：
+应用层通过 `ICloudDriveOpenApiGateway` 抽象访问 115 网页端 API（定义在 Application 层 `Abstractions/` 目录），基础设施层由 `CloudDriveApiClient` 实现该接口并负责与 115 网页端 **6 个域名分组** 的通信：
 
 | 序号 | 域名 | 用途 | 认证方式 |
 |:---:|---|---|---|
@@ -456,7 +456,8 @@ _覆盖需求: 25, 26, 29_
 | 4 | `115.com/web/lixian` | 云下载任务 | Cookie + sign/time/uid 签名 |
 | 5 | `uplb.115.com` | **上传初始化**（`/3.0/sampleinitupload.php`） | Cookie + userid 参数 |
 | 6 | `*.oss-cn-*.aliyuncs.com` | **OSS 直传**（PostObject） | OSS policy + signature（无 Cookie） |
-| 7 | `passportapi.115.com` | 登录态探测（预留） | Cookie |
+
+> `passportapi.115.com/*` 已在 requirements 范围排除声明中明确排除，不作为运行时登录态探测域名。登录态探测仅使用 `GET webapi.115.com/files?cid=0&limit=1`。
 
 > 说明：接口名称保留 `ICloudDriveOpenApiGateway`（为保持应用层依赖稳定），但**语义涵盖为 115 API 统一网关抽象**；如需更准确的命名可后续重构为 `ICloud115WebApiGateway`。
 
@@ -586,7 +587,7 @@ public class CloudDriveRateLimiter
 
 _覆盖需求: 27_
 
-元数据缓存组件，按用户 + 115 账号 + 目录维度缓存文件列表与详情.
+元数据缓存组件，按用户 + 115 账号 + 目录维度对文件列表与详情使用短 TTL 缓存；目录列表默认 TTL 不超过 30 秒，手动刷新和写操作成功后必须绕过或失效旧缓存.
 
 > 说明：Application 层定义 `ICloudDriveMetadataCache` 接口（仅包含 `GetOrSetAsync`、`InvalidateDirectoryAsync`、`InvalidateFileAsync` 方法签名），实现类 `CloudDriveMetadataCache` 位于 Infrastructure 层，内部使用 `IDistributedCache` + `DistributedCacheExtensions`（Application 层不引用 `IDistributedCache`，遵循 Ports & Adapters 模式）。
 
@@ -605,7 +606,7 @@ public class CloudDriveMetadataCache
 
 ```
 
-> 说明：读路径必须先检查 `CloudDriveMetadataCache`；仅当缓存未命中或用户显式执行手动刷新时，才进入 `CloudDriveRateLimiter` 与 `CloudDriveApiClient` 的官方请求链路
+> 说明：读路径可先检查 `CloudDriveMetadataCache` 的短 TTL 条目；仅当缓存未命中、TTL 过期或用户显式执行手动刷新时，才进入 `CloudDriveRateLimiter` 与 `CloudDriveApiClient` 的官方请求链路
 > 搜索结果不走缓存：搜索关键词组合多变且实时性要求高，缓存命中率低，因此搜索请求直接经过限流器发往官方 API
 > 手动刷新请求必须绕过现有缓存并重新拉取官方数据，但该次官方拉取仍需经过限流器统一治理
 > 缓存内容仅允许写入官方实际返回字段或系统可验证的派生值；对官方未提供且不可验证的字段必须保留为空值或缺省值
@@ -688,7 +689,7 @@ public enum CookieSessionStatus
 | ThrottleRetryMaxAttempts | int | 官方返回限流信号后的最大退避重试次数 |
 | ThrottleRetryBaseDelayMilliseconds | int | 限流退避基础延迟 |
 | ThrottleRetryMaxDelayMilliseconds | int | 限流退避最大延迟 |
-| CacheTtlSeconds | int | 元数据缓存 TTL（秒） |
+| CacheTtlSeconds | int | 元数据缓存 TTL（秒）；目录列表默认不超过 30 秒 |
 | LargeFileAsyncThresholdBytes | long | 超过该阈值的上传默认走后台任务 |
 | OfficePreviewServiceUrl | string? | Office 文档第三方预览服务地址（可选） |
 | CloudDriveFeatureEnabled | bool | 115 集成功能是否启用（启动期校验通过后设为 true，配置缺失时为 false） |
@@ -751,10 +752,12 @@ public class CloudDriveAuthCheckDto
 
 public class CloudDriveUserInfoDto
 {
-    public string UserName { get; set; }       // 官方 user_name
-    public string? AvatarSmallUrl { get; set; }  // user_face_s
-    public string? AvatarMediumUrl { get; set; } // user_face_m
-    public string? AvatarLargeUrl { get; set; }  // user_face_l
+    public string Uid { get; set; }            // 官方 user_id
+    public string Nickname { get; set; }       // 官方 user_name
+    public string? AvatarUrl { get; set; }     // 官方 user_face
+    public bool IsVip { get; set; }            // 官方 is_vip
+    public string? MaskedPhone { get; set; }   // 官方 pub_mobile_mask（已脱敏）
+    public string? MaskedEmail { get; set; }   // 官方 pub_email_mask（已脱敏）
     public CloudDriveSpaceInfoDto? SpaceInfo { get; set; }
     public CloudDriveVipInfoDto? VipInfo { get; set; }
 }
@@ -769,12 +772,7 @@ public class CloudDriveUserProfileDto
 
 public class CloudDriveSpaceInfoDto
 {
-    public string AllTotal { get; set; }         // 总空间（格式化值）
-    public string AllUse { get; set; }           // 已用空间（格式化值）
-    public string AllRemain { get; set; }        // 剩余空间（格式化值）
-    public long AllTotalBytes { get; set; }      // 总空间（字节）
-    public long AllUseBytes { get; set; }        // 已用空间（字节）
-    public long AllRemainBytes { get; set; }     // 剩余空间（字节）
+    public string SchemaStatus { get; set; } = "not_collected";
 }
 
 public class CloudDriveVipInfoDto
@@ -826,8 +824,8 @@ public class GetFileListInput
 {
     public string? DirectoryId { get; set; }    // 目录 ID，默认根目录 cid=0
     public int Offset { get; set; }
-    public int Limit { get; set; } = 20;        // 最大 1150
-    public int? Type { get; set; }              // 文件类型筛选：1=文档,2=图片,3=音乐,4=视频,5=压缩,6=应用,7=书籍
+    public int Limit { get; set; } = 20;        // 受系统自有 CloudDrive:MaxPageSize 保护；docs 未采集 115 网页端硬上限
+    public int? Type { get; set; }              // 网页端 type 数值，docs 未定义完整值域
     public string? Suffix { get; set; }         // 文件后缀名筛选
     public int? Asc { get; set; }               // 排序方向：1=升序, 0=降序
     public string? OrderBy { get; set; }        // 排序字段：file__name, file__size, user__utime, file__type
@@ -842,13 +840,13 @@ public class SearchFileInput
 {
     public string Keyword { get; set; }         // 查找关键字（官方 search_value）
     public int Offset { get; set; }
-    public int Limit { get; set; } = 50;        // offset+limit 合计不得超过 10000
+    public int Limit { get; set; } = 50;        // 受系统自有 CloudDrive:MaxPageSize 保护；docs 未采集 offset+limit 总上限
     public string? DirectoryId { get; set; }    // 目标目录 cid（-1=不返回列表内容）
     public string? Date { get; set; }           // 网页端 date 筛选（格式 2020-11-19）
     public string? PickCode { get; set; }       // 网页端 pick_code
     public int? CountFolders { get; set; }      // 网页端 count_folders，默认 1
     public string? Source { get; set; }         // 网页端 source
-    public int? Type { get; set; }              // 文件类型大分类：1=文档,2=图片,3=音乐,4=视频,5=压缩包,6=应用
+    public int? Type { get; set; }              // 网页端 type 数值，docs 未定义完整值域
     public string Format { get; set; } = "json";
 }
 
@@ -897,7 +895,7 @@ public class GetVideoPlayInput
 {
     public string? FileId { get; set; }
     public string? PickCode { get; set; }       // 官方接口必需；若缺失则先由 FileId 解析
-    public int? Definition { get; set; }        // 期望清晰度：1/2/3/4/5/100
+    public int? Definition { get; set; }        // 期望清晰度；成功播放 schema 补采集前不启用具体值域
 }
 
 public class SubmitTranscodeInput
@@ -934,21 +932,28 @@ public class RememberVideoPlayProgressInput
 /// 文件列表项
 public class CloudDriveFileDto
 {
-    public string FileId { get; set; }       // 文件 ID（115 返回的 fid/cid）
-    public string Name { get; set; }         // 文件名
-    public long Size { get; set; }           // 文件大小（字节）
-    public string FileType { get; set; }     // 文件类型/扩展名
-    public bool IsDirectory { get; set; }    // 是否为文件夹
-    public DateTime ModifiedTime { get; set; } // 修改时间
-    public string? PickCode { get; set; }    // 文件提取码（下载、播放、字幕等接口依赖此字段）
-    public string? Sha1 { get; set; }        // SHA1 哈希
-    public bool IsStar { get; set; }           // 是否星标（官方 ism 字段）
-    public List<CloudDriveFileLabelDto>? Labels { get; set; } // 文件标签列表（官方 fl 字段）
-    public bool IsVideo { get; set; }          // 是否为视频（官方 isv 字段）
-    public long? PlayLong { get; set; }        // 音视频时长（秒）
-    public int? VideoDefinition { get; set; }  // 视频清晰度（官方 def 字段：1=标清,2=高清,3=超清,4=1080P,5=4K,100=原画）
-    public string? ThumbnailUrl { get; set; } // 缩略图地址（官方 thumb 字段）
-    public string? OriginalImageUrl { get; set; } // 原图地址（官方 uo 字段，如有）
+    public string FileId { get; set; }          // 官方 fid
+    public string FileName { get; set; }        // 官方 n
+    public long Size { get; set; }              // 官方 s
+    public int? RawCategoryCode { get; set; }   // 官方 fc；docs 未定义值域
+    public string Category { get; set; } = "unknown";
+    public bool? IsDirectory { get; set; }      // 仅真实样本验证后派生
+    public string? PickCode { get; set; }       // 官方 pc
+    public string? Sha1 { get; set; }           // 官方 sha
+    public string? Ico { get; set; }            // 官方 ico
+    public string? FileClass { get; set; }      // 官方 class
+    public string? Thumb { get; set; }          // 官方 tu
+    public string? OriginalUrl { get; set; }    // 官方 u（临时资源）
+    public string? VideoImg { get; set; }       // 官方 tp
+    public bool? IsVideo { get; set; }          // 官方 iv；值域未定义时可空
+    public int? VideoDefinition { get; set; }   // 官方 fvs；docs 未定义值域
+    public long? PlayDuration { get; set; }     // 官方 play_long
+    public string? UploadTime { get; set; }     // 官方 te
+    public string? UpdateTime { get; set; }     // 官方 t
+    public bool? IsStarred { get; set; }        // 官方 m；值域未定义时可空
+    public bool? IsPrivate { get; set; }        // 官方 hdf；值域未定义时可空
+    public int? UploadStatusRaw { get; set; }   // 官方 sta；docs 未定义值域
+    public string UploadStatus { get; set; } = "unknown";
 }
 
 /// 文件详情
@@ -980,10 +985,46 @@ public class CloudDriveFileLabelDto
 }
 
 /// 搜索结果
-public class CloudDriveSearchResultDto : CloudDriveFileDto
+public class CloudDriveSearchListDto
 {
-    public string ParentId { get; set; }       // 官方 parent_id
-    public string? Path { get; set; }          // 可选路径；仅在系统可安全推导时返回
+    public IReadOnlyList<CloudDriveSearchResultDto> Items { get; set; } = Array.Empty<CloudDriveSearchResultDto>();
+    public int Count { get; set; }              // 官方 count
+    public int PageSize { get; set; }           // 官方 page_size
+    public int PageCount { get; set; }          // 官方 page_count
+    public int Offset { get; set; }
+    public int? IsAsc { get; set; }             // 官方 is_asc
+    public string? Order { get; set; }
+    public string? Suffix { get; set; }
+    public int? FcMix { get; set; }             // 官方 fc_mix；值域未采集
+    public int? Type { get; set; }              // 官方 type；值域未采集
+    public string ItemSchemaStatus { get; set; } = "available";
+}
+
+/// 搜索结果（映射自 docs/115-api-docs.md 2026-05-04 /files/search 非空样本）
+public class CloudDriveSearchResultDto
+{
+    public string FileId { get; set; }           // 官方 fid
+    public string Aid { get; set; }              // 官方 aid
+    public string ParentId { get; set; }         // 官方 cid
+    public string FileName { get; set; }         // 官方 n
+    public long? Size { get; set; }              // 官方 s（字符串数字）
+    public string? PickCode { get; set; }        // 官方 pc
+    public int? RawCategoryCode { get; set; }    // 官方 fc；值域未采集
+    public string Category { get; set; } = "unknown";
+    public string? Ico { get; set; }             // 官方 ico
+    public string? Sha1 { get; set; }            // 官方 sha
+    public string? DirectoryName { get; set; }   // 官方 dp，仅表示样本返回的目录显示名，不伪造完整路径
+    public string? HighlightNameRaw { get; set; } // 官方 ns，可能包含 HTML 高亮片段，不得作为可信 HTML 直接渲染
+    public string? Thumb { get; set; }           // 官方 u / tp 的归一化候选
+    public string? VideoImg { get; set; }        // 官方 tp
+    public bool? IsVideo { get; set; }           // 官方 iv；值域未定义时可空
+    public bool? IsStarred { get; set; }         // 官方 m；值域未定义时可空
+    public bool? IsPrivate { get; set; }         // 官方 hdf；值域未定义时可空
+    public int? UploadStatusRaw { get; set; }    // 官方 sta；值域未采集
+    public string UploadStatus { get; set; } = "unknown";
+    public long? PlayDuration { get; set; }      // 官方 play_long
+    public IReadOnlyList<CloudDriveFileLabelDto> Labels { get; set; } = Array.Empty<CloudDriveFileLabelDto>(); // 官方 fl；item shape 依样本为空数组时保持空
+    public string SchemaStatus { get; set; } = "available";
 }
 
 /// 文件夹信息
@@ -1026,17 +1067,25 @@ public class CloudDriveUploadExecutionDto : CloudDriveOperationResultDto
     public CloudDriveUploadedFileDto? File { get; set; }
 }
 
-/// 回收站项
-/// 注意：回收站列表的 type 字段值域（1=文件, 2=目录）与文件列表的 fc 字段值域（0=文件夹, 1=文件）反转，
-/// 基础设施层反序列化时须分别处理 IsDirectory 映射。
-public class CloudDriveRecycleBinItemDto : CloudDriveFileDto
+/// 回收站列表响应
+/// docs/115-api-docs.md 当前仅采集到 /rb 顶层字段，未采集项目明细数组或动态键 item schema。
+public class CloudDriveRecycleListDto
 {
-    public string RecycleBinItemId { get; set; } // 回收站项 ID（网页端 `id` 字段），用于 `webapi.115.com/rb/*` 还原/彻底删除的 `tid` 参数，与 FileId 不同
-    public int RestoreStatus { get; set; }     // 回收站项状态（官方 status：-1=还原中, 0=正常）
-    public DateTime DeletedTime { get; set; }
-    public string? OriginalParentId { get; set; }
-    public string? OriginalParentName { get; set; }
-    public string? OriginalPath { get; set; }  // 仅在系统可安全推导时返回
+    public IReadOnlyList<CloudDriveRecycleBinItemDto> Items { get; set; } = Array.Empty<CloudDriveRecycleBinItemDto>();
+    public int Count { get; set; }              // 官方 count，原始类型 string，基础设施层转 number
+    public int RbPass { get; set; }             // 官方 rb_pass
+    public int Offset { get; set; }
+    public int PageSize { get; set; }           // 官方 page_size
+    public string? Order { get; set; }
+    public int? IsAsc { get; set; }             // 官方 is_asc
+    public string ItemSchemaStatus { get; set; } = "not_collected";
+}
+
+/// 回收站项
+/// 当前未在 docs/115-api-docs.md 中采集到 item 字段。补采集前不得伪造 fileName/fileSize/deletedTime/pickCode/status 等字段。
+public class CloudDriveRecycleBinItemDto
+{
+    public string SchemaStatus { get; set; } = "not_collected";
 }
 
 /// 下载信息
@@ -1086,15 +1135,26 @@ public class ClearOfflineTasksInput
     public string? Status { get; set; }
 }
 
+public class CloudDriveOfflineTaskListDto
+{
+    public IReadOnlyList<CloudDriveOfflineTaskDto> Items { get; set; } = Array.Empty<CloudDriveOfflineTaskDto>();
+    public int Page { get; set; }
+    public int PageCount { get; set; }          // 官方 page_count
+    public int PageRow { get; set; }            // 官方 page_row
+    public int PageSize { get; set; }           // 官方 page_size
+    public int Count { get; set; }
+    public int Quota { get; set; }
+    public int Total { get; set; }
+    public bool? RealState { get; set; }        // 官方 real_state
+    public string? ErrType { get; set; }        // 官方 errtype
+    public string ItemSchemaStatus { get; set; } = "not_collected";
+}
+
+/// 云下载任务项
+/// 当前 docs/115-api-docs.md 仅采集到 tasks: object，未采集 item 字段。补采集前不得伪造 infoHash/name/status 等字段。
 public class CloudDriveOfflineTaskDto
 {
-    public string InfoHash { get; set; }
-    public string Name { get; set; }
-    public long Size { get; set; }
-    public string Status { get; set; }
-    public decimal PercentDone { get; set; }
-    public string? FileId { get; set; }
-    public string? ParentId { get; set; }
+    public string SchemaStatus { get; set; } = "not_collected";
 }
 
 public class CloudDriveOfflineQuotaDto
@@ -1112,6 +1172,23 @@ public class CloudDriveOfflineStatsDto
     public int Active { get; set; }
     public int Completed { get; set; }
     public int Failed { get; set; }
+}
+
+public class CloudDriveShareListDto
+{
+    public IReadOnlyList<CloudDriveShareItemDto> Items { get; set; } = Array.Empty<CloudDriveShareItemDto>();
+    public int? Count { get; set; }                 // /share/slist 官方 count
+    public int? DefineReceiveCode { get; set; }     // 官方 define_receive_code
+    public int? BindReceiveCode { get; set; }       // 官方 bind_receive_code
+    public string? Request { get; set; }            // send/receive 错误样本 request
+    public string ItemSchemaStatus { get; set; } = "not_collected";
+}
+
+/// 分享列表项
+/// 当前 docs/115-api-docs.md 未采集到分享 item 字段。补采集前不得伪造 shareId/title/shareUrl/receiveCode 等字段。
+public class CloudDriveShareItemDto
+{
+    public string SchemaStatus { get; set; } = "not_collected";
 }
 ```
 
@@ -1149,46 +1226,48 @@ public enum DocRenderMode
 #### 视频相关 DTO
 
 ```csharp
-/// 视频播放信息（映射自 `GET webapi.115.com/files/video` 响应）
+/// 视频播放信息（`GET webapi.115.com/files/video` 当前仅采集错误响应；成功播放 schema 补采集后才映射播放字段）
 /// 注意：网页端此接口 `pickcode` 通过 query string 传递，必须携带 `share_id=0` 表示非分享场景。
 public class CloudDriveVideoPlayDto
 {
-    public VideoPlayStatus Status { get; set; } = VideoPlayStatus.Ready;
+    public VideoPlayStatus Status { get; set; } = VideoPlayStatus.SchemaNotCollected;
     public Guid? JobId { get; set; }           // 自动提交转码时返回
-    public List<VideoQualityOption> QualityOptions { get; set; } // 多清晰度选项
-    public List<AudioTrackOption> AudioTracks { get; set; }      // 官方多音轨信息
-    public int Duration { get; set; }          // 视频时长（秒）
-    public int? UserDef { get; set; }            // 官方记忆的用户上次选中清晰度（官方 user_def：1=标清,2=高清,3=超清,4=1080P,5=4K,100=原画）
-    public int? SelectedDefinition { get; set; } // 本次用户请求的清晰度（前端传入）
-    public int? UserRotate { get; set; }       // 记忆视频旋转角度（官方 user_rotate：0/90/180/270）
-    public int? UserTurn { get; set; }         // 记忆视频翻转方向（官方 user_turn：0=不翻转, 1=水平, 2=垂直）
-    public string? RestrictionReason { get; set; } // 4K/原画等受限原因
-    public Dictionary<string, string>? PlaybackMetadata { get; set; } // 官方返回的播放器元数据
+    public List<VideoQualityOption> QualityOptions { get; set; } = []; // 成功 schema 补采集前保持空
+    public List<AudioTrackOption> AudioTracks { get; set; } = [];      // 成功 schema 补采集前保持空
+    public int? Duration { get; set; }          // 补采集成功 schema 后才可映射
+    public int? UserDef { get; set; }           // 补采集成功 schema 后才可映射
+    public int? SelectedDefinition { get; set; } // 补采集成功 schema 后才可映射
+    public int? UserRotate { get; set; }         // 补采集成功 schema 后才可映射
+    public int? UserTurn { get; set; }           // 补采集成功 schema 后才可映射
+    public string? RestrictionReason { get; set; } // 补采集 VIP/受限字段后才可映射
+    public Dictionary<string, string>? PlaybackMetadata { get; set; } // 补采集成功 schema 后才可映射
+    public string PlaybackSchemaStatus { get; set; } = "not_collected";
     public bool IsTemporary { get; set; } = true;
     public string? UsageRestrictionNotice { get; set; }
 }
 
 public enum VideoPlayStatus
 {
+    SchemaNotCollected,
     Ready,
     Transcoding
 }
 
 public class VideoQualityOption
 {
-    public int Definition { get; set; }        // 清晰度标识：1/2/3/4/5/100
-    public int? DefinitionNew { get; set; }    // 新版清晰度标识（官方 definition_n）
-    public string? Title { get; set; }         // 官方清晰度名称
-    public string PlayUrl { get; set; }        // 播放地址
-    public int? Height { get; set; }           // 视频高度（官方 height）
-    public int? Width { get; set; }            // 视频宽度（官方 width）
+    public int? Definition { get; set; }       // 补采集成功 schema 后才可映射
+    public int? DefinitionNew { get; set; }
+    public string? Title { get; set; }
+    public string? PlayUrl { get; set; }
+    public int? Height { get; set; }
+    public int? Width { get; set; }
 }
 
 public class AudioTrackOption
 {
-    public int TrackIndex { get; set; }        // multitrack_list 的索引，用于拼接 audio_track 参数
-    public string Title { get; set; }
-    public bool IsSelected { get; set; }
+    public int? TrackIndex { get; set; }       // 补采集成功 schema 后才可映射
+    public string? Title { get; set; }
+    public bool? IsSelected { get; set; }
 }
 
 /// 视频转码状态
@@ -1200,15 +1279,16 @@ public class CloudDriveVideoTranscodeDto
 }
 
 /// 视频播放进度（映射自 docs/115-api-docs.md 中的 webapi.115.com/files/history）
-/// 读取：GET /files/history?pick_code={pickcode}&fetch=one&category=1&format=json；写入：POST /files/history form-urlencoded。
+/// 读取：GET /files/history?pick_code={pickcode}&fetch=one&format=json；2026-05-04 自动样本为空数组，2026-04-18 手动样本记录 category=1 分支可能返回对象。写入：POST /files/history form-urlencoded。
 public class CloudDriveVideoPlayProgressDto
 {
-    public string FileId { get; set; }         // 官方 file_id
-    public string FileName { get; set; }       // 官方 file_name
-    public string Hash { get; set; }           // 官方 hash
-    public string PickCode { get; set; }       // 官方 pick_code
-    public long PlayedSeconds { get; set; }    // 已播放时长（秒）
+    public string? FileId { get; set; }        // 官方 file_id；空数组响应时为 null
+    public string? FileName { get; set; }      // 官方 file_name；空数组响应时为 null
+    public string? Hash { get; set; }          // 官方 hash；空数组响应时为 null
+    public string PickCode { get; set; }       // 官方 pick_code 或请求 pickcode
+    public long? PlayedSeconds { get; set; }   // 已播放时长（秒）；无历史时为 null
     public long? AddTime { get; set; }         // 记录添加时间戳（官方 add_time）
+    public string SchemaStatus { get; set; } = "available";
 }
 
 /// 字幕列表
@@ -1216,23 +1296,13 @@ public class CloudDriveSubtitleListDto
 {
     public CloudDriveSubtitleDto? AutoloadSubtitle { get; set; }
     public List<CloudDriveSubtitleDto> Items { get; set; } = [];
+    public string ItemSchemaStatus { get; set; } = "not_collected";
 }
 
 /// 字幕信息
 public class CloudDriveSubtitleDto
 {
-    public string SubtitleId { get; set; }     // 字幕 ID (sid)
-    public string Language { get; set; }       // 字幕语言
-    public string Title { get; set; }          // 字幕标题
-    public string SubtitleUrl { get; set; }    // 字幕下载地址
-    public string? Type { get; set; }          // 字幕类型
-    public string? Sha1 { get; set; }          // 官方 sha1
-    public string? FileId { get; set; }        // 官方 file_id
-    public string? FileName { get; set; }      // 字幕文件名
-    public string? PickCode { get; set; }      // 关联视频的提取码
-    public string? CaptionMapId { get; set; }  // 官方 caption_map_id
-    public bool? IsCaptionMap { get; set; }    // 官方 is_caption_map
-    public int? SyncTime { get; set; }         // 官方 sync_time
+    public string SchemaStatus { get; set; } = "not_collected";
 }
 
 ```
@@ -1295,10 +1365,10 @@ public class BoolOrNumberJsonConverter : JsonConverter<bool>
 > 说明：基础设施层解析 115 网页端响应的成败判定由 `IErrorFieldAdapter` 按 URL 路径动态解析（见组件章节）；默认语义为 HTTP 成功且响应中 `state` 字段（由 `BoolOrNumberJsonConverter` 将 `1` 等数值转为 `true`）为 `true` 且 `ErrorFieldAdapter` 返回的 `CloudDriveApiError` 为 null 时视为成功；否则映射为适当的 `CloudDrive*Exception`（见错误码映射表）。
 
 > **网页端特殊接口行为说明（依据 `requirements.md` 采集）：**
-> - **文件列表/搜索响应**：字段归一化映射（`fid → FileId`、`n → Name`、`s → Size`、`fc` 值域转换等）由 Infrastructure 层反序列化字段适配器处理；详具体归一化表 `requirements.md:112` 与 `requirements.md:125`。
-> - **视频播放** `GET webapi.115.com/files/video`：`pickcode` 通过 query string 传递，返回网页端多清晰度 URL 列表；必须携带 `share_id=0` 以表示非分享场景（信息来自采集样本，见 `requirements.md:302`）。
+> - **文件列表/搜索响应**：字段归一化映射（`fid → FileId`、`n → Name`、`s → Size`、`fc → RawCategoryCode` 等）由 Infrastructure 层反序列化字段适配器处理；`fc/sta/hdf/class/fvs/iv` 值域未在 `docs/115-api-docs.md` 中采集，派生字段只能在真实网页端样本验证后启用。
+> - **视频播放** `GET webapi.115.com/files/video`：`pickcode` 通过 query string 传递，必须携带 `share_id=0` 以表示非分享场景；当前 `docs/115-api-docs.md` 仅采集错误响应 `{ state, errno, error }`，未采集成功播放 URL、清晰度、音轨或 VIP 受限字段。成功 schema 补采集前必须返回 `video_play_schema_not_collected` / `PlaybackSchemaStatus = "not_collected"`，不得伪造播放字段。
 > - **视频字幕** `GET webapi.115.com/movies/subtitle`：错误字段使用大写 `errNo` （注里名标注大写 N）+ `error`，由 `ErrorFieldAdapter` 单独配置。
-> - **回收站列表** `GET webapi.115.com/rb`：必须携带 `aid=7`、`cid=0`、`format=json` 三个必填参数（`aid=1` 为正常目录，`aid=7` 为回收站）；响应 `data` 在非空回收站下为动态键对象（键为文件 ID string），空回收站官方不返回 `data` 键。
+> - **回收站列表** `GET webapi.115.com/rb`：必须携带 `aid=7`、`cid=0`、`format=json` 三个必填参数（`aid=1` 为正常目录，`aid=7` 为回收站）；当前 `docs/115-api-docs.md` 仅采集顶层字段 `count/rb_pass/state/error/offset/page_size/order/is_asc`，未采集 item schema。响应缺失项目明细字段或 `data` 字段时返回 `CloudDriveRecycleListDto { Items = [], ItemSchemaStatus = "not_collected" }`，不得伪造回收站项目字段。
 > - **云下载系列接口** `115.com/web/lixian/*`：所有请求必须追加 `?ct=lixian&ac={操作符}`；Body 需携带 `sign + time + uid` 三元组，由 `ICookieSignatureStrategy` 生成；`task_lists` 等接口的补充参数 `stat`（默认 0 表示全部）。
 > - **分享接口** `webapi.115.com/share/slist` 、`/share/send`、`/share/receive`：均必须携带 `format=json`；`send` 与 `receive` 的错误字段优先读 `errNo`，fallback `errno`（见 `requirements.md:464`）。
 > - **用户聚合接口**：`my.115.com/proapi/3.0/index.php?method=user_info&uid=...`（主资料）、`webapi.115.com/user/vip_limit?feature=2`（VIP 配额，错误字段 `code` string）、`webapi.115.com/files/index_info?count_space_nums=1`（存储空间，错误字段 `code` number + `error`）、`vip.115.com/*`（VIP 响应包含 `00_balance` 索引访问归一化为 `balance`）、`pay.115.com/`（错误字段 `msg`、非 `message`）。
@@ -1335,25 +1405,25 @@ public class BoolOrNumberJsonConverter : JsonConverter<bool>
 ### P2: Cookie 失效处理
 
 - **属性**: 对于任意使用 Cookie 的 API 调用，若 `CloudDriveApiClient` 探测到 Cookie 失效（`errNo=login_required` 或 HTTP 401/403），则系统必须：(1) 立即将 `CookieSession.Status` 标记为 `Invalidated` 并设置 `CooldownUntil`；(2) 抛出 `CloudDriveCookieInvalidatedException` 而非模糊错误；(3) 发布 `CookieInvalidated` 领域事件；(4) 在冷却期内不重复发起探测请求。系统不尝试自动恢复失效 Cookie（必须由运维重新注入）
-- **关联需求**: 需求 1 (AC4, AC5, AC6, AC7, AC8), 需求 3 (AC3, AC4)
+- **关联需求**: 需求 1 (AC4, AC5, AC6, AC7), 需求 3 (AC3, AC4)
 - **验证方式**: 集成测试模拟 `errNo=login_required` 与 HTTP 401/403 两种失效场景，验证 `CookieSession.Status` 被标记为 `Invalidated`、`CookieInvalidated` 事件被发布，冷却期内的重复探测返回缓存结果而不发起新的官方请求
 
 ### P3: 频控限流一致性
 
 - **属性**: 对于任意时间窗口内的 API 请求序列，实际发往 115 网页端的请求数不得超过配置的每秒最大请求数（按用户 + 115 账号 + 场景维度）
-- **关联需求**: 需求 17 (AC1, AC2, AC3)
+- **关联需求**: 需求 24 (AC1, AC2, AC3)
 - **验证方式**: 单元测试验证 `CloudDriveRateLimiter` 在并发请求下，通过的请求数不超过配置上限
 
 ### P4: 缓存一致性
 
 - **属性**: 对于任意写操作（上传、移动、复制、删除、重命名、还原、清空回收站），操作成功后受影响目录的缓存必须被失效或刷新；对于任意手动刷新请求，系统必须绕过或重建缓存并返回官方最新数据
-- **关联需求**: 需求 20 (AC2, AC3)
+- **关联需求**: 需求 27 (AC6, AC7, AC8)
 - **验证方式**: 集成测试验证写操作后缓存被清除；验证用户显式刷新目录时绕过旧缓存并返回最新官方数据
 
 ### P5: 文件名验证
 
 - **属性**: 对于任意文件/文件夹创建或重命名操作，若名称为空或包含非法字符，则系统必须拒绝操作并返回明确的验证错误，而非将无效名称传递给 115 API
-- **关联需求**: 需求 7 (AC2, AC4), 需求 12 (AC2, AC4)
+- **关联需求**: 需求 9 (AC3, AC5), 需求 13 (AC3, AC5)
 - **验证方式**: 单元测试验证 `CloudDriveFileNameValidator.ValidateFileName` 对空字符串和非法字符抛出 `CloudDriveInvalidNameException`
 
 ### P6: 错误码映射完整性
@@ -1364,8 +1434,8 @@ public class BoolOrNumberJsonConverter : JsonConverter<bool>
 
 ### P7: 预览类型路由正确性
 
-- **属性**: 对于任意文件预览请求，系统必须根据文件扩展名正确路由到对应的预览策略（图片→下载地址渲染，视频→可播放地址或 Transcoding 状态，PDF/TXT→直接渲染，Office→第三方渲染或不可用），且不支持的格式必须返回明确的不支持提示
-- **关联需求**: 需求 14 (AC2, AC3), 需求 15 (AC5), 需求 16 (AC2, AC3, AC4, AC6)
+- **属性**: 对于任意文件预览请求，系统必须根据文件扩展名正确路由到对应的预览策略（图片→下载地址渲染，视频→`video_play_schema_not_collected` / Transcoding / 后续可播放地址，PDF/TXT→直接渲染，Office→第三方渲染或不可用），且不支持的格式必须返回明确的不支持提示
+- **关联需求**: 需求 15 (AC1, AC5), 需求 16 (AC2, AC3, AC4, AC6), 需求 19 (AC2, AC3, AC7)
 - **验证方式**: 单元测试验证图片/文档/视频扩展名被正确路由到对应预览策略；验证 Office 文档在未配置第三方预览服务时返回 `NotAvailable`；验证不支持的格式返回错误
 
 ### P8: 配置完整性校验
@@ -1377,31 +1447,31 @@ public class BoolOrNumberJsonConverter : JsonConverter<bool>
 ### P9: 临时资源标识
 
 - **属性**: 对于任意返回下载地址、播放地址或预览地址的响应 DTO，`IsTemporary` 字段必须为 `true`
-- **关联需求**: 需求 6 (AC5), 需求 14 (AC1), 需求 15 (AC2, AC12), 需求 16 (AC1)
+- **关联需求**: 需求 8 (AC6, AC7), 需求 15 (AC1, AC2), 需求 16 (AC10), 需求 19 (AC2)
 - **验证方式**: 单元测试验证所有返回临时资源的 DTO 在构造与映射为对外响应后均保持 `IsTemporary = true`
 
 ### P10: 用户数据隔离
 
 - **属性**: 对于任意缓存读写操作，不同用户、不同 115 账号的缓存数据必须完全隔离；用户 A 或账号 X 的缓存键不得与用户 B 或账号 Y 的缓存键冲突或交叉访问
-- **关联需求**: 需求 20 (AC5)
+- **关联需求**: 需求 27 (AC8, AC9)
 - **验证方式**: 单元测试验证 `CloudDriveMetadataCache` 为不同 userId / cloudAccountUid 生成不同的缓存键，且一个用户或账号的失效操作不影响另一个用户或账号的缓存
 
 ### P11: 缓存数据真实性
 
 - **属性**: 对于任意写入 `CloudDriveMetadataCache` 的条目，缓存字段必须来源于官方实际响应或系统可验证的派生值；系统不得凭空生成官方未提供且不可验证的元数据
-- **关联需求**: 需求 20 (AC4)
+- **关联需求**: 需求 27 (AC8)
 - **验证方式**: 属性测试验证缓存映射仅包含官方响应字段和可验证派生字段；当官方缺失字段时返回空值或缺省值而非伪造数据
 
 ### P12: 失败响应语义一致性
 
 - **属性**: 对于任意 Handler 返回的 `Result.Failure(error)`，表现层必须将其转换为非 2xx 的 `ProblemDetails` 响应，并保留稳定的业务错误码；系统不得以 HTTP 200 表示失败
-- **关联需求**: 需求 18 (AC7)
+- **关联需求**: 需求 25 (AC6)
 - **验证方式**: 集成测试验证 Controller 对典型业务失败（如名称非法、文件不存在、配置禁用）输出预期状态码与 `application/problem+json`
 
 ### P13: 后台任务重启恢复协调
 
 - **属性**: 对于任意在进程重启前处于 `Pending` 或 `Running` 状态且具备可恢复检查点的后台任务，系统启动后必须重新协调其状态：可恢复任务重新调度，不可恢复任务标记为失败并记录原因
-- **关联需求**: 需求 21 (AC4, AC6)
+- **关联需求**: 需求 28 (AC5, AC7)
 - **验证方式**: 集成测试模拟进程中断后重新启动，验证恢复协调服务会根据 `PayloadJson` 与 `CheckpointData` 重新调度或失败收敛任务
 
 ---

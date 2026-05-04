@@ -216,6 +216,7 @@ _覆盖需求: 19.2, 19.3, 19.4, 19.5, 19.6_
   - `fetchUserInfo(): Promise<void>` — 调用 `userApi.getInfo()`（对应 `GET /api/user/info`）
   - `fetchSpaceSummary(): Promise<void>` — 调用 `userApi.getStorage()`（对应 `GET /api/user/storage`）
   - `clearSession(): void` — 清除内存会话状态
+- **空间摘要**：仅当 `CloudDriveSpaceInfoDto.schemaStatus='available'` 时写入 `spaceSummary`；当前 `not_collected` 时保持 `null` 并由 UI 显示"空间明细暂不可用"
 - **返回类型**：
   ```typescript
   interface AuthCheckResult {
@@ -293,8 +294,9 @@ _覆盖需求: 19.2, 19.3, 19.4, 19.5, 19.6_
 - **状态**：`items: CloudDriveFileDto[]`、`mode: 'copy' | 'cut' | null`
 - **覆盖需求**：_覆盖需求: 3.6, 4.5_
 
-#### UploadZone 组件（占位）
-- **状态**：接口已定义，实现等待后端上传 API 就绪
+#### UploadZone 组件
+- **状态**：上传链路已采集并由后端代理，前端通过 `POST /api/files/upload` 提交 `multipart/form-data`
+- **行为**：支持拖拽与点击选择文件；同步上传期间接入 `ForegroundOperationGuard`，大文件异步返回 202 + `jobId` 时交由 `jobsApi.poll()` 跟踪终态
 - **覆盖需求**：_覆盖需求: 3.1, 3.2_
 
 #### ConfirmDialog
@@ -335,7 +337,8 @@ _覆盖需求: 19.2, 19.3, 19.4, 19.5, 19.6_
 - **状态**：
   - `keyword: string`
   - `filters: SearchFilters`（引用 §6.1 DTO）
-  - `results: CloudDriveFileDto[]`
+  - `searchList: CloudDriveSearchListDto | null`
+  - `results: CloudDriveSearchResultDto[]`（来自 `searchList.items`，仅当 `searchList.itemSchemaStatus='available'` 时用于展示）
   - `paging: { offset: number; limit: number; hasMore: boolean }`
   - `previousDirectoryId: string | null`
   - `history: string[]`（localStorage 最多保留 20 条）
@@ -344,7 +347,9 @@ _覆盖需求: 19.2, 19.3, 19.4, 19.5, 19.6_
 - **Actions**：`search(keyword, filters)`（首次搜索，重置分页）、`loadMore()`（无限滚动）、`loadSuggestions(keyword)`、`persistHistory(keyword)`、`clearSearch()`、`returnToBrowse()`
 - **API**：`searchApi.search({ searchValue, type, cid, date, ... })` 对应 `GET /api/files/search`
 - **约束**：后端硬上限由 ProblemDetails 400 返回，前端展示友好错误
-- **覆盖需求**：_覆盖需求: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.10, 5.11_
+- **明细状态**：2026-05-04 docs 已采集有限搜索 item schema；`searchList.itemSchemaStatus='available'` 时展示已归一化字段，`not_collected` 时展示"搜索结果明细暂不可用"空态
+- **安全规则**：搜索 item 的 `highlightNameRaw` 来源于 115 `ns` HTML 片段；前端不得直接 `v-html` 渲染，需使用安全分词高亮或后端清洗结果
+- **覆盖需求**：_覆盖需求: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.10, 5.11, 5.12_
 
 #### SearchBar 组件
 - **职责**：搜索输入、类型筛选、目录筛选、时间筛选、历史建议下拉
@@ -355,13 +360,13 @@ _覆盖需求: 19.2, 19.3, 19.4, 19.5, 19.6_
 
 #### RecycleBinStore
 - **职责**：维护回收站列表、分页
-- **状态**：`items: CloudDriveRecycleItemDto[]`、`paging`、`count: number`
+- **状态**：`items: CloudDriveRecycleBinItemDto[]`、`paging`、`count: number`、`itemSchemaStatus: 'available' | 'not_collected'`
 - **API**：`recycleBinApi.list({ offset, limit })` 对应 `GET /api/recycle`
-- **说明**：**后端已处理**回收站响应的动态键结构（文件 ID 为键），前端直接消费数组形式
+- **说明**：后端当前仅按 `docs/115-api-docs.md` 返回回收站顶层字段；项目明细 schema 未采集时返回空 `items` 与 `itemSchemaStatus='not_collected'`，前端显示明细不可用空态
 - **覆盖需求**：_覆盖需求: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7_
 
 #### RecycleBinView + RecycleItemCard 组件
-- **自动刷新**：进行中任务 10 秒轮询
+- **刷新规则**：不做定时轮询；仅在用户手动刷新、还原/彻底删除成功、清空回收站 job 完成后重新加载列表
 - **覆盖需求**：_覆盖需求: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7_
 
 ### 4.7 图片预览（需求 7）
@@ -392,21 +397,21 @@ _覆盖需求: 19.2, 19.3, 19.4, 19.5, 19.6_
 - **API 调用**：`videoApi.getPlay(pickCode)` → `GET /api/videos/{pickCode}/play`，返回 `CloudDriveVideoPlayDto`
 - **后端归一化**：后端已处理 115 网页端的 GET 方法、小写 `pickcode` 参数、`share_id` 必填等细节；前端仅消费标准 DTO
 - **控制栏**：播放/暂停、进度条、音量、全屏、速度选项（0.5x / 1x / 1.25x / 1.5x / 2x）
-- **清晰度**：从 `availableDefinitions` 渲染选择菜单
-- **清晰度枚举**：SD=1 / HD=2 / FHD=3 / FullHD=4 / UHD4K=5 / Original=100
+- **清晰度**：仅当后端返回 `playbackSchemaStatus='available'` 且 `qualityOptions` 非空时渲染选择菜单
+- **成功 schema 未采集**：后端返回 `video_play_schema_not_collected` ProblemDetails 或 `playbackSchemaStatus='not_collected'` 时展示"播放地址暂不可用"空态，不硬编码清晰度枚举或播放地址
 - **切换保留进度**：
   - 切换前记录 `currentTime` 与 `paused` 状态
   - 切换 `src` 后监听 `loadedmetadata` 事件触发 `player.currentTime(savedTime)`
   - 若切换前处于播放状态则调用 `player.play()` 恢复播放
   - 若切换后加载失败（404/410），通过 `TemporaryResourceService` 重新请求地址并重试一次
-- **VIP 检测**：`vipUpgradeRequired: true` 时展示升级提示
+- **VIP/权限提示**：当后端返回 `restrictionReason` 或 `usageRestrictionNotice` 时展示对应升级或权限提示
 - **转码中状态**：`status: 'transcoding'` 时展示"视频转码中"提示和刷新按钮
 - **覆盖需求**：_覆盖需求: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, 8.13_
 
 #### SubtitleSelector 组件
 - **职责**：从 `videoApi.getSubtitles(pickCode)` → `GET /api/videos/{pickCode}/subtitles` 响应渲染字幕菜单
-- **归一化**：后端已合并 `autoload` 与 `list` 数组为统一 `CloudDriveSubtitleDto[]`（通过 `isAutoload` 区分）
-- **空状态**：列表为空时隐藏控件或展示"无字幕"
+- **归一化**：后端仅在 `itemSchemaStatus='available'` 时返回可展示字幕项；当前 docs 未采集字幕 item schema 时返回 `items=[]` + `itemSchemaStatus='not_collected'`
+- **空状态**：列表为空时隐藏控件或展示"无字幕"；`itemSchemaStatus='not_collected'` 时展示"字幕明细暂不可用"
 - **覆盖需求**：_覆盖需求: 8.7, 8.8_
 
 #### VideoHistoryService
@@ -553,8 +558,8 @@ _覆盖需求: 19.2, 19.3, 19.4, 19.5, 19.6_
 ### 4.14 云下载（需求 15）
 
 #### OfflineStore
-- **状态**：`tasks: CloudDriveOfflineTaskDto[]`、`quota: CloudDriveOfflineQuotaDto | null`、`stats: TaskStats | null`、`filter: TaskStatusFilter`
-- **任务状态枚举**：后端已归一化为 `'failed' | 'allocating' | 'downloading' | 'success'`
+- **状态**：`taskList: CloudDriveOfflineTaskListDto | null`、`quota: CloudDriveOfflineQuotaDto | null`、`stats: TaskStats | null`、`filter: TaskStatusFilter`
+- **任务明细状态**：当前 docs 未采集云下载任务 item schema；`taskList.itemSchemaStatus='not_collected'` 时前端展示明细不可用空态
 - **Actions 与对应 API**：
   - `loadTasks(page)` → `GET /api/offline/tasks?page=N`
   - `loadQuota()` → `GET /api/offline/quota`
@@ -565,7 +570,7 @@ _覆盖需求: 19.2, 19.3, 19.4, 19.5, 19.6_
 - **覆盖需求**：_覆盖需求: 15.1, 15.2, 15.3, 15.4, 15.5, 15.6, 15.7, 15.8, 15.9, 15.10, 15.11_
 
 #### OfflineDownloadView + TaskListItem + QuotaSummaryCard 组件
-- **自动刷新**：进行中任务 10 秒轮询
+- **自动刷新**：仅在 `itemSchemaStatus='available'` 且存在进行中任务时 10 秒轮询；schema 未采集时不依据伪造状态轮询
 - **覆盖需求**：_覆盖需求: 15.1, 15.2, 15.3, 15.4, 15.5, 15.6, 15.7, 15.8, 15.9, 15.10, 15.11_
 
 ### 4.15 分享管理（需求 16）
@@ -577,8 +582,8 @@ _覆盖需求: 19.2, 19.3, 19.4, 19.5, 19.6_
 - **覆盖需求**：_覆盖需求: 16.1, 16.2, 16.3, 16.4, 16.5, 16.6, 16.7_
 
 #### ShareManagementView + ShareItemCard 组件
-- **占位字段**：未返回字段以占位符展示
-- **复制能力**：当 `shareUrl` 或 `receiveCode`（提取码）存在时，渲染复制按钮，基于 `navigator.clipboard.writeText()` 实现（需回退到降级方案 `execCommand('copy')`）
+- **占位字段**：`CloudDriveShareListDto.itemSchemaStatus='not_collected'` 时展示"分享明细暂不可用"，不渲染伪造分享卡片
+- **复制能力**：当后端补采集后返回 `shareUrl` 或 `receiveCode`（提取码）时，渲染复制按钮，基于 `navigator.clipboard.writeText()` 实现（需回退到降级方案 `execCommand('copy')`）
 - **覆盖需求**：_覆盖需求: 16.3, 16.6_
 
 ### 4.16 用户中心（需求 17）
@@ -592,7 +597,7 @@ _覆盖需求: 19.2, 19.3, 19.4, 19.5, 19.6_
   - `loadBalance()` → `GET /api/user/balance`
   - `loadStorageDetails()` → `GET /api/user/storage`
 - **敏感字段保护**：后端已过滤 34 个敏感字段（手机号、邮箱、住址、生日、职业等），前端 SHALL **严禁**尝试访问这些字段；开发环境若意外收到敏感字段，记录告警
-- **格式化字段优先**：展示空间占用时优先使用后端返回的 `sizeFormat` 字段
+- **空间明细**：仅当 `CloudDriveSpaceInfoDto.schemaStatus='available'` 时展示后端返回的空间字段；当前 `not_collected` 时展示"空间明细暂不可用"，不自行构造总量/已用/分类占比
 - **覆盖需求**：_覆盖需求: 17.1, 17.2, 17.3, 17.4, 17.5, 17.6, 17.7, 17.8, 17.9_
 
 #### UserCenterView + UserProfileCard + VipStatusCard + BalanceCard + StorageDetailsCard 组件
@@ -680,15 +685,17 @@ sequenceDiagram
 
     VideoPlayer->>VideoApi: getSubtitles(pickCode)
     VideoApi->>Backend: GET /api/videos/{pickCode}/subtitles
-    Backend-->>VideoApi: 200 CloudDriveSubtitleDto[]
-    Note over VideoApi: 后端已合并 autoload 与 list 数组
+    Backend-->>VideoApi: 200 CloudDriveSubtitleListDto
+    Note over VideoApi: itemSchemaStatus=not_collected 时展示字幕明细不可用
     VideoApi-->>VideoPlayer: 字幕列表
     VideoPlayer->>VideoPlayer: 初始化 Video.js 并播放
 
-    User->>VideoPlayer: 切换清晰度
-    VideoPlayer->>VideoPlayer: 保存 currentTime
-    VideoPlayer->>VideoPlayer: 切换 src
-    VideoPlayer->>VideoPlayer: seek(currentTime)
+    opt playbackSchemaStatus=available 且 qualityOptions 非空
+        User->>VideoPlayer: 切换清晰度
+        VideoPlayer->>VideoPlayer: 保存 currentTime
+        VideoPlayer->>VideoPlayer: 切换 src
+        VideoPlayer->>VideoPlayer: seek(currentTime)
+    end
 
     alt 地址过期（410 或 302）
         VideoPlayer->>VideoApi: getPlay(pickCode) 重试一次
@@ -714,10 +721,10 @@ sequenceDiagram
     SearchStore->>SearchStore: previousDirectoryId = FileStore.currentDirectoryId
     SearchStore->>SearchApi: search({ searchValue, type, cid, date })
     SearchApi->>Backend: GET /api/files/search
-    Backend-->>SearchApi: 200 CloudDriveFileDto[]
-    SearchApi-->>SearchStore: results
+    Backend-->>SearchApi: 200 CloudDriveSearchListDto
+    SearchApi-->>SearchStore: searchList
 
-    Note over SearchStore: 展示搜索结果视图
+    Note over SearchStore: itemSchemaStatus=not_collected 时展示搜索明细不可用
 
     User->>SearchBar: 点击"返回浏览"
     SearchBar->>SearchStore: returnToBrowse()
@@ -725,7 +732,7 @@ sequenceDiagram
     FileStore-->>SearchBar: 恢复浏览上下文
 ```
 
-_覆盖需求: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.10, 5.11_
+_覆盖需求: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.10, 5.11, 5.12_
 
 ### 5.5 云下载任务列表
 
@@ -737,9 +744,9 @@ sequenceDiagram
 
     OfflineView->>OfflineApi: getTasks(page)
     OfflineApi->>Backend: GET /api/offline/tasks?page=1
-    Note over Backend: 后端内部：<br/>生成 sign + time + uid<br/>POST 115.com/web/lixian/?ct=lixian&ac=task_lists<br/>归一化为 CloudDriveOfflineTaskDto[]
-    Backend-->>OfflineApi: 200 { tasks, quota, total }
-    OfflineApi-->>OfflineView: 任务列表（status 已归一化为枚举）
+    Note over Backend: 后端内部：<br/>生成 sign + time + uid<br/>POST 115.com/web/lixian/?ct=lixian&ac=task_lists<br/>仅归一化 docs 已采集顶层字段
+    Backend-->>OfflineApi: 200 CloudDriveOfflineTaskListDto
+    OfflineApi-->>OfflineView: 任务列表（itemSchemaStatus 可为 not_collected）
 ```
 
 _覆盖需求: 15.1, 15.4, 15.5_
@@ -827,7 +834,9 @@ interface CloudDriveFileDto {
   fileId: string;              // 后端: fid
   parentId?: string;           // 后端: cid（item 中表示父目录）
   fileName: string;            // 后端: n
-  category: 'file' | 'folder'; // 后端: fc (1=folder, 0=file)
+  rawCategoryCode?: number;     // 后端: fc；docs 未定义值域
+  category: 'file' | 'folder' | 'unknown';
+  isDirectory?: boolean;        // 仅当后端已通过真实网页端样本验证 fc 值域时派生
   size: number;                // 后端: s
   pickCode: string;            // 后端: pc
   sha1?: string;               // 后端: sha
@@ -836,14 +845,14 @@ interface CloudDriveFileDto {
   thumb?: string;              // 后端: tu
   originalUrl?: string;        // 后端: u（临时 token URL）
   videoImg?: string;           // 后端: tp
-  isVideo: boolean;            // 后端: iv
-  videoDefinition?: VideoDefinition; // 后端: fvs
+  isVideo?: boolean;           // 后端: iv；缺失时按扩展名兜底识别预览入口
+  videoDefinition?: number;          // 后端: fvs；值域需后端验证后返回
   playDuration?: number;       // 后端: play_long（秒）
   uploadTime?: number;         // 后端: te
   updateTime?: number;         // 后端: t
-  isStarred: boolean;          // 后端: m
-  isPrivate: boolean;          // 后端: hdf
-  uploadStatus: 'incomplete' | 'complete'; // 后端: sta
+  isStarred?: boolean;         // 后端: m；缺失时前端不显示星标状态
+  isPrivate?: boolean;         // 后端: hdf；缺失时前端不显示私密状态
+  uploadStatus: 'unknown' | string; // 后端: sta；docs 未定义值域
 }
 ```
 
@@ -893,7 +902,7 @@ _覆盖需求: 2.6_
 
 ```typescript
 interface FileFilter {
-  type?: 1 | 2 | 3 | 4 | 5 | 6 | 7; // 1=文档, 2=图片, 3=音乐, 4=视频, 5=压缩, 6=应用, 7=书籍
+  type?: string | number;           // 后端透传到 115 type；docs 未采集值域，前端不硬编码枚举
   star?: boolean;                    // 仅显示星标
 }
 ```
@@ -904,7 +913,7 @@ _覆盖需求: 2.3_
 
 ```typescript
 interface SearchFilters {
-  type?: 1 | 2 | 3 | 4 | 5;  // 1=文档, 2=图片, 3=音乐, 4=视频, 5=压缩包
+  type?: string | number;      // 后端透传到 115 type；docs 未采集值域，前端不硬编码枚举
   cid?: string;               // 限定搜索目录
   date?: string;              // 格式 YYYY-MM-DD（对应后端 date 参数）
   // 注：后端已明确 gte_day/lte_day 属于开放平台参数，网页端仅支持 date
@@ -917,106 +926,166 @@ _覆盖需求: 5.5, 5.6_
 
 ```typescript
 type TaskStatusFilter = 'all' | 'active' | 'completed' | 'failed';
-// 前端筛选值，active 对应 API 已归一化的 'allocating' + 'downloading'
+// 仅当后端补采集任务 item status 后启用 active/completed/failed 分组
 ```
 
 _覆盖需求: 15.4_
-
-#### VideoDefinition 枚举
-
-```typescript
-type VideoDefinition = 1 | 2 | 3 | 4 | 5 | 100;
-// 1=SD 标清, 2=HD 高清, 3=FHD 超清, 4=FullHD 1080P, 5=UHD4K 4K, 100=Original 原画
-```
-
-_覆盖需求: 8.5_
 
 #### CloudDriveVideoPlayDto
 
 ```typescript
 interface CloudDriveVideoPlayDto {
-  pickCode: string;
-  fileName: string;
-  fileSize: number;
-  playDuration: number;
-  videoUrls: VideoUrlVariantDto[];
-  availableDefinitions: VideoDefinition[];
-  userSelectedDefinition?: VideoDefinition;
-  status?: 'ready' | 'transcoding';
-  jobId?: string;              // 转码任务 ID（当 status: 'transcoding'）
-  vipUpgradeRequired?: boolean;
+  status?: 'schemaNotCollected' | 'ready' | 'transcoding';
+  jobId?: string;
+  qualityOptions: VideoQualityOption[];
+  audioTracks: AudioTrackOption[];
+  duration?: number;
+  userDef?: number;
+  selectedDefinition?: number;
+  userRotate?: number;
+  userTurn?: number;
+  restrictionReason?: string;
+  playbackMetadata?: Record<string, string>;
+  playbackSchemaStatus: 'available' | 'not_collected';
+  isTemporary: true;
+  usageRestrictionNotice?: string;
 }
 
-interface VideoUrlVariantDto {
-  url: string;
-  height: number;
-  width: number;
-  definition: VideoDefinition;
-  title: string;
+interface VideoQualityOption {
+  definition?: number;
   definitionNew?: number;
+  title?: string;
+  playUrl?: string;
+  height?: number;
+  width?: number;
+}
+
+interface AudioTrackOption {
+  trackIndex?: number;
+  title?: string;
+  isSelected?: boolean;
 }
 ```
 
 _覆盖需求: 8.4, 8.5, 8.9, 8.10_
 
+#### CloudDriveSearchListDto
+
+```typescript
+interface CloudDriveSearchListDto {
+  items: CloudDriveSearchResultDto[];
+  count: number;
+  pageSize: number;
+  pageCount: number;
+  offset: number;
+  isAsc?: number;
+  order?: string;
+  suffix?: string;
+  fcMix?: number;
+  type?: number;
+  itemSchemaStatus: 'available' | 'not_collected';
+}
+
+interface CloudDriveSearchResultDto {
+  schemaStatus: 'available' | 'not_collected';
+  fileId: string;
+  aid: string;
+  parentId: string;
+  fileName: string;
+  size?: number;
+  pickCode?: string;
+  rawCategoryCode?: number;
+  category: 'file' | 'folder' | 'unknown';
+  ico?: string;
+  sha1?: string;
+  directoryName?: string;
+  highlightNameRaw?: string; // 官方 ns，可能包含 HTML；前端不得直接 v-html
+  thumb?: string;
+  videoImg?: string;
+  isVideo?: boolean;
+  isStarred?: boolean;
+  isPrivate?: boolean;
+  uploadStatusRaw?: number;
+  uploadStatus: 'unknown' | string;
+  playDuration?: number;
+}
+```
+
+_覆盖需求: 5.2, 5.3_
+
+#### CloudDriveSubtitleListDto
+
+```typescript
+interface CloudDriveSubtitleListDto {
+  autoloadSubtitle?: CloudDriveSubtitleDto | null;
+  items: CloudDriveSubtitleDto[];
+  itemSchemaStatus: 'available' | 'not_collected';
+}
+```
+
 #### CloudDriveSubtitleDto
 
 ```typescript
 interface CloudDriveSubtitleDto {
-  sid: string;
-  language: string;
-  title: string;
-  url: string;
-  type: string;
-  isAutoload: boolean;         // 后端标记：来自 autoload 数组为 true
-  sha1?: string;
-  fileId?: string;             // 外挂字幕文件 ID
-  fileName?: string;
-  pickCode?: string;
+  schemaStatus: 'available' | 'not_collected';
+  // 当前 docs 未采集字幕 item schema；补采集后再增加 language/title/url 等字段
 }
 ```
 
 _覆盖需求: 8.7_
 
-#### CloudDriveRecycleItemDto
+#### CloudDriveRecycleListDto
 
 ```typescript
-interface CloudDriveRecycleItemDto {
-  id: string;                  // 后端已处理动态键 → 常规数组
-  fileName: string;
-  category: 'file' | 'folder'; // type: 1=file, 2=folder
-  fileSize: number;
-  deletedTime: number;         // dtime
-  thumbnailUrl?: string;
-  originalParentId: string;    // cid
-  originalParentName: string;  // parent_name
-  pickCode: string;
-  restoreStatus: 'normal' | 'restoring'; // status: 0=normal, -1=restoring
+interface CloudDriveRecycleListDto {
+  items: CloudDriveRecycleBinItemDto[];
+  count: number;
+  rbPass: number;
+  offset: number;
+  pageSize: number;
+  order?: string;
+  isAsc?: number;
+  itemSchemaStatus: 'available' | 'not_collected';
+}
+```
+
+_覆盖需求: 6.1, 6.2, 6.6_
+
+#### CloudDriveRecycleBinItemDto
+
+```typescript
+interface CloudDriveRecycleBinItemDto {
+  schemaStatus: 'available' | 'not_collected';
+  // 当前 docs 未采集回收站 item schema；补采集后再增加 fileName/fileSize/deletedTime 等字段
 }
 ```
 
 _覆盖需求: 6.2_
 
-#### CloudDriveOfflineTaskDto
+#### CloudDriveOfflineTaskListDto
 
 ```typescript
-interface CloudDriveOfflineTaskDto {
-  infoHash: string;
-  name: string;
-  size: number;
-  addTime: number;
-  lastUpdate: number;
-  percentDone: number;
-  status: OfflineTaskStatus;   // 后端已归一化
-  url: string;
-  fileId?: string;
-  parentId?: string;
-  videoDefinition?: VideoDefinition;
-  playDuration?: number;
+interface CloudDriveOfflineTaskListDto {
+  items: CloudDriveOfflineTaskDto[];
+  page: number;
+  pageCount: number;
+  pageRow: number;
+  pageSize: number;
+  count: number;
+  quota: number;
+  total: number;
+  realState?: boolean;
+  errType?: string;
+  itemSchemaStatus: 'available' | 'not_collected';
 }
 
-type OfflineTaskStatus = 'failed' | 'allocating' | 'downloading' | 'success';
-// 后端已将 API -1/0/1/2 归一化
+interface CloudDriveOfflineTaskDto {
+  schemaStatus: 'available' | 'not_collected';
+  // 当前 docs 未采集任务 item schema；补采集后再增加 name/status/percentDone 等字段
+}
+
+type OfflineTaskStatus = string;
+// 当前 docs 未采集任务 item status 值域；前端不得硬编码 -1/0/1/2 派生值
 ```
 
 _覆盖需求: 15.4, 15.5_
@@ -1049,17 +1118,21 @@ interface TaskStats {
 
 _覆盖需求: 15.3_
 
-#### CloudDriveShareDto
+#### CloudDriveShareListDto
 
 ```typescript
+interface CloudDriveShareListDto {
+  items: CloudDriveShareDto[];
+  count?: number;
+  defineReceiveCode?: number;
+  bindReceiveCode?: number;
+  request?: string;
+  itemSchemaStatus: 'available' | 'not_collected';
+}
+
 interface CloudDriveShareDto {
-  shareId: string;
-  title?: string;
-  createTime?: number;
-  status?: string;
-  receiveCode?: string;
-  shareUrl?: string;
-  // 未返回字段为 undefined，UI 以占位符展示
+  schemaStatus: 'available' | 'not_collected';
+  // 当前 docs 未采集分享 item schema；补采集后再增加 shareUrl/receiveCode 等字段
 }
 ```
 
@@ -1108,17 +1181,12 @@ interface CloudDriveBalanceDto {
 
 _覆盖需求: 17.5_
 
-#### CloudDriveStorageDetailsDto
+#### CloudDriveSpaceInfoDto
 
 ```typescript
-interface CloudDriveStorageDetailsDto {
-  usedSize: number;
-  usedFormatted: string;       // size_format 优先
-  totalSize: number;
-  totalFormatted: string;
-  remainSize: number;
-  remainFormatted: string;
-  categoryBreakdown?: Record<string, { size: number; formatted: string }>;
+interface CloudDriveSpaceInfoDto {
+  schemaStatus: 'available' | 'not_collected';
+  // 当前 docs 未采集 /files/index_info data 内部字段；补采集后再增加 used/total/remain/categoryBreakdown 等字段
 }
 ```
 
@@ -1143,7 +1211,7 @@ interface CloudDriveUserProfileDto {
   userInfo: CloudDriveUserInfoDto | null;
   vip: CloudDriveVipInfoDto | null;
   balance: CloudDriveBalanceDto | null;
-  storage: CloudDriveStorageDetailsDto | null;
+  storage: CloudDriveSpaceInfoDto | null;
   // 任一子模块失败时为 null（错误隔离）
 }
 ```
@@ -1192,11 +1260,16 @@ _覆盖需求: 3.8, 14.8_
 | 维度 | 前端职责 | 后端职责 |
 |------|---------|---------|
 | 字段命名 | 消费 camelCase | 归一化 115 短字段 → camelCase |
-| 动态键结构 | 消费数组 | 处理回收站 `data` 动态键 → 数组 |
+| 回收站明细 | 消费 `CloudDriveRecycleListDto` | 后端仅返回 docs 已采集顶层字段；item schema 未采集时 `items=[]` + `itemSchemaStatus='not_collected'` |
+| 搜索明细 | 消费 `CloudDriveSearchListDto` | 后端返回 2026-05-04 已采集搜索 item 字段；schema 异常时 `items=[]` + `itemSchemaStatus='not_collected'` |
+| 视频播放 | 消费 `CloudDriveVideoPlayDto` 或 ProblemDetails | 成功播放 schema 未采集时返回 `video_play_schema_not_collected` / `playbackSchemaStatus='not_collected'` |
+| 字幕明细 | 消费 `CloudDriveSubtitleListDto` | 后端仅返回 docs 已采集顶层数组存在性；item schema 未采集时 `items=[]` + `itemSchemaStatus='not_collected'` |
+| 云下载任务明细 | 消费 `CloudDriveOfflineTaskListDto` | 后端仅返回 docs 已采集顶层字段；task item schema 未采集时 `items=[]` + `itemSchemaStatus='not_collected'` |
+| 分享明细 | 消费 `CloudDriveShareListDto` | 后端仅返回 docs 已采集顶层字段；share item schema 未采集时 `items=[]` + `itemSchemaStatus='not_collected'` |
 | 字段大小写 | 消费统一格式 | 处理 `errNo`/`errno`/`errCode` 变体 |
 | 错误响应 | 消费 ProblemDetails | 转换 115 错误响应 → ProblemDetails |
 | 敏感字段 | 消费脱敏后字段 | 过滤 34 个隐私字段 |
-| 值域枚举 | 消费字符串枚举 | 将数值枚举（如 status -1/0/1/2）归一化为字符串 |
+| 值域枚举 | 仅消费后端已验证枚举 | 未采集值域返回 `unknown` / `not_collected`，不得使用开放平台推断值 |
 | 签名生成 | **不涉及** | 生成云下载 `sign + time + uid` |
 | Cookie 注入 | **不涉及** | 注入 `UID/CID/USSID` |
 | 会话 Cookie 安全属性 | 不读取、不写入、不覆盖 | `Set-Cookie` 设置 `HttpOnly`、`Secure`、`SameSite=Lax` 或 `SameSite=Strict`；跨站例外才使用 `SameSite=None; Secure` |
@@ -1292,14 +1365,14 @@ _覆盖需求: 18.9_
 #### 组件测试
 - `FileBrowser.spec.ts`：列表/网格切换、多选、范围选择 _覆盖需求: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11, 2.12, 2.13, 2.14_
 - `ImageViewer.spec.ts`：加载态、失败态、重试、缩放 _覆盖需求: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9_
-- `VideoPlayer.spec.ts`：清晰度切换保留进度、字幕、VIP 升级提示、转码中提示 _覆盖需求: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, 8.13_
+- `VideoPlayer.spec.ts`：`not_collected` 空态、schema available 时清晰度切换保留进度、字幕、VIP 升级提示、转码中提示 _覆盖需求: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, 8.13_
 - `RecycleBinView.spec.ts`：列表渲染、空状态 _覆盖需求: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7_
 
 #### E2E 测试
 - `auth.spec.ts`：Cookie 有效/失效/网络异常三种路径 _覆盖需求: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6_
 - `file-browse.spec.ts`：目录切换、排序、筛选、分页 _覆盖需求: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11, 2.12, 2.13, 2.14_
-- `search.spec.ts`：搜索、日期筛选、返回浏览 _覆盖需求: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.10, 5.11_
-- `video.spec.ts`：播放、清晰度、字幕、VIP 提示 _覆盖需求: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, 8.12, 8.13, 8.14_
+- `search.spec.ts`：搜索、日期筛选、返回浏览 _覆盖需求: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.10, 5.11, 5.12_
+- `video.spec.ts`：播放不可用空态、schema available 时清晰度、字幕、VIP 提示 _覆盖需求: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9, 8.10, 8.11, 8.12, 8.13, 8.14_
 - `offline.spec.ts`：任务列表、配额、筛选 _覆盖需求: 15.1, 15.2, 15.3, 15.4, 15.5, 15.6, 15.7, 15.8, 15.9, 15.10, 15.11_
 - `error-handling.spec.ts`：401 跳转、429 频控、404 移除、410 分享过期、网络异常 _覆盖需求: 18.1, 18.2, 18.3, 18.4, 18.5, 18.6, 18.7, 18.8, 18.9, 18.10, 18.11_
 - `responsive.spec.ts`：桌面/平板/移动三种视口的布局切换、预览全屏、右键→长按退化 _覆盖需求: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6_
@@ -1323,7 +1396,7 @@ _覆盖需求: 19.5_
 |---------|-------------|
 | 1. 登录态检测 | §4.1 AuthStore + AuthGuard |
 | 2. 文件浏览器 | §4.2 FileStore + FileBrowser + BreadcrumbNav + useInfiniteScroll |
-| 3. 文件操作 _(待后端 API 就绪)_ | §4.3 FileOperationService + ClipboardService + UploadZone + JobsApi |
+| 3. 文件操作 _(上传可实现，其他写操作待后端 API 就绪)_ | §4.3 FileOperationService + ClipboardService + UploadZone + JobsApi |
 | 4. 右键菜单 | §4.4 ContextMenu + FileDetailsModal |
 | 5. 搜索 | §4.5 SearchStore + SearchBar |
 | 6. 回收站 | §4.6 RecycleBinStore + RecycleBinView |
@@ -1349,7 +1422,7 @@ _覆盖需求: 19.5_
 
 ### 10.1 依赖后端待补采集 API 的功能
 
-以下组件已定义接口，实现等待后端 integration spec 完成对应 115 API 的采集与实现；已在 `docs/115-api-docs.md` 中采集的上传、视频播放、字幕、播放历史不列为待补采集：
+以下组件已定义接口，实现等待后端 integration spec 完成对应 115 API 的采集与实现。已在 `docs/115-api-docs.md` 中采集的上传链路、`/files/video` 错误 schema、字幕顶层数组和播放历史读写端点不列为待补采集；成功播放 URL/清晰度/VIP 字段与字幕 item schema 仍按 `not_collected` 空态处理：
 
 | 组件/方法 | 后端 API | 覆盖需求 |
 |----------|---------|----------|
@@ -1376,9 +1449,9 @@ _覆盖需求: 19.5_
 4. **前端不处理错误字段变体**：后端 `ExceptionHandlingMiddleware` 已将 9 种 115 错误格式统一转换为 ProblemDetails
 5. **OpenAPI 类型生成**：在 CI 中执行 `openapi-typescript http://localhost:5000/openapi/v1.json -o src/types/generated.ts`，确保前端类型与后端契约同步
 6. **敏感字段边界**：后端已过滤 34 个隐私字段（手机号、邮箱、住址、生日、职业、兴趣等），前端 SHALL **严禁**假设这些字段存在；开发环境若意外收到，记录警告并提 issue
-7. **视频 VIP 检测**：后端在 `CloudDriveVideoPlayDto` 中返回 `vipUpgradeRequired: true` 标志，前端据此展示升级引导
+7. **视频 VIP/权限提示**：仅当后端在已采集成功播放 schema 基础上返回 `restrictionReason` 或 `usageRestrictionNotice` 时，前端展示对应升级或权限引导
 8. **图片 `originalUrl` 时效性**：使用 `TemporaryResourceService` 做过期检测与一次重试；若 URL 过期，前端重新调用 `GET /api/files/{pickCode}/preview`
-9. **回收站数据结构**：后端已处理动态键（文件 ID 为键），前端直接消费 `CloudDriveRecycleItemDto[]`
+9. **未采集明细结构**：搜索、回收站、字幕、云下载任务、分享的 `itemSchemaStatus='not_collected'` 时均展示对应明细不可用空态，不渲染伪造项目
 10. **大文件/批量操作 202 处理**：后端返回 `202 Accepted { jobId }` 时，前端调用 `jobsApi.poll(jobId)` 轮询 `GET /api/jobs/{jobId}`
 11. **分页硬上限由后端校验**：前端默认 `limit=50`，若超限后端返回 400 ProblemDetails，前端展示友好错误
 12. **DTO 契约边界原则**：前端严格遵守「只消费、不解析」。若发现后端 DTO 与 integration requirements 不一致，应提 issue 给后端修正，不在前端自行适配

@@ -10,10 +10,10 @@
 
 - [x] 1. 领域层 - 核心实体、枚举、异常与配置定义
   - [x] 1.1 创建领域层枚举
-    - 创建 `CloudDriveJobType` 枚举（Upload, BatchCopy, BatchMove, BatchDelete, BatchRecycleBinRestore, BatchRecycleBinDelete, ClearRecycleBin, Transcode）
+    - 创建 `CloudDriveJobType` 枚举（Upload, BatchCopy, BatchMove, BatchDelete, BatchRecycleBinRestore, BatchRecycleBinDelete, ClearRecycleBin, ClearOfflineTasks, Transcode）
     - 创建 `CloudDriveJobStatus` 枚举（Pending, Running, Completed, Failed, Cancelled）
     - 创建 `CookieSessionStatus` 枚举（Active, Invalidated, Revoked）
-    - _需求: 1, 15, 21_ _设计: §CookieSession（聚合根 - 领域层）, §CloudDriveJob（聚合根 - 领域层）_
+    - _需求: 1, 7, 10, 11, 12, 14, 16, 21, 28_ _设计: §CookieSession（聚合根 - 领域层）, §CloudDriveJob（聚合根 - 领域层）_
 
   - [x] 1.2 创建领域层聚合根 `CookieSession`
     - 继承 `AggregateRoot<Guid>`，使用 SqlSugar `[SugarTable]` 和 `[SugarColumn]` 特性标注表名、主键与字段
@@ -29,7 +29,7 @@
     - 包含 Id, UserId, CloudAccountUid, JobType, Status, ResourceId, Progress, ErrorMessage, PayloadJson, CheckpointData, StartTime, EndTime, CreationTime
     - 保留 `public` 无参构造函数供 SqlSugar ORM 反序列化使用，业务代码通过领域方法操作状态
     - 实现业务方法（更新状态、更新进度、记录错误等），状态变更时通过 `AddDomainEvent()` 收集领域事件（领域事件须继承框架 `Domain.Events.DomainEvent` 抽象基类）
-    - _需求: 21, 28_ _设计: §CloudDriveJob（聚合根 - 领域层）, §5. 后台任务模块 (Quartz.NET Job)_
+    - _需求: 28_ _设计: §CloudDriveJob（聚合根 - 领域层）, §5. 后台任务模块 (Quartz.NET Job)_
 
   - [x] 1.4 创建业务异常类
     - 创建 `CloudDriveCookieInvalidatedException`（Cookie 失效 / 登录态无效 / HTTP 401 / HTTP 403 / `errNo=login_required`）
@@ -47,14 +47,14 @@
     - 创建 `ICookieSessionRepository` 接口（定义在 Domain 层 `Repositories/`），继承框架 `IRepository<CookieSession, Guid>` 并扩展按 `UserId + CloudAccountUid` 查询的 `GetByAccountAsync` 方法
     - 创建 `ICloudDriveJobRepository` 接口，继承框架 `IRepository<CloudDriveJob, Guid>` 并扩展按 UserId 查询、按 Id 查询方法；为启动恢复协调支持按 Status 扫描 `Pending` / `Running` 任务
     - 创建领域事件 `CookieInvalidated`（继承 `DomainEvent`，携带 `CloudAccountUid`、`Reason`、`InvalidatedAt`、`CooldownUntil`）
-    - 创建 `CloudDriveFileNameValidator` 静态类：实现 `ValidateNewFolderName`（限 **255 字符**，对应需求 7 新建文件夹）与 `ValidateRenameFileName`（限 **255 字节**，UTF-8 编码，对应需求 12 重命名）两种校验方法；验证失败时抛出 `CloudDriveInvalidNameException`
-    - _需求: 1, 2, 7, 12, 21, 28_ _设计: §CookieSession（聚合根 - 领域层）, §CloudDriveJob（聚合根 - 领域层）, §CloudDriveFileManager_
+    - 创建 `CloudDriveFileNameValidator` 静态类：实现 `ValidateNewFolderName`（限 **255 字符**，对应需求 9 新建文件夹）与 `ValidateRenameFileName`（限 **255 字节**，UTF-8 编码，对应需求 13 重命名）两种校验方法；验证失败时抛出 `CloudDriveInvalidNameException`
+    - _需求: 1, 2, 9, 13, 28_ _设计: §CookieSession（聚合根 - 领域层）, §CloudDriveJob（聚合根 - 领域层）, §CloudDriveFileManager_
 
   - [x] 1.6 编写实体单元测试
     - 测试 `CookieSession` 实体的业务方法：`MarkInvalidated` 正确追加 `CookieInvalidated` 事件、`IsInCooldown` 在冷却期内返回 true、`Revoke` 状态流转
     - 测试 `CloudDriveJob` 实体的状态流转逻辑（Pending → Running → Completed/Failed/Cancelled）
     - 测试 `CloudDriveFileNameValidator` 对 255 字符 / 255 字节边界、空字符串与非法字符的处理（注意中文字符 UTF-8 下占 3 字节）
-    - _需求: 1, 7, 12, 21_ _设计: §CookieSession（聚合根 - 领域层）, §CloudDriveJob（聚合根 - 领域层）_
+    - _需求: 1, 9, 13, 28_ _设计: §CookieSession（聚合根 - 领域层）, §CloudDriveJob（聚合根 - 领域层）_
 
 - [x] 2. 应用层 - 服务、抽象接口与属性测试
   - [x] 2.1 创建应用层抽象接口与配置类
@@ -71,7 +71,7 @@
     - 创建 `RateLimitOverflowStrategy` 枚举（Queue, Reject）
     - 确认 `IDomainEventSource` 接口已包含 `Track(IHasDomainEvents entity)` 方法签名（框架已实现，无需修改）
     - 实现类 `CloudDriveMetadataCache`、`CloudDriveRateLimiter`、`ErrorFieldAdapter`、`DataProtectionCloudDriveSecretProtector`、`LoggingCookieInvalidationNotifier`、`NotImplementedCookieSignatureStrategy` 位于 Infrastructure 层（见任务 4.9-4.13）
-    - _需求: 1, 2, 17, 18, 20, 25, 26_ _设计: §1. 认证与会话管理模块 (Auth), §9. 基础设施组件, §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
+    - _需求: 1, 2, 18, 20, 24, 25, 26, 27_ _设计: §1. 认证与会话管理模块 (Auth), §9. 基础设施组件, §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
 
   - [x] 2.2 实现 `CookieSessionManager` 应用层服务
     - 普通类 + 构造函数注入 `ICookieSessionRepository`（Domain 仓储接口）、`ICloudDriveSecretProtector`、`ICookieInvalidationNotifier` 与 `IOptions<CloudDriveAppConfig>`；不继承框架基类
@@ -90,7 +90,7 @@
     - 验证 `UpsertSessionAsync` 存储的 `EncryptedCookiePayload` 经过加密，不包含 UID/CID/USSID 明文
     - 验证同一 key ring / 同一部署上下文下服务重启后仍可成功解密既有 Cookie 与签名密钥
     - 验证日志输出经 `CloudDriveSensitiveFieldsFilter` 脱敏后不包含原始 Cookie 字符串
-    - _需求: 1, 2, 26_
+    - _需求: 1, 2, 26_ _设计: §P1: Cookie 安全性_
 
   - [x] 2.4 编写属性测试 - Cookie 失效处理
     - **属性 P2: Cookie 失效处理**
@@ -98,22 +98,22 @@
     - 模拟 HTTP 401 / 403 场景，验证同样触发失效标记与 `CookieInvalidated` 领域事件
     - 验证冷却期内的重复探测返回缓存结果 / `CloudDriveCookieInvalidatedException`，不发起新的官方请求
     - 验证系统不尝试自动恢复失效 Cookie（对比 OAuth Refresh_Token 自动刷新机制）
-    - _需求: 1, 3_
+    - _需求: 1, 3_ _设计: §P2: Cookie 失效处理_
 
   - [x] 2.5 编写属性测试 - 缓存一致性
     - **属性 P4: 缓存一致性**
     - 验证写操作后缓存被清除，下一次读请求触发 API 调用
     - 验证用户主动刷新目录时绕过旧缓存并返回最新官方数据
-    - _需求: 20, 27_
+    - _需求: 27_ _设计: §P4: 缓存一致性_
 
   - [x] 2.6 编写属性测试 - 用户数据隔离
     - **属性 P10: 用户数据隔离**
     - 验证不同 `userId / cloudAccountUid` 生成不同缓存键，一个用户或账号的失效操作不影响另一个用户或账号
-    - _需求: 20, 27_
+    - _需求: 27_ _设计: §P10: 用户数据隔离_
 
   - [x] 2.7 实现 `CloudDriveFileManager` 应用层服务 - 读路径缓存协作
     - 普通类 + 构造函数注入，注入 `ICloudDriveMetadataCache`、`ICloudDriveOpenApiGateway`、`ICloudDriveRateLimiter`、`IOptions<CloudDriveAppConfig>`
-    - 实现 `GetFileListAsync`：缓存优先获取文件列表
+    - 实现 `GetFileListAsync`：优先命中目录列表短 TTL 缓存，未命中、TTL 过期或手动刷新时再请求官方 API
     - 实现 `GetFileDetailAsync`：缓存优先获取文件详情
     - 复用 `ICloudDriveMetadataCache` 在读取路径优先命中缓存
     - 调用 `ICloudDriveOpenApiGateway` 时仅需传递 `UserId + CloudAccountUid`；网关内部从 `CookieSessionManager` 获取当前 Cookie 并注入请求头，Cookie 方案不携带 `AppId` 维度
@@ -128,18 +128,18 @@
     - **属性 P5: 文件名验证**
     - 验证 `CloudDriveFileNameValidator.ValidateNewFolderName` 对 255 字符边界、空字符串、非法字符抛出 `CloudDriveInvalidNameException`
     - 验证 `CloudDriveFileNameValidator.ValidateRenameFileName` 对 255 字节边界（UTF-8）、空字符串、非法字符抛出 `CloudDriveInvalidNameException`
-    - _需求: 7, 12_
+    - _需求: 9, 13_ _设计: §P5: 文件名验证_
 
   - [x] 2.10 编写属性测试 - 频控限流一致性
     - **属性 P3: 频控限流一致性**
     - 验证并发请求下通过的请求数不超过按用户 + 115 账号 + 场景维度的配置上限
     - 验证 Queue / Reject 两种超限策略与最大队列长度生效
-    - _需求: 17, 24_
+    - _需求: 24_ _设计: §P3: 频控限流一致性_
 
   - [x] 2.11 编写属性测试 - 缓存数据真实性
     - **属性 P11: 缓存数据真实性**
     - 验证缓存写入仅包含官方响应字段与系统可验证派生值，官方缺失字段返回空值或缺省值而非伪造数据
-    - _需求: 27_
+    - _需求: 27_ _设计: §P11: 缓存数据真实性_
 
 - [x] 3. 检查点 - 领域层与应用层服务完成验证
   - 当前阶段通过条件：
@@ -148,20 +148,21 @@
     - `ICloudDriveMetadataCache`、`ICloudDriveRateLimiter`、`ICookieInvalidationNotifier`、`ICookieSignatureStrategy`、`IErrorFieldAdapter` 接口已定义在 Application 层
     - 不依赖真实 115 API 即可验证 Cookie 加密/解密、失效冷却、名称校验、缓存命中/失效、缓存真实性、隔离维度与限流逻辑
     - 领域层仅包含实体、枚举、异常、仓储接口、领域事件和文件名验证器，无基础设施依赖
+    - _需求: 1, 2, 3, 9, 13, 20, 24, 25, 26, 27, 28_ _设计: §CookieSession（聚合根 - 领域层）, §CloudDriveFileManager, §CloudDriveRateLimiter, §CloudDriveMetadataCache, §P1: Cookie 安全性, §P11: 缓存数据真实性_
 
 - [x] 4. 基础设施层 - HTTP 客户端、仓储与数据库
   - [x] 4.1 创建 115 网页端 API 响应模型
     - 创建 `CloudDrive115WebResponse<T>` 通用响应包装类（`State`, `Data`, `Message`/`Msg`/`Error`, `Code`/`Errno`/`ErrCode`/`ErrNo`）；其中 `State` 属性使用 `BoolOrNumberJsonConverter` 兼容 bool(true/false) 与 number(0/1)；具体错误字段的选择由 `IErrorFieldAdapter` 按 URL 路径决定，响应模型本身仅以联合字段呈现
     - 创建各 API 端点的具体响应模型（文件列表、文件详情、下载地址、视频播放、字幕、回收站、云下载任务、分享列表、用户中心多源）
-    - 创建字段归一化反序列化适配器处理网页端文件对象字段映射：`fid → FileId`、`n → Name`、`s → Size`、`fc`（0=文件夹, 1=文件）→ `IsDirectory`；回收站接口的 `type`（1=文件, 2=目录）需反向映射；搜索接口仅处理 `docs/115-api-docs.md` 已采集的请求参数，不引入开放平台 `fc` 筛选参数
-    - _需求: 4, 5, 6, 14, 16, 20, 25_ _设计: §9. 基础设施组件, §DTO 定义_
+    - 创建字段归一化反序列化适配器处理网页端文件对象字段映射：`fid → FileId`、`n → Name`、`s → Size`、`fc → RawCategoryCode`；`fc` 值域未在 `docs/115-api-docs.md` 中采集，`IsDirectory` 只能在真实网页端样本验证后派生，未知时返回 null；搜索接口仅处理 `docs/115-api-docs.md` 已采集的请求参数，不引入开放平台 `fc` 筛选参数
+    - _需求: 4, 5, 6, 14, 16, 17, 20, 22, 23, 25_ _设计: §9. 基础设施组件, §DTO 定义_
 
   - [x] 4.2 实现 `CloudDriveApiClient` 基础设施骨架
     - 使用 `IHttpClientFactory` 创建 Named HttpClient（按域名分组：`Cloud115Web`、`Cloud115My`、`Cloud115Vip`、`Cloud115Pay`、`Cloud115Offline`）
     - 实现 `ICloudDriveOpenApiGateway` 接口（定义在 Application 层），作为访问 115 网页端 API 的基础设施实现
     - 配置 `WebApiBaseUrl`、`MyApiBaseUrl`、`VipApiBaseUrl`、`PayApiBaseUrl`、`OfflineApiBaseUrl` 与共享 `System.Text.Json` 序列化设置
     - 构造函数注入 `CookieSessionManager`、`IErrorFieldAdapter`、`ICookieSignatureStrategy`、`ICloudDriveRateLimiter`、`IOptions<CloudDriveAppConfig>`、`ILogger<CloudDriveApiClient>`
-    - _需求: 2, 17, 25_ _设计: §ICloudDriveOpenApiGateway / CloudDriveApiClient_
+    - _需求: 2, 24, 25_ _设计: §ICloudDriveOpenApiGateway / CloudDriveApiClient_
 
   - [x] 4.3 实现网页端与用户中心请求封装
     - 实现 `SendWebApiRequestAsync`：默认走 `WebApiBaseUrl`；按 `CloudDriveApiContext` 组装 query string 与 form/json body；通过 `CookieSessionManager.GetValidCookieHeaderAsync` 获取当前 Cookie 并注入请求头；调用 `ICloudDriveRateLimiter.AcquireAsync` 按场景限流
@@ -176,7 +177,7 @@
     - 在 `ICookieSignatureStrategy` 未提供有效实现（默认 `NotImplementedCookieSignatureStrategy`）时返回 `Result.Failure`，带 `offline_signature_not_available` 错误码，并由 WebApi 映射为明确 ProblemDetails
     - 实现 `UploadFileAsync`：对网页端上传链路返回的 OSS / multipart 上传凭证 URL 发送 `multipart/form-data`；不直接注入 Cookie（仅依赖上传接口返回的临时凭证）
     - 为后台任务恢复保留必要的上下文字段（`TempFilePath` 和官方返回的 `pick_code`）
-    - _需求: 5, 20, 21, 26_ _设计: §6. 云下载模块 (Offline), §ICookieSignatureStrategy（云下载签名预留扩展点）, §ICloudDriveOpenApiGateway / CloudDriveApiClient_
+    - _需求: 7, 20, 21, 26_ _设计: §6. 云下载模块 (Offline), §ICookieSignatureStrategy（云下载签名预留扩展点）, §ICloudDriveOpenApiGateway / CloudDriveApiClient_
 
   - [x] 4.5 实现错误映射、脱敏日志与 Polly 韧性策略
     - 复用框架层 Polly 配置基础，为各 Named HttpClient 配置幂等请求的有限重试、超时、熔断策略
@@ -185,7 +186,7 @@
     - 将网络连接超时和连接失败分别映射为 `CloudDriveNetworkException`，并保留可读错误原因
     - 记录请求方法、请求路径、错误码、错误消息和重试次数；通过 `CloudDriveSensitiveFieldsFilter` 对 Cookie / UID / CID / USSID / 签名密钥 / extraFields 进行脱敏
     - 实现 115 错误码到业务异常的映射逻辑：`login_required` → `CloudDriveCookieInvalidatedException`；频控错误码 → `CloudDriveRateLimitException`（同时回调 `ICloudDriveRateLimiter.RecordThrottleSignal`）；404 → `CloudDriveFileNotFoundException`；其他业务失败 → `CloudDriveApiException`
-    - _需求: 1, 17, 25, 26_ _设计: §错误码映射, §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
+    - _需求: 1, 24, 25, 26_ _设计: §错误码映射, §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
 
   - [x] 4.6 实现 `ErrorFieldAdapter` 注册表与默认规则
     - 实现 `IErrorFieldAdapter`；内部维护不可变 `IReadOnlyDictionary<string, ErrorFieldDescriptor>`，注册需求 25 错误字段变体表覆盖的全部 URL 规则
@@ -202,20 +203,20 @@
     - 验证网络超时与连接失败分别映射为明确的网络异常
     - 验证幂等请求按配置重试，非幂等写请求不自动重试
     - 验证未命中任何 URL 模式时返回带 `unknown_error_shape` 错误码的 `CloudDriveApiException` 并保留脱敏摘要
-    - _需求: 1, 17, 25_
+    - _需求: 1, 24, 25_ _设计: §P6: 错误码映射完整性_
 
   - [x] 4.8 实现 SqlSugar CodeFirst 建表与实体映射
     - 在应用启动时调用 `db.CodeFirst.InitTables<CookieSession>()` 和 `db.CodeFirst.InitTables<CloudDriveJob>()` 自动创建或更新表
     - 通过 `[SugarTable]`、`[SugarColumn(IsPrimaryKey = true)]`、`[SugarColumn(Length = ...)]` 等特性配置表名、主键、字段长度与索引
     - `CookieSession` 需为 `UserId + CloudAccountUid` 建立唯一索引；`EncryptedCookiePayload` 使用足够长度的 TEXT 列以容纳加密密文
-    - _需求: 1, 21_ _设计: §CookieSession（聚合根 - 领域层）, §CloudDriveJob（聚合根 - 领域层）_
+    - _需求: 1, 28_ _设计: §CookieSession（聚合根 - 领域层）, §CloudDriveJob（聚合根 - 领域层）_
 
   - [x] 4.9 实现仓储类
     - 实现 `CookieSessionRepository`，独立实现 `ICookieSessionRepository` 接口（不继承框架 `Repository<,>` 基类，因其为 `internal sealed` 且未注入 `IDomainEventSource`），直接注入 `ISqlSugarClient` 和 `IDomainEventSource`，封装 CRUD 操作并扩展 `GetByAccountAsync`、`ListByUserAsync` 查询方法
     - 实现 `CloudDriveJobRepository`，独立实现 `ICloudDriveJobRepository` 接口，直接注入 `ISqlSugarClient` 和 `IDomainEventSource`，封装 CRUD 操作并扩展按 UserId 查询、按 Id 查询、按 Status 扫描方法
     - 仓储的 Insert/Update 操作后需调用 `IDomainEventSource.Track(entity)` 将实体注册到领域事件追踪集合，以便 `DomainEventDispatchBehavior` 在事务提交前自动分发领域事件
     - 注册为 Scoped 生命周期
-    - _需求: 1, 21_ _设计: §CookieSession（聚合根 - 领域层）, §CloudDriveJob（聚合根 - 领域层）_
+    - _需求: 1, 28_ _设计: §CookieSession（聚合根 - 领域层）, §CloudDriveJob（聚合根 - 领域层）_
 
   - [x] 4.10 注册基础设施层依赖注入
     - 创建 `IServiceCollection` 扩展方法 `AddCloudDriveInfrastructure()`
@@ -231,14 +232,14 @@
     - 注册 `CloudDriveAppConfig` 配置绑定（`services.Configure<CloudDriveAppConfig>(configuration.GetSection("CloudDrive"))`）
     - 确保 Cookie 加密密钥通过机密存储或加密配置提供，不会以明文暴露到日志或响应
     - 确保 Data Protection key ring 在同一部署内可持久化复用，以保证服务重启后仍可解密既有 Cookie 和签名密钥
-    - _需求: 1, 2, 17, 20, 25, 26_ _设计: §9. 基础设施组件_
+    - _需求: 1, 2, 20, 24, 25, 26, 27, 28_ _设计: §9. 基础设施组件_
 
   - [x] 4.11 实现 `CloudDriveRateLimiter` 基础设施类
     - 实现 `ICloudDriveRateLimiter` 接口，基于令牌桶算法，注册为 Singleton
     - 内部通过 `ConcurrentDictionary<string, TokenBucket>` 按 `UserId + CloudAccountUid + Category` 维度键持有令牌桶实例，确保跨请求共享限流状态
     - 按用户 + 115 账号 + 场景维度限流，支持 Queue / Reject 超限策略与最大队列长度
     - 暴露 `RecordThrottleSignal` 接收 115 官方频控信号并触发退避
-    - _需求: 17, 24_ _设计: §CloudDriveRateLimiter_
+    - _需求: 24_ _设计: §CloudDriveRateLimiter_
 
   - [x] 4.12 实现 `CloudDriveMetadataCache` 基础设施类
     - 实现 `ICloudDriveMetadataCache` 接口，内部使用 `IDistributedCache` + `DistributedCacheExtensions`
@@ -248,7 +249,7 @@
     - 缓存键按 `UserId + CloudAccountUid + DirectoryId/FileId` 组合生成，确保不同账号数据完全隔离
     - 确保缓存内容仅包含文件元数据，不得存储 Cookie / UID / CID / USSID / 签名密钥等敏感信息
     - 支持通过 `CloudDriveAppConfig.CacheTtlSeconds` 配置 TTL
-    - _需求: 20, 27_ _设计: §CloudDriveMetadataCache_
+    - _需求: 27_ _设计: §CloudDriveMetadataCache_
 
   - [x] 4.13 实现 `CloudDriveSensitiveFieldsFilter` 日志脱敏过滤器
     - 实现 `ILogFilter` 或 `ILoggerProvider` 包装器，在日志输出阶段统一替换 Cookie / UID / CID / USSID / 签名密钥 / `ExtraFields` 值为 `[REDACTED]`
@@ -263,20 +264,21 @@
     - SqlSugar CodeFirst 建表可正常执行（`CookieSession`、`CloudDriveJob`）
     - `ICloudDriveOpenApiGateway`、`IErrorFieldAdapter`、`ICookieInvalidationNotifier`、`ICookieSignatureStrategy`、仓储与 `CloudDriveAppConfig` 装配完成，可供应用层直接使用
     - `CloudDriveMetadataCache`、`CloudDriveRateLimiter`、`CloudDriveSensitiveFieldsFilter` 基础设施实现已完成并注册
+    - _需求: 1, 2, 20, 24, 25, 26, 27, 28_ _设计: §ICloudDriveOpenApiGateway / CloudDriveApiClient, §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）, §CloudDriveRateLimiter, §CloudDriveMetadataCache, §9. 基础设施组件_
 
 - [x] 6. 应用层 - DTO 定义与手动映射
   - [x] 6.1 创建应用层 DTO
     - 创建公共 DTO：`CloudDriveOperationResultDto`；公开前端输入 DTO 不得继承或包含 `CloudAccountUid`
     - 创建分页与列表包装 DTO：`PagedResultDto<T>`、`ListResultDto<T>`（若框架基础设施未提供则在此创建）
-    - 创建文件相关 DTO：`CloudDriveFileDto`、`CloudDriveFileDetailDto`、`CloudDrivePathNodeDto`、`CloudDriveFileLabelDto`、`CloudDriveSearchResultDto`、`CloudDriveDownloadDto`、`CloudDriveFolderDto`、`CloudDriveUploadSessionDto`、`CloudDriveUploadedFileDto`、`CloudDriveUploadExecutionDto`、`CloudDriveRecycleBinItemDto`
+    - 创建文件相关 DTO：`CloudDriveFileDto`、`CloudDriveFileDetailDto`、`CloudDrivePathNodeDto`、`CloudDriveFileLabelDto`、`CloudDriveSearchListDto`、`CloudDriveSearchResultDto`、`CloudDriveDownloadDto`、`CloudDriveFolderDto`、`CloudDriveUploadSessionDto`、`CloudDriveUploadedFileDto`、`CloudDriveUploadExecutionDto`、`CloudDriveRecycleListDto`、`CloudDriveRecycleBinItemDto`
     - 创建预览相关 DTO 与枚举：`CloudDriveImagePreviewDto`、`CloudDriveDocPreviewDto`、`DocRenderMode` 枚举（Direct, ThirdParty, NotAvailable）
-    - 创建视频相关 DTO 与枚举：`CloudDriveVideoPlayDto`（含 `UserDef` 官方记忆清晰度）、`VideoPlayStatus` 枚举（Ready, Transcoding）、`VideoQualityOption`（含 `DefinitionNew` 新版清晰度标识）、`AudioTrackOption`、`CloudDriveVideoTranscodeDto`、`CloudDriveVideoPlayProgressDto`（含 `AddTime`）、`CloudDriveSubtitleListDto`、`CloudDriveSubtitleDto`
-    - 创建认证/用户相关 DTO：`CloudDriveCookieSessionDto`（运维 DTO，含 `CloudAccountUid`、`Status`、`CreationTime`、`LastModificationTime`、`CooldownUntil`）、公开认证 DTO `CloudDriveAuthCheckDto`（`IsAuthenticated`、`FailureReason?`）、`CloudDriveUserProfileDto`、`CloudDriveUserInfoDto`、`CloudDriveSpaceInfoDto`、`CloudDriveVipInfoDto`、`CloudDriveBalanceDto`
-    - 创建云下载 DTO：`CloudDriveOfflineTaskDto`、`CloudDriveOfflineQuotaDto`、`CloudDriveOfflineStatsDto`（字段归一化 `total_count → Total`、`failed_count → Failed`、`finished_count → Completed`、`downloading_count → Active`）
-    - 创建分享管理 DTO：`CloudDriveShareItemDto`、`CloudDriveShareSendItemDto`、`CloudDriveShareReceiveItemDto`
+    - 创建视频相关 DTO 与枚举：`CloudDriveVideoPlayDto`（成功播放 schema 未采集时 `PlaybackSchemaStatus = "not_collected"`）、`VideoPlayStatus` 枚举（SchemaNotCollected, Ready, Transcoding）、`VideoQualityOption`/`AudioTrackOption`（仅在成功播放 schema 补采集后映射，未采集前保持空）、`CloudDriveVideoTranscodeDto`、`CloudDriveVideoPlayProgressDto`（含 `AddTime`）、`CloudDriveSubtitleListDto`、`CloudDriveSubtitleDto`（item schema 未采集时仅占位）
+    - 创建认证/用户相关 DTO：`CloudDriveCookieSessionDto`（运维 DTO，含 `CloudAccountUid`、`Status`、`CreationTime`、`LastModificationTime`、`CooldownUntil`）、公开认证 DTO `CloudDriveAuthCheckDto`（`IsAuthenticated`、`FailureReason?`）、`CloudDriveUserProfileDto`、`CloudDriveUserInfoDto`、`CloudDriveSpaceInfoDto`（schema 未采集时 `SchemaStatus = "not_collected"`）、`CloudDriveVipInfoDto`、`CloudDriveBalanceDto`
+    - 创建云下载 DTO：`CloudDriveOfflineTaskListDto`、`CloudDriveOfflineTaskDto`（item schema 未采集时仅占位）、`CloudDriveOfflineQuotaDto`、`CloudDriveOfflineStatsDto`（字段归一化 `total_count → Total`、`failed_count → Failed`、`finished_count → Completed`、`downloading_count → Active`）
+    - 创建分享管理 DTO：`CloudDriveShareListDto`、`CloudDriveShareItemDto`（item schema 未采集时仅占位）
     - 创建任务相关 DTO：`CloudDriveJobDto`
     - 不再创建 `CloudDriveTokenDto` 与 `CloudDrivePkceAuthorizationDto`（OAuth 方案遗留 DTO，Cookie 方案不使用）
-    - _需求: 1, 3, 19, 20, 21, 22, 23_ _设计: §DTO 定义_
+    - _需求: 1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 13a, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 28_ _设计: §DTO 定义_
 
   - [x] 6.2 创建应用层输入 DTO 与 FluentValidation 验证器
     - 创建内部账号上下文解析接口 `ICloudDriveAccountContextResolver`，公开前端端点的输入 DTO 不包含 `CloudAccountUid`
@@ -293,13 +295,13 @@
   - [x] 6.3 编写属性测试 - 临时资源标识
     - **属性 P9: 临时资源标识**
     - 验证所有返回临时资源的 DTO（下载地址、预览地址、播放地址）在构造与映射为对外响应后均保持 `IsTemporary = true`
-    - _需求: 6, 14, 15, 16_
+    - _需求: 8, 15, 16, 19_ _设计: §P9: 临时资源标识_
 
   - [x] 6.4 创建手动映射扩展方法
     - 为 115 网页端 API 响应模型 → 领域对象 → DTO 创建静态扩展方法 `ToDto()` / `ToEntity()`
     - 编译期可检查类型安全，无反射开销
     - 按模块组织映射扩展方法（`CookieMapping`、`FileMapping`、`PreviewMapping`、`VideoMapping`、`OfflineMapping`、`ShareMapping`、`UserAggregationMapping`、`JobMapping`）
-    - 文件映射内完成字段归一化：`fid → FileId`、`n → Name`、`s → Size`、`fc` 值域转换等；回收站 `type` 字段的反向映射
+    - 文件映射内完成字段归一化：`fid → FileId`、`n → Name`、`s → Size`、`fc → RawCategoryCode` 等；`fc`、回收站 item 字段值域在 `docs/115-api-docs.md` 补采集前不得硬编码派生语义
     - 映射时对网页端未返回的字段保留 null 或缺省值，不得伪造官方未提供且不可验证的数据
     - **严禁使用 AutoMapper**（CD0004）
     - _需求: 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23_ _设计: §DTO 定义_
@@ -308,10 +310,10 @@
     - 创建 `CloudDriveVideoPlayProgressDto`（含 `AddTime` 官方 add_time 时间戳）
     - 创建 `GetVideoPlayProgressInput` 与 `RememberVideoPlayProgressInput`
     - 创建 `GetVideoPlayProgressInputValidator` 与 `RememberVideoPlayProgressInputValidator`
-    - 为视频播放 DTO 补充 `UserDef`（网页端 user_def 记忆清晰度）、`RestrictionReason`、`UsageRestrictionNotice`、多音轨与细化清晰度字段的映射验证
-    - 为 `VideoQualityOption` 补充 `DefinitionNew`（网页端 definition_n 新版清晰度标识）
-    - 为 `CloudDriveRecycleBinItemDto` 补充 `RecycleBinItemId`（网页端 `id`，用于 `tid` 参数）和 `RestoreStatus`（网页端 `status`：-1=还原中, 0=正常），注意回收站 `type` 值域（1=文件,2=目录）与文件列表 `fc` 值域（0=文件夹,1=文件）反转
-    - _需求: 11, 14, 15_ _设计: §视频相关 DTO, §DTO 定义_
+    - 为视频播放 DTO 预留 `UserDef`、`RestrictionReason`、`UsageRestrictionNotice`、多音轨与细化清晰度字段；成功播放 schema 未采集前验证这些字段保持 `null` / 空集合且 `PlaybackSchemaStatus = "not_collected"`
+    - 为 `VideoQualityOption` 预留 `DefinitionNew`；仅在后续 `docs/115-api-docs.md` 补采集 `definition_n` 等成功播放字段后启用映射验证
+    - 为回收站查询补充 `CloudDriveRecycleListDto` 顶层字段映射（`count/rb_pass/offset/page_size/order/is_asc`）；`CloudDriveRecycleBinItemDto` 在 `docs/115-api-docs.md` 未补采集 item schema 前仅作为空占位，不定义 `tid`、`status` 或 `type` 值域语义
+    - _需求: 14, 16, 17, 18_ _设计: §视频相关 DTO, §DTO 定义_
 
 - [x] 7. 应用层 - Cookie 会话管理 Command/Query Handler
   - [x] 7.1 实现运行时配置保护与 `UpsertCookieSessionCommandHandler`（运维端点）
@@ -350,7 +352,7 @@
     - 验证 `CookieEncryptionKeyName`、`WebApiBaseUrl` 或（如启用云下载）`SignatureKeyName` 任一缺失时，`CloudDriveFeatureEnabled` 为 `false`
     - 验证 `CloudDriveFeatureEnabled == false` 时所有 Handler 方法抛出 `CloudDriveConfigurationException`
     - 验证正确配置下 `CloudDriveFeatureEnabled == true` 且 Handler 正常执行
-    - _需求: 2_
+    - _需求: 2_ _设计: §P8: 配置完整性校验_
 
   - [x] 7.6 编写 Cookie 会话单账号上下文单元测试
     - 验证 `UpsertCookieSessionCommandHandler` 写入 `CookieSession` 后按 `UserId + CloudAccountUid` 双维度唯一隔离
@@ -366,7 +368,7 @@
     - 统一决定同步/异步执行边界并创建 `CloudDriveJob` 记录，创建时将业务输入参数序列化为 JSON 写入 `PayloadJson` 字段；上传任务持久化可恢复元数据（`TempFilePath` 和官方返回的 `pick_code`），不直接序列化文件流
     - 通过应用层抽象 `ICloudDriveJobScheduler.ScheduleAsync()` 触发调度；Infrastructure 层当前使用 Quartz.NET 创建 Trigger，并通过 `JobDataMap` 传递 `JobId`
     - 对外组装 `JobId` 与受理结果，供 `CloudDriveOperationResultDto` / `CloudDriveUploadExecutionDto` 复用
-    - _需求: 5, 8, 9, 10, 11, 15, 21_ _设计: §5. 后台任务模块 (Quartz.NET Job), §CloudDriveJob（聚合根 - 领域层）_
+    - _需求: 7, 10, 11, 12, 14, 16, 21, 28_ _设计: §5. 后台任务模块 (Quartz.NET Job), §CloudDriveJob（聚合根 - 领域层）_
 
   - [x] 8.2 实现 `CloudDriveUploadJob` (Quartz IJob - Infrastructure 层)
     - 实现 `IJob.Execute(IJobExecutionContext context)`，从 `JobDataMap` 获取 `JobId`，从数据库 `CloudDriveJob.PayloadJson` 字段加载业务载荷（上传任务使用包含 `DirectoryId`、`FileName`、`FileSize`、`FileSha1`、`TempFilePath`、`PickCode` 等可恢复元数据的内部载荷对象）。Job 类定义在 Infrastructure 层（遵循 infrastructure-patterns.md 规范）
@@ -378,7 +380,7 @@
     - 当本地恢复资源不可用或不可恢复失败发生时，返回上传失败，并清理本地恢复检查点与临时上传文件；若网页端提供取消或废弃上传会话的接口，优先调用该接口回收远端会话
     - 上传成功后失效目标目录缓存
     - 注意：Quartz Job 在独立 DI Scope 中执行，不经过 MediatR Pipeline（`TransactionBehavior` 和 `DomainEventDispatchBehavior` 均不生效）；Job 内部需自行管理事务，且直接操作 `CloudDriveJob` 实体产生的领域事件需通过注入 `IMediator` 手动调用 `Publish()` 逐一分发并清空事件集合。此说明同样适用于任务 8.3、8.4、8.5
-    - _需求: 5, 21, 27_ _设计: §5. 后台任务模块 (Quartz.NET Job), §CloudDriveJob（聚合根 - 领域层）_
+    - _需求: 7, 27, 28_ _设计: §5. 后台任务模块 (Quartz.NET Job), §CloudDriveJob（聚合根 - 领域层）_
 
   - [x] 8.3 实现 `CloudDriveBatchOperationJob` (Quartz IJob - Infrastructure 层)
     - 实现 `IJob.Execute()`，处理批量复制、移动、删除、回收站批量还原（`BatchRecycleBinRestore`）和回收站批量彻底删除（`BatchRecycleBinDelete`）任务。Job 类定义在 Infrastructure 层
@@ -386,19 +388,19 @@
     - 持续更新进度、错误摘要与任务状态
     - 对支持安全重试的批量任务记录已完成项与最近安全检查点
     - 任务完成后失效源目录与目标目录缓存
-    - _需求: 8, 9, 10, 11, 21, 27_ _设计: §5. 后台任务模块 (Quartz.NET Job), §CloudDriveJob（聚合根 - 领域层）_
+    - _需求: 10, 11, 12, 14, 27, 28_ _设计: §5. 后台任务模块 (Quartz.NET Job), §CloudDriveJob（聚合根 - 领域层）_
 
   - [x] 8.4 实现 `CloudDriveClearRecycleBinJob` (Quartz IJob - Infrastructure 层)
     - 实现 `IJob.Execute()`，处理清空回收站任务；因清空回收站 115 网页端写接口尚未在 `docs/115-api-docs.md` 中采集，当前 Job 返回 `cloud_drive_api_not_collected` 失败状态，待补采集后再接入真实路径。Job 类定义在 Infrastructure 层
     - 记录任务状态与错误摘要
     - 任务完成后统一触发相关缓存失效
-    - _需求: 11, 21, 27_ _设计: §5. 后台任务模块 (Quartz.NET Job)_
+    - _需求: 14, 27, 28_ _设计: §5. 后台任务模块 (Quartz.NET Job)_
 
   - [x] 8.5 实现 `CloudDriveTranscodeJob` (Quartz IJob - Infrastructure 层)
     - 实现 `IJob.Execute()`，处理视频转码任务与状态回写：通过重复调用 `GET webapi.115.com/files/video?pickcode={pickcode}&share_id=0` 探测可播放性判断转码完成状态。Job 类定义在 Infrastructure 层
     - 记录任务状态、进度与错误摘要
     - 为播放接口返回 `Transcoding` 状态提供数据来源
-    - _需求: 15, 21_ _设计: §5. 后台任务模块 (Quartz.NET Job), §4. 视频模块 (Video)_
+    - _需求: 16, 28_ _设计: §5. 后台任务模块 (Quartz.NET Job), §4. 视频模块 (Video)_
 
   - [x] 8.6 实现 `GetJobStatusQueryHandler` 与 `GetJobListQueryHandler`
     - 实现 `GetJobStatusQueryHandler`：通过 `GetJobStatusInput` 查询任务状态，并校验 `jobId` 归属当前用户与解析出的单账号上下文
@@ -414,13 +416,13 @@
     - 应用启动时扫描 `CloudDriveJob` 中处于 `Pending` / `Running` 状态的任务记录
     - 对具备 `PayloadJson` + `CheckpointData` 或明确安全重试条件的任务重新调度到 Quartz
     - 对不可恢复任务标记为 `Failed` 并记录失败原因，避免任务永久悬挂
-    - _需求: 21, 28_ _设计: §P13: 后台任务重启恢复协调, §5. 后台任务模块 (Quartz.NET Job)_
+    - _需求: 28_ _设计: §P13: 后台任务重启恢复协调, §5. 后台任务模块 (Quartz.NET Job)_
 
 - [x] 9. 应用层 - 文件管理 Command/Query Handler
   - [x] 9.1 实现 `GetFileListQueryHandler` 与 `GetFileDetailQueryHandler`
     - 实现 `GetFileListQueryHandler`：获取指定目录文件列表（分页，默认根目录 `cid=0`）；网页端 API `GET webapi.115.com/files`（必填 `aid=1`）
     - 实现 `GetFileDetailQueryHandler`：优先从文件列表响应、缓存或已知 `CloudDriveFileDto` 字段组装文件详情；若无法从已采集接口取得详情，则返回明确 ProblemDetails，不得猜测 `docs/115-api-docs.md` 未采集的 115 详情路径
-    - 响应字段由 Infrastructure 层归一化适配器转换（`fid → FileId`、`n → Name`、`s → Size`、`fc` 值域转换 → `IsDirectory`）
+    - 响应字段由 Infrastructure 层归一化适配器转换（`fid → FileId`、`n → Name`、`s → Size`、`fc → RawCategoryCode`）；`fc/type/sta/m` 值域未采集为官方枚举时不得推断 `IsDirectory`
     - Query Handler 仅执行数据查询，不触发副作用（CD0007）
     - _需求: 4, 6_ _设计: §2. 文件管理模块 (File), §CloudDriveFileManager_
 
@@ -428,7 +430,7 @@
     - 新建文件夹接口尚未在 `docs/115-api-docs.md` 中采集；当前 Handler 复用 `CloudDriveFileNameValidator.ValidateNewFolderName`（255 字符）完成输入校验后返回 `cloud_drive_api_not_collected` ProblemDetails，待补采集后再接入真实路径
     - 成功后失效受影响目录缓存
     - 领域事件由仓储 `Track(entity)` + `DomainEventDispatchBehavior` 自动分发，Handler 内部不手动调用 `IMediator.Publish()`
-    - _需求: 7, 27_ _设计: §2. 文件管理模块 (File), §CloudDriveFileManager_
+    - _需求: 9, 27_ _设计: §2. 文件管理模块 (File), §CloudDriveFileManager_
 
   - [x] 9.3 实现 `InitUploadCommandHandler`
     - 调用 `ICloudDriveOpenApiGateway.SendUploadInitRequestAsync` 发送 `POST uplb.115.com/3.0/sampleinitupload.php`（body: `userid={uid}&filename={name}&filesize={bytes}&target=U_1_{cid}`），返回 `CloudDriveUploadSessionDto`
@@ -448,37 +450,37 @@
   - [x] 9.5 实现 `UploadFileCommandHandler` - 异步上传编排
     - 当文件大小超过 `LargeFileAsyncThresholdBytes` 或客户端显式请求异步执行时，委托 `CloudDriveJobOrchestrator` 创建后台上传任务
     - 返回 `Accepted = true` 的 `CloudDriveUploadExecutionDto` 与 `JobId`
-    - _需求: 7, 21_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
+    - _需求: 7, 28_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
 
   - [x] 9.6 实现 `GetDownloadUrlQueryHandler`
     - 通过文件的 `pickcode` 调用网页端下载接口（具体路径以 `requirements.md` 采集为准）获取下载地址
     - 返回网页端临时下载 URL 或受控代理下载信息，并将结果标记为临时授权资源（`IsTemporary = true`）
     - 在文件不存在或地址获取失败时返回明确错误原因
     - Query Handler 不触发副作用（CD0007）
-    - _需求: 6_ _设计: §2. 文件管理模块 (File), §P9: 临时资源标识_
+    - _需求: 8_ _设计: §2. 文件管理模块 (File), §P9: 临时资源标识_
 
   - [x] 9.7 实现 `MoveFilesCommandHandler`
     - 文件移动接口尚未在 `docs/115-api-docs.md` 中采集；当前 Handler 校验输入并返回 `cloud_drive_api_not_collected` ProblemDetails，待补采集后再接入真实路径
     - 同步完成后失效源目录与目标目录缓存
     - 在超过同步执行阈值时委托 `CloudDriveJobOrchestrator` 创建后台任务；同步完成时返回 `Accepted = false`，异步受理时返回 `JobId`
-    - _需求: 8, 21, 27_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
+    - _需求: 10, 27, 28_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
 
   - [x] 9.8 实现 `CopyFilesCommandHandler`
     - 文件复制接口尚未在 `docs/115-api-docs.md` 中采集；当前 Handler 校验输入并返回 `cloud_drive_api_not_collected` ProblemDetails，待补采集后再接入真实路径
     - 同步完成后失效目标目录缓存
     - 在超过同步执行阈值时委托 `CloudDriveJobOrchestrator` 创建后台任务；同步完成时返回 `Accepted = false`，异步受理时返回 `JobId`
-    - _需求: 9, 21, 27_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
+    - _需求: 11, 27, 28_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
 
   - [x] 9.9 实现 `DeleteFilesCommandHandler`
     - 文件删除接口尚未在 `docs/115-api-docs.md` 中采集；当前 Handler 校验输入并返回 `cloud_drive_api_not_collected` ProblemDetails，待补采集后再接入真实路径
     - 同步完成后失效源目录缓存
     - 在超过同步执行阈值时委托 `CloudDriveJobOrchestrator` 创建后台任务；同步完成时返回 `Accepted = false`，异步受理时返回 `JobId`
-    - _需求: 10, 21, 27_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
+    - _需求: 12, 27, 28_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
 
   - [x] 9.10 实现 `RenameFileCommandHandler`
     - 文件/文件夹重命名接口尚未在 `docs/115-api-docs.md` 中采集；当前 Handler 复用 `CloudDriveFileNameValidator.ValidateRenameFileName`（255 字节）完成输入校验后返回 `cloud_drive_api_not_collected` ProblemDetails，待补采集后再接入真实路径
     - 成功后失效受影响目录缓存
-    - _需求: 12, 27_ _设计: §2. 文件管理模块 (File), §CloudDriveFileManager_
+    - _需求: 13, 27_ _设计: §2. 文件管理模块 (File), §CloudDriveFileManager_
 
   - [x] 9.10a 实现 `ToggleStarCommandHandler`
     - 星标切换接口尚未在 `docs/115-api-docs.md` 中采集；当前 Handler 校验 `starred` 输入并返回 `cloud_drive_api_not_collected` ProblemDetails，待补采集后再接入真实路径
@@ -486,25 +488,25 @@
     - _需求: 13a, 27_ _设计: §2. 文件管理模块 (File)_
 
   - [x] 9.11 实现 `SearchFilesQueryHandler`
-    - 实现文件搜索（网页端 `GET webapi.115.com/files/search`，分页，关键词验证，返回 `parent_id` 与可选路径）
+    - 实现文件搜索（网页端 `GET webapi.115.com/files/search`，分页，关键词验证，返回 `CloudDriveSearchListDto`）
     - 支持 `docs/115-api-docs.md` 已采集的网页端筛选参数：`search_value`、`aid`、`cid`、`type`、`date`、`pick_code`、`count_folders`、`source`、`format`、`offset`、`limit`；不支持开放平台参数 `file_label`、`gte_day`/`lte_day`、`fc`、`suffix`
     - 搜索请求不走 `CloudDriveMetadataCache`（搜索关键词组合多变且实时性要求高，缓存命中率低），直接经 `ICloudDriveRateLimiter` 限流后通过 `ICloudDriveOpenApiGateway.SendWebApiRequestAsync` 发出
     - 错误字段解析由 `ErrorFieldAdapter` 按 `/files/search` URL 规则处理（`errCode` number + `error`）
-    - 仅返回网页端可提供的 `parent_id` 与系统可安全推导的路径信息
+    - `docs/115-api-docs.md` 已在 2026-05-04 自动采集到 `/files/search` 非空 item schema；Handler 映射 `fid/n/s/pc/fc/ico/dp/ns/sha/hdf/fl/u/iv/play_long` 等已采集字段并返回 `ItemSchemaStatus = "available"`，但不得把 `type/fc/sta/m` 推断为官方枚举，不得把 `ns` 作为可信 HTML 直接交给前端渲染
     - Query Handler 不触发副作用（CD0007）
     - _需求: 5, 25_ _设计: §2. 文件管理模块 (File), §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
 
   - [x] 9.12 实现回收站查询与还原 Handler
-    - 实现 `GetRecycleBinListQueryHandler`：获取回收站列表（网页端 `GET webapi.115.com/rb`，必填 `aid=7` / `cid=0` / `format=json`）；空回收站时网页端不返回 `data` 键，已包含 `data` 时为动态键对象（键为文件 ID string）
+    - 实现 `GetRecycleBinListQueryHandler`：获取回收站列表顶层信息（网页端 `GET webapi.115.com/rb`，必填 `aid=7` / `cid=0` / `format=json`）；当前 `docs/115-api-docs.md` 未采集 item schema，响应缺失 `data` 或明细字段时返回 `CloudDriveRecycleListDto { Items = [], ItemSchemaStatus = "not_collected" }`，不得伪造列表项
     - 实现 `RestoreFromRecycleBinCommandHandler` 占位：回收站还原接口尚未在 `docs/115-api-docs.md` 中采集，当前返回 `cloud_drive_api_not_collected` ProblemDetails，待补采集后再接入真实路径
     - 在批量还原超过同步执行阈值时委托 `CloudDriveJobOrchestrator` 创建后台任务；同步完成时返回 `Accepted = false`，异步受理时返回 `JobId`
-    - _需求: 14, 21, 27_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
+    - _需求: 14, 27, 28_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
 
   - [x] 9.13 实现回收站彻底删除与清空 Handler
     - 实现 `DeleteFromRecycleBinCommandHandler` 占位：回收站彻底删除接口尚未在 `docs/115-api-docs.md` 中采集，当前返回 `cloud_drive_api_not_collected` ProblemDetails，待补采集后再接入真实路径
     - 在批量彻底删除超过同步执行阈值时委托 `CloudDriveJobOrchestrator` 创建后台任务；同步完成时返回 `Accepted = false`，异步受理时返回 `JobId`
     - 实现 `ClearRecycleBinCommandHandler` 占位：清空回收站接口尚未在 `docs/115-api-docs.md` 中采集；当前实现可统一通过 `CloudDriveJobOrchestrator` 创建后台任务并返回 `Accepted = true` 与 `JobId`，任务执行时返回 `cloud_drive_api_not_collected` 失败状态，待补采集后再接入真实路径
-    - _需求: 14, 21_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
+    - _需求: 14, 28_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
 
   - [x] 9.14 实现内部目录缓存失效能力
     - 实现应用层内部目录缓存失效/重载协作，不暴露公开 `POST /api/files/refresh` 端点
@@ -518,7 +520,7 @@
     - 测试上传成功后返回路径并触发目标目录缓存失效
     - 测试批量操作/清空回收站的同步/异步分流条件，以及 `Accepted` / `JobId` 返回语义
     - 测试回收站空响应（无 `data` 键）的容错处理
-    - _需求: 4, 5, 6, 7, 8, 9, 10, 11, 12, 13a, 14, 21, 27_ _设计: §2. 文件管理模块 (File)_
+    - _需求: 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 13a, 14, 27, 28_ _设计: §2. 文件管理模块 (File)_
 
 - [x] 10. 应用层 - 预览、视频、云下载、分享与用户聚合 Handler
   - [x] 10.1 实现 `GetImagePreviewQueryHandler` 与 `GetDocPreviewQueryHandler`
@@ -527,7 +529,7 @@
     - 实现文件扩展名到预览类型的路由逻辑
     - 对文件不存在和格式不支持场景返回明确错误；Office 第三方预览服务未配置时返回 `RenderMode = NotAvailable`
     - Query Handler 不触发副作用（CD0007）
-    - _需求: 14, 16_ _设计: §3. 预览模块 (Preview)_
+    - _需求: 15, 19_ _设计: §3. 预览模块 (Preview)_
 
   - [x] 10.2 编写属性测试 - 预览类型路由正确性
     - **属性 P7: 预览类型路由正确性**
@@ -535,34 +537,34 @@
     - 验证视频文件不会被误分类为图片或文档预览，而是进入视频播放链路
     - 验证 Office 文档在未配置第三方预览服务时返回 `NotAvailable`
     - 验证不支持的格式返回错误
-    - _需求: 14, 15, 16_
+    - _需求: 15, 16, 19_ _设计: §P7: 预览类型路由正确性_
 
   - [x] 10.3 实现 `GetVideoPlayUrlCommandHandler`
-    - 通过文件的 `pickcode` 调用 `GET webapi.115.com/files/video?pickcode={pickcode}&share_id=0` 获取播放地址（含多清晰度与网页端播放元数据）
-    - 若视频尚未完成转码（通过重复调用上述接口的可播放性探测判定）则自动提交转码并返回 `Transcoding` 状态；本次调用成功创建后台转码任务时必须返回 `JobId`
-    - 对非视频类型或文件不存在场景返回明确错误
+    - 通过文件的 `pickcode` 调用 `GET webapi.115.com/files/video?pickcode={pickcode}&share_id=0` 获取播放信息；当前 docs 仅采集错误响应字段
+    - 若后端基于已采集转码提交接口创建后台转码任务，则返回 `Transcoding` 状态与 `JobId`；成功播放 schema 未采集前不得通过轮询 `/files/video` 猜测可播放 URL 或清晰度
+    - `/files/video` 成功播放 schema 未采集时返回 `video_play_schema_not_collected` ProblemDetails，不得伪造播放地址、清晰度或音轨字段；对非视频类型或文件不存在场景返回明确错误
     - `share_id=0` 必带（非分享场景）；`pickcode` 为网页端接口的核心定位参数
     - 使用 Command 而非 Query，因为该操作可能触发转码提交副作用（创建后台任务），遵循 CD0007 约束
-    - _需求: 15_ _设计: §4. 视频模块 (Video), §5. 后台任务模块 (Quartz.NET Job)_
+    - _需求: 16, 28_ _设计: §4. 视频模块 (Video), §5. 后台任务模块 (Quartz.NET Job)_
 
   - [x] 10.4 实现 `SubmitTranscodeCommandHandler`
     - 通过文件的 `pickcode` 提交视频转码：`GET webapi.115.com/files/video_push?pickcode={pickcode}&op=vip_push&format=json`（备选路径：`GET webapi.115.com/movies/transcode?pickcode={pickcode}&format=json`）
     - 统一复用 `CloudDriveJobOrchestrator` 创建转码任务
     - 校验文件存在且类型为视频
-    - _需求: 15, 21_ _设计: §4. 视频模块 (Video), §5. 后台任务模块 (Quartz.NET Job)_
+    - _需求: 16, 28_ _设计: §4. 视频模块 (Video), §5. 后台任务模块 (Quartz.NET Job)_
 
   - [x] 10.5 实现 `GetSubtitlesQueryHandler`
-    - 通过文件的 `pickcode` 调用 `GET webapi.115.com/movies/subtitle` 获取视频字幕列表，返回 `CloudDriveSubtitleListDto`（包含自动加载字幕与字幕项列表）
-    - 映射 `caption_map_id`、`is_caption_map`、`sync_time`、`sha1`、`file_id` 等公开字段
-    - 处理字幕不存在、自动加载字幕缺失或暂不可用的返回语义
+    - 通过文件的 `pickcode` 调用 `GET webapi.115.com/movies/subtitle` 获取视频字幕顶层结构，返回 `CloudDriveSubtitleListDto`
+    - 当前 docs 仅采集 `data.autoload` 与 `data.list` 为空数组，未采集 item schema；返回 `Items = []`、`AutoloadSubtitle = null` 与 `ItemSchemaStatus = "not_collected"`，不得伪造字幕字段
+    - 处理字幕不存在、自动加载字幕缺失、item schema 未采集或暂不可用的返回语义
     - 错误字段解析由 `ErrorFieldAdapter` 按 `/movies/subtitle` URL 规则处理（大写 `errNo` + `error`）
     - Query Handler 不触发副作用（CD0007）
-    - _需求: 15, 25_ _设计: §4. 视频模块 (Video), §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
+    - _需求: 17, 25_ _设计: §4. 视频模块 (Video), §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
 
   - [x] 10.6 实现 `GetVideoPlayProgressQueryHandler`
-    - 通过文件的 `pickcode` 调用 `GET webapi.115.com/files/history?pick_code={pickcode}&fetch=one&category=1&format=json` 获取网页端记忆的播放进度
+    - 通过文件的 `pickcode` 调用 `GET webapi.115.com/files/history?pick_code={pickcode}&fetch=one&format=json` 获取网页端记忆的播放进度；兼容 2026-05-04 自动样本空数组与 2026-04-18 手动样本 `category=1` 对象字段分支
     - 若仅有 `FileId`，先通过 `CloudDriveFileManager` 解析出 `pickcode`
-    - 返回 `CloudDriveVideoPlayProgressDto`（含 `file_id`、`file_name`、`hash`、`pickcode`、已播放时长、`add_time` 记录添加时间戳）
+    - 返回 `CloudDriveVideoPlayProgressDto`；仅在响应对象真实包含 `file_id`、`file_name`、`hash`、`time`、`add_time` 时映射，空数组时返回空播放进度语义，不伪造历史字段
     - Query Handler 不触发副作用（CD0007）
     - _需求: 18_ _设计: §4. 视频模块 (Video)_
 
@@ -574,15 +576,15 @@
     - _需求: 18_ _设计: §4. 视频模块 (Video)_
 
   - [x] 10.8 补充 `GetVideoPlayUrlCommandHandler` 的受限状态与用途标识
-    - 当网页端返回 4K / 原画受限状态或升级引导资源时，映射明确的受限原因到 `RestrictionReason`
+    - 仅当后续成功播放 schema 明确采集到 4K / 原画受限状态或升级引导字段时，才映射明确的受限原因到 `RestrictionReason`；当前未采集前保持 `null`
     - 在返回 `CloudDriveVideoPlayDto` 时显式设置 `IsTemporary = true`
     - 填充 `UsageRestrictionNotice`，明确该播放资源仅限当前已绑定用户在系统内短时使用，不得视为永久公开外链
-    - _需求: 15, 16_ _设计: §4. 视频模块 (Video), §P9: 临时资源标识_
+    - _需求: 16_ _设计: §4. 视频模块 (Video), §P9: 临时资源标识_
 
   - [x] 10.9 实现云下载查询 Handler（Offline Query）
     - 实现 `GetOfflineTaskListQueryHandler`：获取云下载任务列表，调用 `ICloudDriveOpenApiGateway.SendOfflineApiRequestAsync` 发送 `115.com/web/lixian/?ct=lixian&ac=task_lists` 请求（自动通过 `ICookieSignatureStrategy` 生成 `sign + time + uid` 签名）
-    - 响应字段归一化：`total_count → Total`、`failed_count → Failed`、`finished_count → Completed`、`downloading_count → Active`
-    - 实现 `GetOfflineQuotaQueryHandler`：获取云下载空间配额与统计（`115.com/web/lixian/?ct=lixian&ac=get_quota_package_info` 或需求采集中确认的等效端点）
+    - `task_lists` 响应只映射顶层 `page/page_count/page_row/page_size/count/quota/total/state/real_state/errtype`；`tasks` item schema 未采集时返回 `Items = []` 与 `ItemSchemaStatus = "not_collected"`
+    - 实现 `GetOfflineQuotaQueryHandler`：获取云下载空间配额与统计（固定调用 `GET 115.com/web/lixian/?ct=lixian&ac=get_quota_package_info`）
     - 实现 `GetOfflineStatsQueryHandler`：调用 `POST 115.com/web/lixian/?ct=lixian&ac=task_count`，将 `total_count`、`failed_count`、`finished_count`、`downloading_count` 归一化为 `CloudDriveOfflineStatsDto`
     - Query Handler 不触发副作用（CD0007）
     - _需求: 20_ _设计: §6. 云下载模块 (Offline), §ICookieSignatureStrategy（云下载签名预留扩展点）_
@@ -596,16 +598,16 @@
     - _需求: 21_ _设计: §6. 云下载模块 (Offline), §ICookieSignatureStrategy（云下载签名预留扩展点）, §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
 
   - [x] 10.11 实现分享管理 Handler（Share Queries）
-    - 实现 `GetMySharesQueryHandler`：查询我的分享列表（`GET webapi.115.com/share/slist`，必填 `format=json`）
-    - 实现 `GetShareSendsQueryHandler`：查询分享发送记录（`GET webapi.115.com/share/send`，必填 `format=json`）
-    - 实现 `GetShareReceivesQueryHandler`：查询分享接收记录（`GET webapi.115.com/share/receive`，必填 `format=json`）
+    - 实现 `GetMySharesQueryHandler`：查询我的分享顶层信息（`GET webapi.115.com/share/slist`，必填 `format=json`）
+    - 实现 `GetShareSendsQueryHandler`：查询分享发送顶层/错误信息（`GET webapi.115.com/share/send`，必填 `format=json`）
+    - 实现 `GetShareReceivesQueryHandler`：查询分享接收顶层/错误信息（`GET webapi.115.com/share/receive`，必填 `format=json`）
     - 错误字段解析由 `ErrorFieldAdapter` 按 URL 规则处理：`slist` 使用 `errNo`；`send` / `receive` 优先读 `errNo`，fallback `errno`
-    - 当前需求 22 采集样本均为失败响应（低置信度，见 `requirements.md:324-335`）；解析失败时 Handler 返回 `share_sample_unavailable` 业务错误，待联调获得真实可用样本后补齐字段映射
+    - 当前 `/share/slist` 仅采集顶层字段且 list item shape 为 null；`send/receive` 仅采集错误响应。Handler 返回 `CloudDriveShareListDto { Items = [], ItemSchemaStatus = "not_collected" }`，待联调获得真实 item schema 后补齐字段映射
     - Query Handler 不触发副作用（CD0007）
     - _需求: 22, 25_ _设计: §7. 分享管理模块 (Share), §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
 
   - [x] 10.12 实现用户中心聚合 Handler（UserAggregation Queries）
-    - 实现 `GetUserSpaceQueryHandler`：获取用户空间详情，通过 `UserAggregationService` 调用 `webapi.115.com/files/index_info?count_space_nums=1` 与相关接口
+    - 实现 `GetUserSpaceQueryHandler`：获取用户空间详情，通过 `UserAggregationService` 调用 `webapi.115.com/files/index_info?count_space_nums=1` 与相关接口；当前 docs 仅采集 `data: object`，返回 `SchemaStatus = "not_collected"`，不得伪造 size_format 或空间分类字段
     - 实现 `GetUserVipQueryHandler`：获取 VIP 详情与特权，通过 `UserAggregationService` 并行调用 `webapi.115.com/user/vip_limit` + `vip.115.com/*` 多源接口
     - Query Handler 不触发副作用（CD0007）— 详细实现举见 `UserAggregationService`（任务 10.13）
     - _需求: 23_ _设计: §8. 用户中心聚合模块 (UserAggregator)_
@@ -624,10 +626,11 @@
     - 大文件上传、批量操作、清空回收站、视频转码的同步/异步边界已可验证
     - 临时资源 DTO、`Transcoding` 状态返回与账号隔离逻辑已完成联调自检
     - Cookie 失效冷却期、`CookieInvalidated` 领域事件分发、登录态探测路径已完成联调自检
-    - 视频播放进度读写、4K/原画受限状态与受限用途提示已完成联调自检
+    - 视频播放进度读写与受限用途提示已完成联调自检；4K/原画受限状态字段未采集前仅验证保持 `null`，不得伪造
     - `UserAggregationService` 多源并行聚合与 34 个敏感字段过滤已完成联调自检
     - 云下载签名（`ICookieSignatureStrategy`）未提供实现时返回 `offline_signature_not_available` 业务错误
     - 所有 Command Handler 通过 `TransactionBehavior` 自动管理 SqlSugar 事务
+    - _需求: 1, 3, 4, 5, 6, 14, 15, 16, 17, 18, 20, 21, 22, 23, 25, 26, 27, 28_ _设计: §1. 认证与会话管理模块 (Auth), §2. 文件管理模块 (File), §3. 预览模块 (Preview), §4. 视频模块 (Video), §5. 后台任务模块 (Quartz.NET Job), §6. 云下载模块 (Offline), §7. 分享管理模块 (Share), §8. 用户中心聚合模块 (UserAggregator)_
     - 所有输入 DTO 通过 `ValidationBehavior` + FluentValidation 自动校验
 
 - [x] 12. 表现层 - API 控制器
@@ -667,25 +670,25 @@
     - DELETE /api/files → `IMediator.Send(new DeleteFilesCommand(this.GetAuthenticatedUserId(), input))`（body: `fileIds[]`；115 删除接口待补采集；当前 Handler 返回 `cloud_drive_api_not_collected`）
     - PATCH /api/files/{fileId} → `IMediator.Send(new RenameFileCommand(this.GetAuthenticatedUserId(), input))`（body: `newFileName`；115 重命名接口待补采集；当前 Handler 返回 `cloud_drive_api_not_collected`）
     - POST /api/files/{fileId}/star → `IMediator.Send(new ToggleStarCommand(this.GetAuthenticatedUserId(), input))`（body 中携带 `starred`；115 星标写接口待补采集；当前 Handler 返回 `cloud_drive_api_not_collected`）
-    - _需求: 7, 8, 9, 10, 12, 13a, 21, 27_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
+    - _需求: 7, 9, 10, 11, 12, 13, 13a, 27, 28_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
 
   - [x] 12.5 实现 `RecycleBinController`
     - GET /api/recycle?offset={offset}&limit={limit} → `IMediator.Send(new GetRecycleBinListQuery(this.GetAuthenticatedUserId(), input))`
     - POST /api/recycle/restore → `IMediator.Send(new RestoreFromRecycleBinCommand(this.GetAuthenticatedUserId(), input))`（还原接口待补采集；当前 Handler 返回 `cloud_drive_api_not_collected`）
     - DELETE /api/recycle/{id} → `IMediator.Send(new DeleteFromRecycleBinCommand(this.GetAuthenticatedUserId(), input))`（彻底删除接口待补采集；当前 Handler 返回 `cloud_drive_api_not_collected`）
     - DELETE /api/recycle → `IMediator.Send(new ClearRecycleBinCommand(this.GetAuthenticatedUserId(), input))`（清空接口待补采集，异步返回 jobId；Job 执行时返回 `cloud_drive_api_not_collected`）
-    - _需求: 14, 21_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
+    - _需求: 14, 28_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
 
   - [x] 12.6 实现 `PreviewController` / `DocumentsController`
     - GET /api/files/{pickCode}/preview → `IMediator.Send(new GetImagePreviewQuery(this.GetAuthenticatedUserId(), input))`
     - GET /api/documents/{pickCode}/preview → `IMediator.Send(new GetDocPreviewQuery(this.GetAuthenticatedUserId(), input))`
-    - _需求: 14, 16_ _设计: §3. 预览模块 (Preview)_
+    - _需求: 15, 19_ _设计: §3. 预览模块 (Preview)_
 
   - [x] 12.7 实现 `VideosController`
     - GET /api/videos/{pickCode}/play → `IMediator.Send(new GetVideoPlayUrlCommand(this.GetAuthenticatedUserId(), input))`（后端按 `docs/115-api-docs.md` 调用 `GET webapi.115.com/files/video?pickcode=...&share_id=0&local=1&format=json`；该 Command 允许在未转码时提交后台转码任务）
     - POST /api/videos/{pickCode}/transcode → `IMediator.Send(new SubmitTranscodeCommand(this.GetAuthenticatedUserId(), input))`（显式转码提交，调用 `webapi.115.com/files/video_push` 或备选 `movies/transcode`）
     - GET /api/videos/{pickCode}/subtitles → `IMediator.Send(new GetSubtitlesQuery(this.GetAuthenticatedUserId(), input))`
-    - _需求: 15_ _设计: §4. 视频模块 (Video)_
+    - _需求: 16, 17_ _设计: §4. 视频模块 (Video)_
 
   - [x] 12.8 补充 `CloudDriveVideoController` 播放进度端点
     - GET /api/videos/{pickCode}/history → `IMediator.Send(new GetVideoPlayProgressQuery(this.GetAuthenticatedUserId(), input))`
@@ -724,7 +727,7 @@
   - [x] 12.12 实现 `JobsController`
     - GET /api/jobs/{jobId} → `IMediator.Send(new GetJobStatusQuery(this.GetAuthenticatedUserId(), input))`
     - GET /api/jobs?status={status?}&offset={offset}&limit={limit} → `IMediator.Send(new GetJobListQuery(this.GetAuthenticatedUserId(), input))`
-    - _需求: 21, 28_ _设计: §5. 后台任务模块 (Quartz.NET Job)_
+    - _需求: 28_ _设计: §5. 后台任务模块 (Quartz.NET Job)_
 
 - [ ] 13. 模块注册与集成
   - [ ] 13.1 创建 `IServiceCollection` 扩展方法注册所有依赖
@@ -749,7 +752,7 @@
     - 确保限流器与缓存协同工作，且按 `UserId + CloudAccountUid` 内部维度隔离，减少重复高频 API 调用；公开前端 API 不接收 `cloudAccountUid`
     - 确保仅幂等请求进入自动重试链路，非幂等写请求遵循设计定义的重试边界
     - 云下载请求通过独立的 `Cloud115Offline` 限流桶隔离，避免与普通读请求竞争配额
-    - _需求: 17, 24, 27_ _设计: §CloudDriveRateLimiter, §CloudDriveMetadataCache_
+    - _需求: 24, 27_ _设计: §CloudDriveRateLimiter, §CloudDriveMetadataCache_
 
   - [ ] 13.3 执行模块级装配验证
     - 验证配置缺失时启动期校验与运行期保护同时生效（`CookieEncryptionKeyName` / `WebApiBaseUrl` 缺失即可触发）
@@ -761,7 +764,14 @@
     - 验证 `Result.Failure` 会被映射为非 2xx `ProblemDetails`，不会以 HTTP 200 返回失败
     - 验证 `CloudDriveSensitiveFieldsFilter` 对 Cookie / UID / CID / USSID / 签名密钥在日志中的脱敏生效
     - 验证应用重启后后台任务恢复协调服务会重新调度可恢复任务或将不可恢复任务收敛为失败
-    - _需求: 2, 17, 21, 25, 26, 27_ _设计: §P8: 配置完整性校验, §P13: 后台任务重启恢复协调, §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
+    - _需求: 2, 24, 25, 26, 27, 28_ _设计: §P8: 配置完整性校验, §P13: 后台任务重启恢复协调, §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
+
+  - [ ] 13.4 对齐 2026-05-04 刷新后的 DTO 与 Handler 契约
+    - 将搜索链路从旧 `PagedResultDto<CloudDriveSearchResultDto>` 对齐为 `CloudDriveSearchListDto`，补齐 `ItemSchemaStatus`、已采集搜索 item 字段、`HighlightNameRaw/ns` 安全边界与 schema 异常 fallback
+    - 将视频播放 DTO 与 Handler 对齐到 `PlaybackSchemaStatus = "not_collected"`；成功播放 schema 未采集前不得返回 `Ready`、播放地址、清晰度或音轨字段
+    - 将播放历史 DTO 与映射对齐到空数组/对象双形态：`FileId/FileName/Hash/PlayedSeconds` 可空，空数组返回从头播放语义，不写入空字符串或伪造 `0`
+    - 补充对应单元测试和契约测试，覆盖搜索 schema available、schema fallback、视频播放 schema not collected、播放历史空数组与对象分支
+    - _需求: 5, 16, 18, 25, 30_ _设计: §DTO 定义, §2. 文件管理模块 (File), §4. 视频模块 (Video), §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
 
 - [ ] 14. 最终检查点 - 全部测试通过
   - 当前阶段通过条件：
@@ -770,6 +780,7 @@
     - 至少完成一轮围绕 Cookie 注入、登录态探测、文件浏览、上传、后台任务、预览/播放、云下载、分享、用户聚合的端到端走查
     - 架构约束验证：Domain 层无基础设施依赖、Application 层无直连 ORM/缓存/HTTP、Controller 仅通过 ISender 分发
     - 安全验证：Cookie 存储经加密、日志输出经 `CloudDriveSensitiveFieldsFilter` 脱敏、运维端点受管理员授权保护
+    - _需求: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 13a, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30_ _设计: §需求↔设计覆盖矩阵, §9. 基础设施组件, §DTO 定义_
 
 ## 备注
 

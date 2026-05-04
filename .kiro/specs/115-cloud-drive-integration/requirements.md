@@ -6,7 +6,7 @@
 
 > **架构定位**：本 spec 定义 115 网盘**后端业务模块**，基于 `.kiro/specs/115-cloud-drive-net10/` 已搭建的 .NET 10 DDD 四层框架实现。前端 Vue 3 应用通过本模块提供的 `/api/*` REST 端点访问 115 网盘数据。
 
-> **数据源权威性**：本系统仅对接 **115 网页端原生 API**，以 `docs/115-api-docs.md`（2026-04-08 自动采集 + 2026-04-18 手动补充，`runId: 20260408145821-oqg9xv`，共 71 个唯一接口）为权威数据源。开放平台文档（`/open/*`）仅作为参数含义、业务约束、特殊行为的补充参考。**不**通过 OAuth 换取 Access/Refresh Token 直接调用开放平台 API。
+> **数据源权威性**：本系统仅对接 **115 网页端原生 API**，以 `docs/115-api-docs.md`（2026-05-04 最新自动采集，`runId: 20260504073432-ck05g2`，并保留 2026-04-18 上传链路手动补充，共 76 个唯一接口）为权威数据源。开放平台文档（`/open/*`）仅作为参数含义、业务约束、特殊行为的补充参考。**不**通过 OAuth 换取 Access/Refresh Token 直接调用开放平台 API。
 
 > **认证方式**：采用 **Cookie-based 认证**（UID/CID/USSID），由管理员从已登录的 115 网页端导出 Cookie 注入系统配置；后端通过 ASP.NET Core Data Protection 加密存储，请求 115 API 时自动注入。**不使用 OAuth 2.0、AppID/AppSecret、PKCE 流程**。
 
@@ -14,7 +14,7 @@
 
 > **账号模型**：**单账号模型**。系统仅维护一个 115 账号的 Cookie 会话，不支持多账号切换。
 
-> **API 覆盖说明**：已通过 `docs/115-api-docs.md` 获取 71 个网页端接口，本系统使用其中 **20 个业务接口**（含 2026-04-18 补充采集的上传初始化 `uplb.115.com/3.0/sampleinitupload.php`、OSS 直传、视频转码 `webapi.115.com/files/video_push`、播放进度 `webapi.115.com/files/history`）。对文档中已有采集证据的接口，后端 SHALL 直接按该文档访问 115；不得改写成开放平台 OAuth 口径或继续标注为待联调。**部分写操作接口**（文件增删改、下载地址、云下载创建/删除/清空、回收站还原/彻底删除/清空等）**尚未在该文档中采集**，仍标注为「待补采集」。上传链路涉及外部 OSS 域名 `*.oss-cn-*.aliyuncs.com`（阿里云对象存储直传）。
+> **API 覆盖说明**：已通过 `docs/115-api-docs.md` 获取 76 个网页端接口证据（74 个 2026-05-04 自动采集 + 2 个上传链路手动补充），本系统使用其中 **20 个业务接口**（含 2026-04-18 补充采集的上传初始化 `uplb.115.com/3.0/sampleinitupload.php`、OSS 直传，以及 2026-05-04 自动采集确认的视频转码 `webapi.115.com/files/video_push`、播放进度 `webapi.115.com/files/history`）。对文档中已有采集证据的接口，后端 SHALL 直接按该文档访问 115；不得改写成开放平台 OAuth 口径或继续标注为待联调。**部分写操作接口**（文件增删改、下载地址、云下载创建/删除/清空、回收站还原/彻底删除/清空等）**尚未在该文档中采集**，仍标注为「待补采集」。上传链路涉及外部 OSS 域名 `*.oss-cn-*.aliyuncs.com`（阿里云对象存储直传）。
 
 > **官方 API 范围排除声明**：以下 13 个官方网页端端点**明确不纳入本系统**，避免引入不必要的数据收集或侵入性调用：
 > - `webapi.115.com/category/shortcut`（快捷分类，非核心功能）
@@ -28,7 +28,7 @@
 > - `q.115.com/*`（社区功能，非网盘）
 > - `passportapi.115.com/*`（账号安全预警，非网盘）
 
-> **硬上限来源说明**：本 spec 中出现的 `limit=1150`、`offset+limit≤10000` 等硬上限值**源自开放平台文档推断**，网页端实测可能不同。实现阶段 SHALL 以真实响应为准调整验证规则。
+> **分页上限说明**：`docs/115-api-docs.md` 当前仅采集到网页端 `offset` / `limit` 参数，未采集到 `limit=1150`、`offset+limit≤10000` 等网页端硬上限。系统不得将开放平台推断值作为 115 网页端硬拦截规则；如需保护服务资源，只能通过系统自有配置（如 `CloudDrive:MaxPageSize`）限制，并在 ProblemDetails 中标注为系统保护限制而非 115 官方限制。
 
 ## 前置要求与约束
 
@@ -107,13 +107,13 @@
 #### 验收标准
 
 1. WHEN 用户请求获取指定目录的文件列表时，THE File_Service SHALL 调用 `GET webapi.115.com/files`，必填参数 `aid=1`（网盘档案 ID；回收站为 `aid=7`）、`cid=0` 表示根目录、`format=json`
-2. THE File_Service SHALL 采用 `offset + limit` 分页，默认 `offset=0`、`limit=50`；`limit` 不得超过 115 硬上限 1150（**保护限值来自开放平台文档推断**）
-3. THE File_Service SHALL 支持透传筛选与排序参数：`o`（`user_ptime`/`file_name`/`file_size`）、`asc`（1/0）、`type`（1-7 文件类型）、`show_dir`、`star=1`（仅星标）、`natsort`、`snap`、`count_folders`、`record_open_time`、`code`（待采集含义）、`scid`（待采集含义）、`source`、`suffix`
-4. THE File_Service SHALL 归一化网页端响应字段为 `CloudDriveFileDto`：`fid→fileId, n→fileName, s→size, fc→category(1=folder,0=file), pc→pickCode, tu→thumb, u→originalUrl, tp→videoImg, iv→isVideo, fvs→videoDefinition, play_long→playDuration, te→uploadTime, t→updateTime, m→isStarred, hdf→isPrivate, sta→uploadStatus, sha→sha1, ico→ico, class→fileClass`；**其中 `sta/hdf/class/fvs/fc/iv` 等字段值域映射基于开放平台文档推断，实现阶段 SHALL 以真实响应为准验证**
+2. THE File_Service SHALL 采用 `offset + limit` 分页，默认 `offset=0`、`limit=50`；`docs/115-api-docs.md` 未采集网页端最大 `limit`，实现不得以开放平台推断值作为 115 硬上限
+3. THE File_Service SHALL 支持透传筛选与排序参数：`o`（`user_ptime`/`file_name`/`file_size`）、`asc`（1/0）、`type`（网页端已采集参数存在但值域未采集）、`show_dir`、`star=1`（仅星标）、`natsort`、`snap`、`count_folders`、`record_open_time`、`code`（待采集含义）、`scid`（待采集含义）、`source`、`suffix`；不得将未采集的 `type=1..7` 语义当作 115 官方枚举
+4. THE File_Service SHALL 归一化网页端响应字段为 `CloudDriveFileDto`：`fid→fileId, n→fileName, s→size, fc→rawCategoryCode, pc→pickCode, tu→thumb, u→originalUrl, tp→videoImg, iv→isVideo, fvs→videoDefinition, play_long→playDuration, te→uploadTime, t→updateTime, m→isStarred, hdf→isPrivate, sta→uploadStatus, sha→sha1, ico→ico, class→fileClass`；`fc/sta/hdf/class/fvs/iv` 等字段值域未在 `docs/115-api-docs.md` 中定义，派生 `category/isDirectory/uploadStatus` 前 SHALL 通过真实网页端样本验证，未知时返回 `category='unknown'` / `isDirectory=null`，不得硬编码互相冲突的开放平台推断值
 5. THE File_Service SHALL 归一化响应中的 `path` 数组为 `CloudDriveBreadcrumbDto[]`
 6. WHEN 未指定目录时，THE File_Service SHALL 默认返回根目录（`cid=0`）
 7. IF 目录不存在，THEN 返回 HTTP 404 ProblemDetails
-8. WHEN `limit > 1150` 时，THE File_Service SHALL 抛出 `ValidationException`，返回 HTTP 400 ProblemDetails
+8. WHEN `offset < 0`、`limit <= 0` 或 `limit` 超出系统自有 `CloudDrive:MaxPageSize` 配置时，THE File_Service SHALL 抛出 `ValidationException`，返回 HTTP 400 ProblemDetails；错误码 SHALL 表示系统保护限制，不得表述为 115 网页端官方上限
 
 ### 需求 5：文件搜索
 
@@ -123,11 +123,14 @@
 
 1. WHEN 用户提交搜索关键词时，THE File_Service SHALL 调用 `GET webapi.115.com/files/search`
 2. THE File_Service SHALL 支持筛选参数：`search_value`（必填）、`aid`（默认 1）、`cid`（默认 0，指定搜索目录）、`type`（网页端为 empty/数值）、`date`（`YYYY-MM-DD`，日期筛选）、`pick_code`（可选，按提取码查询）、`count_folders`（默认 1）、`source`、`format=json`；**开放平台的 `gte_day`/`lte_day`/`fc`/`suffix`/`file_label` 参数在网页端采集中未出现**，本系统暂不采用
-3. THE File_Service SHALL 采用 `offset + limit` 分页，且 `offset + limit ≤ 10000`（**保护限值来自开放平台文档推断**）
+3. THE File_Service SHALL 采用 `offset + limit` 分页；`docs/115-api-docs.md` 未采集网页端 `offset + limit` 总上限，系统不得以 `10000` 作为 115 硬限制
 4. WHEN 关键词为空或纯空白时，返回 HTTP 400 ProblemDetails
-5. WHEN `offset + limit > 10000` 时，返回 HTTP 400 ProblemDetails
-6. THE File_Service SHALL 将搜索结果归一化为 `CloudDriveFileDto[]`
-7. WHEN 搜索无匹配结果时，返回 HTTP 200 + 空数组
+5. WHEN `offset < 0`、`limit <= 0` 或 `limit` 超出系统自有 `CloudDrive:MaxPageSize` 配置时，返回 HTTP 400 ProblemDetails；错误码 SHALL 表示系统保护限制，不得表述为 115 网页端官方上限
+6. THE File_Service SHALL 按 `docs/115-api-docs.md` 已采集 schema 归一化 `/files/search` 顶层字段：`count`、`page_size`、`page_count`、`offset`、`is_asc`、`order`、`suffix`、`fc_mix`、`type`、`state`、`error`、`errCode`
+7. WHEN 搜索响应 `data` 为数组时，THE File_Service SHALL 映射 2026-05-04 已采集的搜索 item 字段：`fid`、`aid`、`cid`、`n`、`s`、`sta`、`pc`、`fc`、`m`、`t`、`te`、`tp`、`ico`、`dp`、`ns`、`sha`、`hdf`、`fl`、`u`、`iv`、`play_long` 等；未在文档中列明的字段不得推断
+8. THE File_Service SHALL 将 `CloudDriveSearchListDto.ItemSchemaStatus` 置为 `"available"`；IF 后续响应不再符合已采集数组 item schema，THEN 返回 `Items = []` 与 `ItemSchemaStatus = "not_collected"`，并记录 Warning 日志
+9. THE File_Service SHALL 将搜索 item 的 `ns` 作为高亮片段原文或清洗后的显示名候选保存，不得要求前端把 `ns` 作为可信 HTML 直接渲染；`fc`、`type`、`sta`、`m` 等值域仍以未采集语义处理，不得硬编码为官方枚举
+10. WHEN 搜索无匹配结果时，返回 HTTP 200 + 空数组，`ItemSchemaStatus` 保持 `"available"`
 
 ### 需求 6：查看文件详情
 
@@ -266,15 +269,15 @@
 
 **用户故事：** 作为用户，我希望查看和管理回收站中的文件。
 
-> **状态**：列表查询已采集（`GET webapi.115.com/rb`）；还原/彻底删除/清空 API **待补采集**。
+> **状态**：列表查询顶层字段已采集（`GET webapi.115.com/rb`）；回收站项目明细字段、还原/彻底删除/清空 API **待补采集**。
 
 #### 验收标准
 
 1. THE WebApi_Layer SHALL 提供 `GET /api/recycle` 端点，支持 query 参数 `offset`/`limit`
-2. WHEN 用户请求查看回收站时，THE File_Service SHALL 调用 `GET webapi.115.com/rb`，必填参数 `aid=7`（回收站档案）、`cid=0`、`format=json`，采用 `offset + limit` 分页（默认 `limit=30`，最大 200保护限值）
-3. THE File_Service SHALL 处理 115 响应的**动态键结构**：当有回收站记录时 `data` 为对象，**键为文件 ID（string）**，值为详情对象；归一化为 `CloudDriveRecycleItemDto[]` 数组
-4. IF 响应缺失 `data` 字段（**空回收站时官方不返回 `data` 键**），THEN 归一化为空数组，不抛异常
-5. THE File_Service SHALL 归一化字段：`id→id, file_name→fileName, type→category(1=file,2=folder), file_size→fileSize, dtime→deletedTime, thumb_url→thumbnailUrl, cid→originalParentId, parent_name→originalParentName, pick_code→pickCode, status→restoreStatus(0=normal,-1=restoring)`
+2. WHEN 用户请求查看回收站时，THE File_Service SHALL 调用 `GET webapi.115.com/rb`，必填参数 `aid=7`（回收站档案）、`cid=0`、`format=json`，采用 `offset + limit` 分页（默认 `limit=30`；最大值仅受系统自有 `CloudDrive:MaxPageSize` 配置约束）
+3. THE File_Service SHALL 仅按 `docs/115-api-docs.md` 已采集 schema 归一化顶层字段：`count`、`rb_pass`、`state`、`error`、`offset`、`page_size`、`order`、`is_asc`
+4. IF 响应缺失项目明细字段或 `data` 字段，THEN THE File_Service SHALL 返回 `CloudDriveRecycleListDto { items: [], itemSchemaStatus: 'not_collected' }`，不得伪造 `fileName/fileSize/deletedTime/pickCode/status` 等未采集字段
+5. IF 后续 `docs/115-api-docs.md` 补充回收站项目明细 schema，THEN THE File_Service SHALL 只映射文档中明确采集到的字段；在此之前 `CloudDriveRecycleBinItemDto` 字段均视为不可用
 6. THE File_Service SHALL 将响应的 `count` 字段从 string 转 number
 7. THE WebApi_Layer SHALL 预留 `POST /api/recycle/restore` 端点（还原，待采集）
 8. THE WebApi_Layer SHALL 预留 `DELETE /api/recycle/{id}` 端点（彻底删除，待采集）
@@ -304,17 +307,17 @@
 #### 验收标准
 
 1. THE WebApi_Layer SHALL 提供 `GET /api/videos/{pickCode}/play` 端点
-2. THE Video_Service SHALL 调用 `GET webapi.115.com/files/video?pickcode=...&share_id=0&local=1&format=json` 获取播放地址与元数据；`share_id=0` 表示非分享场景，分享场景传入实际分享 ID
-3. THE Video_Service SHALL 归一化响应为 `CloudDriveVideoPlayDto`：`pickCode`/`fileName`/`fileSize`/`playDuration`/`videoUrls: VideoUrlVariantDto[]`/`availableDefinitions: VideoDefinition[]`/`userSelectedDefinition?`
-4. THE Video_Service SHALL 定义 `VideoDefinition` 枚举：`SD=1`/`HD=2`/`FHD=3`/`FullHD=4`/`UHD4K=5`/`Original=100`
-5. THE Video_Service SHALL 在网页端返回多种清晰度时支持获取对应地址（当前采集为失败样本；完整响应结构基于开放平台推断含 `video_url[]` 和 `definition_list_new[]`，实现阶段以真实响应为准）
+2. THE Video_Service SHALL 调用 `GET webapi.115.com/files/video?pickcode=...&share_id=0&local=1&format=json` 获取视频播放端点响应；`share_id=0` 表示非分享场景，分享场景传入实际分享 ID。当前仅采集错误响应 schema，成功播放地址与元数据待补采集
+3. THE Video_Service SHALL 仅按 `docs/115-api-docs.md` 当前已采集 schema 处理 `/files/video` 错误响应字段：`state`、`errno`、`error`
+4. IF `/files/video` 尚未采集到成功播放 schema，THEN THE Video_Service SHALL 返回 `video_play_schema_not_collected` ProblemDetails 或 `CloudDriveVideoPlayDto { playbackSchemaStatus: 'not_collected', qualityOptions: [], audioTracks: [] }`，不得伪造播放地址、清晰度枚举或播放元数据
+5. IF 后续 `docs/115-api-docs.md` 补充成功播放 schema，THEN THE Video_Service SHALL 只映射文档中明确采集到的播放地址、清晰度、音轨与元数据字段，并将未采集字段返回 `null` 或空数组
 6. IF 视频尚未完成转码，THEN 返回 `status: 'transcoding'` 状态并附带 `jobId`（若已提交转码）
 6a. THE Video_Service SHALL 通过 `GET webapi.115.com/files/video_push?pickcode=...&op=vip_push&format=json` 提交主动转码请求（`op=pay_push` 为备选，用于按量计费场景）；备选路径为 `GET webapi.115.com/movies/transcode?pickcode=...&format=json`；两路径均在非 VIP 场景下返回 `{ state: false, errNo: N, errno: N, error: '...', request: '...' }` 错误响应
-7. IF 用户 VIP 等级不足时请求高清晰度，115 可能返回升级引导视频，THE Video_Service SHALL 检测响应特征（URL 域名或响应提示字段）并附加 `vipUpgradeRequired: true`
+7. IF 后续已采集成功播放 schema 中包含 VIP 受限或升级引导字段，THEN THE Video_Service SHALL 按采集字段映射到 `restrictionReason` 或 `usageRestrictionNotice`；在字段未采集前不得基于 URL 猜测受限状态
 8. IF 文件不是视频类型，THEN 返回 HTTP 400 ProblemDetails
 9. IF 文件不存在，THEN 返回 HTTP 404 ProblemDetails
-10. THE Video_Service SHALL 在响应中标识播放地址的临时性
-11. THE WebApi_Layer SHALL 将主动转码提交暴露为独立端点 `POST /api/videos/{pickCode}/transcode`；播放地址获取端点本身 SHALL 保持 `GET /api/videos/{pickCode}/play`
+10. IF 后续成功播放 schema 可用并返回播放地址，THEN THE Video_Service SHALL 在响应中标识播放地址的临时性
+11. THE WebApi_Layer SHALL 将主动转码提交暴露为独立端点 `POST /api/videos/{pickCode}/transcode`；播放端点本身 SHALL 保持 `GET /api/videos/{pickCode}/play`
 
 ### 需求 17：视频字幕
 
@@ -324,22 +327,24 @@
 
 1. THE WebApi_Layer SHALL 提供 `GET /api/videos/{pickCode}/subtitles` 端点
 2. THE Video_Service SHALL 调用 `GET webapi.115.com/movies/subtitle?pickcode=...&format=json`
-3. THE Video_Service SHALL 将响应的 `autoload` 数组和 `list` 数组归一化为统一的 `CloudDriveSubtitleDto[]`，通过 `isAutoload: boolean` 标记源
-4. THE CloudDriveSubtitleDto SHALL 包含：`sid`/`language`/`title`/`url`/`type`/`isAutoload`/`sha1?`/`fileId?`/`fileName?`/`pickCode?`
-5. IF 字幕列表为空，THEN 返回 HTTP 200 + 空数组
+3. THE Video_Service SHALL 仅按 `docs/115-api-docs.md` 已采集 schema 识别 `data.autoload` 与 `data.list` 两个数组；当前样本数组 item schema 未采集
+4. IF `autoload` / `list` item schema 未采集，THEN THE Video_Service SHALL 返回 `CloudDriveSubtitleListDto { autoloadSubtitle: null, items: [], itemSchemaStatus: 'not_collected' }`，不得伪造 `sid/language/title/url/type/sha1/fileId/fileName/pickCode` 等字幕字段
+5. IF 后续 `docs/115-api-docs.md` 补充字幕 item schema，THEN THE Video_Service SHALL 只映射文档中明确采集到的字段
+6. IF 字幕列表为空或 item schema 未采集，THEN 返回 HTTP 200 + 空数组
 
 ### 需求 18：视频播放进度
 
 **用户故事：** 作为用户，我希望视频播放进度能被记忆。
 
-> **状态**：**已采集完整读/写接口**（2026-04-18 自动化场景实测）。网页端使用 `webapi.115.com/files/history`，错误字段为 `state:boolean` + `error:string`（非 `errNo`/`errCode` 风格）。
+> **状态**：**已采集读/写端点**（2026-05-04 自动化场景确认；2026-04-18 手动场景补充历史对象字段）。网页端使用 `webapi.115.com/files/history`，错误字段为 `state:boolean` + `error:string`（非 `errNo`/`errCode` 风格）。
 
 #### 验收标准
 
 1. THE WebApi_Layer SHALL 提供 `GET /api/videos/{pickCode}/history` 端点
 2. THE WebApi_Layer SHALL 提供 `POST /api/videos/{pickCode}/history` 端点（请求体含 `time: number`/`watchEnd: boolean`）
-3. THE Video_Service SHALL 调用 `GET webapi.115.com/files/history?pick_code=...&format=json`（可选 `&fetch=one` 获取单条）读取播放进度；响应结构 `{ state: boolean, error: string, data: { ... } }`
+3. THE Video_Service SHALL 调用 `GET webapi.115.com/files/history?pick_code=...&format=json`（可选 `&fetch=one`）读取播放进度；2026-05-04 自动样本返回空数组，2026-04-18 手动样本记录 `fetch=one&category=1` 分支可能返回对象字段 `{ file_id, file_name, hash, pick_code, time, add_time }`，实现 SHALL 兼容空数组/对象两种形态
 4. THE Video_Service SHALL 调用 `POST webapi.115.com/files/history`（Content-Type: `application/x-www-form-urlencoded`，body: `pick_code=...&op=...&time=N&definition=N`）写入播放进度；`watchEnd` 映射为特定 `op` 值；响应结构 `{ state: boolean, error: string }`
+5. IF 读取响应缺失播放进度对象字段或返回空数组，THEN THE Video_Service SHALL 返回空播放进度/从头播放语义，不得伪造 `file_id/file_name/hash/time/add_time`
 
 ### 需求 19：文档预览
 
@@ -371,11 +376,12 @@
 1. THE WebApi_Layer SHALL 提供 `GET /api/offline/tasks` 端点，参数 `page`（默认 1）
 2. THE Offline_Service SHALL 调用 `POST 115.com/web/lixian/?ct=lixian&ac=task_lists`（必填 Query 参数 `ct=lixian&ac=task_lists`；**Body 需签名参数** `page/stat/uid/sign/time`）
 3. THE Offline_Service SHALL 使用 `Signature_Service` 生成 POST Body `{ page, stat, uid, sign, time }`（`stat` 为任务状态过滤参数，默认 0 表示全部）；签名算法尚未在 `docs/115-api-docs.md` 中采集，默认实现 SHALL 返回 `offline_signature_not_available` ProblemDetails，直到通过真实 Cookie 场景补采集并验证签名算法
-4. THE Offline_Service SHALL 归一化任务为 `CloudDriveOfflineTaskDto`：`info_hash→infoHash, name→name, size→size, add_time→addTime, last_update→lastUpdate, percentDone→percentDone, url→url, file_id→fileId, wp_path_id→parentId, def2→videoDefinition, play_long→playDuration`；**顶层 `real_state/errtype/quota/total` 字段归一化为 `CloudDriveOfflineTaskListDto` 的状态与配额字段**
-5. THE Offline_Service SHALL 归一化任务 `status` 字段：`-1→'failed'`/`0→'allocating'`/`1→'downloading'`/`2→'success'`（**值域映射来自开放平台文档推断，待真实响应验证**）
-6. THE WebApi_Layer SHALL 提供 `GET /api/offline/quota` 端点，调用 `GET 115.com/web/lixian/?ct=lixian&ac=get_quota_package_info`；归一化响应为 `CloudDriveOfflineQuotaDto { package: object, count, surplus, maxSize, used }`
-7. THE WebApi_Layer SHALL 提供 `GET /api/offline/stats` 端点，调用 `POST 115.com/web/lixian/?ct=lixian&ac=task_count`；统计字段映射：`total_count→total`、`failed_count→failed`、`finished_count→completed`、`downloading_count→active`；归一化为 `{ total, active, completed, failed }`
-8. THE Cloud_Drive_Service SHALL 将签名 `sign` 参数从日志中脱敏
+4. THE Offline_Service SHALL 仅按 `docs/115-api-docs.md` 已采集 schema 归一化任务列表顶层字段：`page`、`page_count`、`page_row`、`page_size`、`count`、`quota`、`total`、`state`、`real_state`、`errtype`
+5. IF `tasks` 对象的 item schema 未采集，THEN THE Offline_Service SHALL 返回 `CloudDriveOfflineTaskListDto { items: [], itemSchemaStatus: 'not_collected' }`，不得伪造 `infoHash/name/size/addTime/lastUpdate/percentDone/url/fileId/parentId/status` 等任务字段
+6. IF 后续 `docs/115-api-docs.md` 补充云下载任务 item schema，THEN THE Offline_Service SHALL 只映射文档中明确采集到的字段；在此之前不得采用开放平台 `status -1/0/1/2` 推断值域
+7. THE WebApi_Layer SHALL 提供 `GET /api/offline/quota` 端点，调用 `GET 115.com/web/lixian/?ct=lixian&ac=get_quota_package_info`；归一化响应为 `CloudDriveOfflineQuotaDto { package: object, count, surplus, maxSize, used }`
+8. THE WebApi_Layer SHALL 提供 `GET /api/offline/stats` 端点，调用 `POST 115.com/web/lixian/?ct=lixian&ac=task_count`；统计字段映射：`total_count→total`、`failed_count→failed`、`finished_count→completed`、`downloading_count→active`；归一化为 `{ total, active, completed, failed }`
+9. THE Cloud_Drive_Service SHALL 将签名 `sign` 参数从日志中脱敏
 
 ### 需求 21：云下载任务管理
 
@@ -402,9 +408,11 @@
 2. WHEN `tab=slist` 时，THE Share_Service SHALL 调用 `GET webapi.115.com/share/slist?offset=0&limit=30&format=json`
 3. WHEN `tab=send` 时，调用 `GET webapi.115.com/share/send?offset=0&limit=30&format=json`
 4. WHEN `tab=receive` 时，调用 `GET webapi.115.com/share/receive?offset=0&limit=30&format=json`
-5. THE Share_Service SHALL 归一化响应为 `CloudDriveShareDto[]`；未返回字段保留 `null`
-6. WHEN `tab` 值不支持时，返回 HTTP 400 ProblemDetails
-7. **注**：三个分享接口当前采集样本均为失败响应（低置信度），成功响应结构待实际验证
+5. THE Share_Service SHALL 仅按 `docs/115-api-docs.md` 已采集 schema 归一化分享顶层字段：`/share/slist` 的 `count/list/define_receive_code/bind_receive_code/state/error/errno`，以及 `/share/send`、`/share/receive` 的 `state/error/errNo/errno/request`
+6. IF `list` item schema 或 send/receive 成功列表 schema 未采集，THEN THE Share_Service SHALL 返回 `CloudDriveShareListDto { items: [], itemSchemaStatus: 'not_collected' }`，不得伪造 `shareId/title/createTime/status/receiveCode/shareUrl` 等字段
+7. IF 后续 `docs/115-api-docs.md` 补充分享 item schema，THEN THE Share_Service SHALL 只映射文档中明确采集到的字段
+8. WHEN `tab` 值不支持时，返回 HTTP 400 ProblemDetails
+9. **注**：三个分享接口当前采集样本均为失败或空列表响应（低置信度），成功 item 结构待实际验证
 
 ### 需求 23：用户中心聚合
 
@@ -431,7 +439,7 @@
    - **其他隐私**：`user_name_checking`、`user_name_prepub`、`qrcode_url`、`share_url`、`user_public`（权限配置对象）
    SHALL 在归一化层过滤或脱敏，严禁将 `data` 对象原样透传
 5. THE User_Service SHALL 处理 `vip.115.com/?ct=order&ac=get_yun_card` 响应字段：`{ num, url, vip_count, space_count, forever_count, sqcode_count, sqcode_cancel_count, 00_balance }`；其中 `00_balance`（以数字开头）需通过 `data["00_balance"]` 索引访问，归一化为 `balance`
-6. THE User_Service SHALL 展示空间占用时优先使用 API 返回的 `size_format` 字段
+6. THE User_Service SHALL 仅在 `docs/115-api-docs.md` 明确采集到空间详情字段时展示空间占用格式化字段；当前 `webapi.115.com/files/index_info` 仅采集 `data: object`，因此 `CloudDriveSpaceInfoDto` SHALL 标注 `schemaStatus='not_collected'`，不得伪造 `size_format`、总空间、已用空间或分类占比字段
 7. IF 任一子接口失败，THEN 对应子模块设为 `null`，其他正常返回（错误隔离）
 8. THE WebApi_Layer SHALL 提供细粒度端点：`GET /api/user/info`/`GET /api/user/vip`/`GET /api/user/balance`/`GET /api/user/storage`
 9. IF Cookie 无效，THEN 返回 HTTP 401 ProblemDetails
@@ -517,11 +525,11 @@
 
 #### 验收标准
 
-1. THE Metadata_Cache SHALL 按目录维度缓存文件列表元数据，支持配置 TTL
+1. THE Metadata_Cache SHALL 按用户 + 115 账号 + 目录维度对文件列表元数据使用短 TTL 缓存，默认 TTL 不超过 30 秒，支持配置调低或关闭
 2. THE Metadata_Cache SHALL 缓存用户基础信息 5 分钟（`user:info`）
 3. THE Metadata_Cache SHALL 缓存 VIP 状态 5 分钟（`user:vip`）
 4. THE Metadata_Cache SHALL 缓存存储空间 2 分钟（`user:storage`）
-5. THE Metadata_Cache SHALL NOT 缓存文件列表（实时性要求，或短 TTL 如 30 秒）
+5. THE Metadata_Cache SHALL NOT 对文件列表使用长 TTL 或跨写操作复用旧缓存；手动刷新与写操作成功后必须绕过或失效目录列表短 TTL 缓存
 6. WHEN 写操作成功后（上传/移动/复制/删除/重命名/还原/清空），THE File_Service SHALL 使受影响目录缓存失效（通过领域事件 `DirectoryContentChanged`）
 7. WHEN 用户主动刷新目录时，THE File_Service SHALL 绕过或重建缓存
 8. THE Metadata_Cache SHALL 只缓存 115 实际返回的数据，不得伪造字段
@@ -574,7 +582,7 @@
 ### 性能与响应
 
 1. 文件列表查询首屏 P95 响应时间 ≤ 1.5 秒（缓存命中场景 ≤ 300ms）
-2. 视频播放地址获取 P95 ≤ 2 秒
+2. 视频播放端点响应 P95 ≤ 2 秒；成功播放地址 schema 未采集时该指标仅覆盖错误/不可用空态返回
 3. 用户聚合接口 P95 ≤ 2 秒（并行子调用）
 4. 单个 API 调用默认超时 10 秒，批量上传/清空任务等长耗时操作不受限
 5. Polly 策略：瞬时错误重试 3 次 + 指数退避 (1s/2s/4s)，超过阈值熔断 30 秒
