@@ -19,7 +19,11 @@ internal sealed class FakeCloudDriveMetadataCache : ICloudDriveMetadataCache
         _store[cacheKey] = value;
     }
 
-    public async Task<T?> GetOrSetAsync<T>(string cacheKey, Func<Task<T>> factory, TimeSpan? ttl = null)
+    public async Task<T?> GetOrSetAsync<T>(
+        string cacheKey,
+        Func<CancellationToken, Task<T>> factory,
+        TimeSpan? ttl = null,
+        CancellationToken cancellationToken = default)
     {
         GetOrSetKeys.Add(cacheKey);
 
@@ -29,12 +33,16 @@ internal sealed class FakeCloudDriveMetadataCache : ICloudDriveMetadataCache
         }
 
         FactoryCallCount++;
-        T value = await factory();
+        T value = await factory(cancellationToken);
         _store[cacheKey] = value;
         return value;
     }
 
-    public Task InvalidateDirectoryAsync(Guid userId, string cloudAccountUid, string directoryId)
+    public Task InvalidateDirectoryAsync(
+        Guid userId,
+        string cloudAccountUid,
+        string directoryId,
+        CancellationToken cancellationToken = default)
     {
         InvalidatedDirectories.Add((userId, cloudAccountUid, directoryId));
 
@@ -50,7 +58,11 @@ internal sealed class FakeCloudDriveMetadataCache : ICloudDriveMetadataCache
         return Task.CompletedTask;
     }
 
-    public Task InvalidateFileAsync(Guid userId, string cloudAccountUid, string fileId)
+    public Task InvalidateFileAsync(
+        Guid userId,
+        string cloudAccountUid,
+        string fileId,
+        CancellationToken cancellationToken = default)
     {
         InvalidatedFiles.Add((userId, cloudAccountUid, fileId));
         return Task.CompletedTask;

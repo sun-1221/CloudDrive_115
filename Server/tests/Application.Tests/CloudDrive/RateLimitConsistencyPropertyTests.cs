@@ -60,13 +60,25 @@ public sealed class RateLimitConsistencyPropertyTests
     /// </summary>
     private sealed class AlwaysMissCache : ICloudDriveMetadataCache
     {
-        public async Task<T?> GetOrSetAsync<T>(string cacheKey, Func<Task<T>> factory, TimeSpan? ttl = null) =>
-            await factory();
+        public async Task<T?> GetOrSetAsync<T>(
+            string cacheKey,
+            Func<CancellationToken, Task<T>> factory,
+            TimeSpan? ttl = null,
+            CancellationToken cancellationToken = default) =>
+            await factory(cancellationToken);
 
-        public Task InvalidateDirectoryAsync(Guid userId, string cloudAccountUid, string directoryId) =>
+        public Task InvalidateDirectoryAsync(
+            Guid userId,
+            string cloudAccountUid,
+            string directoryId,
+            CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
-        public Task InvalidateFileAsync(Guid userId, string cloudAccountUid, string fileId) =>
+        public Task InvalidateFileAsync(
+            Guid userId,
+            string cloudAccountUid,
+            string fileId,
+            CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
     }
 

@@ -28,4 +28,12 @@ public interface ICookieSessionRepository : IRepository<CookieSession, Guid>
     Task<IReadOnlyList<CookieSession>> GetByUserAsync(
         Guid userId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 查询全部 Active 或冷却中的 Cookie 会话。
+    /// </summary>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>Active 或 Invalidated 会话只读列表；无数据时返回空列表。</returns>
+    Task<IReadOnlyList<CookieSession>> GetAvailableSessionsAsync(
+        CancellationToken cancellationToken = default);
 }

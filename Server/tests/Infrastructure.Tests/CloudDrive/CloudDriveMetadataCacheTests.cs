@@ -22,12 +22,12 @@ public sealed class CloudDriveMetadataCacheTests
         int factoryCalls = 0;
 
         // Act
-        string? first = await cache.GetOrSetAsync(cacheKey, () =>
+        string? first = await cache.GetOrSetAsync(cacheKey, _ =>
         {
             factoryCalls++;
             return Task.FromResult("official-data");
         });
-        string? second = await cache.GetOrSetAsync(cacheKey, () =>
+        string? second = await cache.GetOrSetAsync(cacheKey, _ =>
         {
             factoryCalls++;
             return Task.FromResult("new-data");
@@ -59,9 +59,9 @@ public sealed class CloudDriveMetadataCacheTests
         await cache.InvalidateDirectoryAsync(userId, "115001", "dir-1");
 
         // Assert
-        Assert.Equal("reloaded", await cache.GetOrSetAsync(targetKey, () => Task.FromResult("reloaded")));
-        Assert.Equal("other-directory", await cache.GetOrSetAsync(otherDirectoryKey, () => Task.FromResult("miss")));
-        Assert.Equal("other-user", await cache.GetOrSetAsync(otherUserKey, () => Task.FromResult("miss")));
+        Assert.Equal("reloaded", await cache.GetOrSetAsync(targetKey, _ => Task.FromResult("reloaded")));
+        Assert.Equal("other-directory", await cache.GetOrSetAsync(otherDirectoryKey, _ => Task.FromResult("miss")));
+        Assert.Equal("other-user", await cache.GetOrSetAsync(otherUserKey, _ => Task.FromResult("miss")));
     }
 
     [Fact]
@@ -80,8 +80,8 @@ public sealed class CloudDriveMetadataCacheTests
         await cache.InvalidateFileAsync(userId, "115001", "file-1");
 
         // Assert
-        Assert.Equal("reloaded", await cache.GetOrSetAsync(fileKey, () => Task.FromResult("reloaded")));
-        Assert.Equal("file-2", await cache.GetOrSetAsync(otherFileKey, () => Task.FromResult("miss")));
+        Assert.Equal("reloaded", await cache.GetOrSetAsync(fileKey, _ => Task.FromResult("reloaded")));
+        Assert.Equal("file-2", await cache.GetOrSetAsync(otherFileKey, _ => Task.FromResult("miss")));
     }
 
     [Fact]
@@ -94,13 +94,13 @@ public sealed class CloudDriveMetadataCacheTests
         int factoryCalls = 0;
 
         // Act
-        _ = await cache.GetOrSetAsync(cacheKey, () =>
+        _ = await cache.GetOrSetAsync(cacheKey, _ =>
         {
             factoryCalls++;
             return Task.FromResult("first");
         }, TimeSpan.FromMilliseconds(50));
         await Task.Delay(80);
-        string? reloaded = await cache.GetOrSetAsync(cacheKey, () =>
+        string? reloaded = await cache.GetOrSetAsync(cacheKey, _ =>
         {
             factoryCalls++;
             return Task.FromResult("second");
@@ -119,12 +119,12 @@ public sealed class CloudDriveMetadataCacheTests
 
         // Act & Assert
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => cache.GetOrSetAsync("cloud-drive:metadata:cookie:UID=secret", () => Task.FromResult("bad")));
+            () => cache.GetOrSetAsync("cloud-drive:metadata:cookie:UID=secret", _ => Task.FromResult("bad")));
     }
 
     private static async Task SeedAsync(CloudDriveMetadataCache cache, string key, string value)
     {
-        _ = await cache.GetOrSetAsync(key, () => Task.FromResult(value));
+        _ = await cache.GetOrSetAsync(key, _ => Task.FromResult(value));
     }
 
     private CloudDriveMetadataCache CreateCache(CloudDriveAppConfig? config = null)

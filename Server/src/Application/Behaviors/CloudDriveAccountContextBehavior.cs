@@ -17,11 +17,11 @@ public sealed class CloudDriveAccountContextBehavior<TRequest, TResponse>
     : IPipelineBehavior<TRequest, TResponse>
     where TRequest : notnull
 {
-    private readonly IServiceProvider _serviceProvider;
+    private readonly ICloudDriveAccountContextResolver _resolver;
 
-    public CloudDriveAccountContextBehavior(IServiceProvider serviceProvider)
+    public CloudDriveAccountContextBehavior(ICloudDriveAccountContextResolver resolver)
     {
-        _serviceProvider = serviceProvider;
+        _resolver = resolver;
     }
 
     /// <inheritdoc />
@@ -40,15 +40,8 @@ public sealed class CloudDriveAccountContextBehavior<TRequest, TResponse>
             return await next(cancellationToken);
         }
 
-        ICloudDriveAccountContextResolver? resolver = _serviceProvider.GetService(
-            typeof(ICloudDriveAccountContextResolver)) as ICloudDriveAccountContextResolver;
-        if (resolver is null)
-        {
-            return await next(cancellationToken);
-        }
-
         Guid userId = GetUserId(request);
-        Result<CloudDriveAccountContext> contextResult = await resolver.ResolveAsync(userId, cancellationToken);
+        Result<CloudDriveAccountContext> contextResult = await _resolver.ResolveAsync(userId, cancellationToken);
         if (contextResult.IsFailure)
         {
             return CreateFailureResponse(contextResult.Error);

@@ -112,4 +112,17 @@ internal sealed class CookieSessionRepository(
             .OrderBy(session => session.CreationTime, OrderByType.Desc)
             .ToListAsync(cancellationToken);
     }
+
+    /// <summary>
+    /// 查询全部 Active 或冷却中的 Cookie 会话。
+    /// </summary>
+    public async Task<IReadOnlyList<CookieSession>> GetAvailableSessionsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await db.Queryable<CookieSession>()
+            .Where(session => session.Status == Domain.Enums.CookieSessionStatus.Active
+                || session.Status == Domain.Enums.CookieSessionStatus.Invalidated)
+            .OrderBy(session => session.CreationTime, OrderByType.Desc)
+            .ToListAsync(cancellationToken);
+    }
 }

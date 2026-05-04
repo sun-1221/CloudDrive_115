@@ -13,15 +13,27 @@ public interface ICloudDriveMetadataCache
     /// <summary>
     /// 获取或设置缓存。缓存未命中时调用 <paramref name="factory"/> 获取数据并写入缓存。
     /// </summary>
-    Task<T?> GetOrSetAsync<T>(string cacheKey, Func<Task<T>> factory, TimeSpan? ttl = null);
+    Task<T?> GetOrSetAsync<T>(
+        string cacheKey,
+        Func<CancellationToken, Task<T>> factory,
+        TimeSpan? ttl = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 使指定目录缓存失效。
     /// </summary>
-    Task InvalidateDirectoryAsync(Guid userId, string cloudAccountUid, string directoryId);
+    Task InvalidateDirectoryAsync(
+        Guid userId,
+        string cloudAccountUid,
+        string directoryId,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 使指定文件缓存失效。
     /// </summary>
-    Task InvalidateFileAsync(Guid userId, string cloudAccountUid, string fileId);
+    Task InvalidateFileAsync(
+        Guid userId,
+        string cloudAccountUid,
+        string fileId,
+        CancellationToken cancellationToken = default);
 }

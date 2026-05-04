@@ -52,19 +52,27 @@ public sealed class CacheConsistencyPropertyTests
 
         public void Seed(string key, object value) => _store[key] = value;
 
-        public Task<T?> GetOrSetAsync<T>(string cacheKey, Func<Task<T>> factory, TimeSpan? ttl = null)
+        public async Task<T?> GetOrSetAsync<T>(
+            string cacheKey,
+            Func<CancellationToken, Task<T>> factory,
+            TimeSpan? ttl = null,
+            CancellationToken cancellationToken = default)
         {
             if (_store.TryGetValue(cacheKey, out object? cached))
-                return Task.FromResult((T?)cached);
-
-            return factory().ContinueWith(t =>
             {
-                _store[cacheKey] = t.Result!;
-                return (T?)t.Result;
-            });
+                return (T?)cached;
+            }
+
+            T value = await factory(cancellationToken);
+            _store[cacheKey] = value!;
+            return value;
         }
 
-        public Task InvalidateDirectoryAsync(Guid userId, string cloudAccountUid, string directoryId)
+        public Task InvalidateDirectoryAsync(
+            Guid userId,
+            string cloudAccountUid,
+            string directoryId,
+            CancellationToken cancellationToken = default)
         {
             InvalidatedDirectories.Add((userId, cloudAccountUid, directoryId));
             // 移除匹配的缓存键
@@ -73,7 +81,11 @@ public sealed class CacheConsistencyPropertyTests
             return Task.CompletedTask;
         }
 
-        public Task InvalidateFileAsync(Guid userId, string cloudAccountUid, string fileId) =>
+        public Task InvalidateFileAsync(
+            Guid userId,
+            string cloudAccountUid,
+            string fileId,
+            CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
     }
 

@@ -5,8 +5,10 @@ using Application.CloudDrive;
 
 using Domain.Exceptions;
 
-using Microsoft.Extensions.Options;
+using Infrastructure.Diagnostics;
+
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Infrastructure.CloudDrive;
 
@@ -36,6 +38,7 @@ internal sealed class CloudDriveRateLimiter(
             config,
             waitDelay =>
             {
+                CloudDriveMetrics.RecordRateLimitQueued(normalizedCategory);
                 logger.LogInformation(
                     "115 本地限流排队 UserId={UserId}, CloudAccountUid={CloudAccountUid}, Category={Category}, DelayMs={DelayMs}",
                     userId,
@@ -45,6 +48,7 @@ internal sealed class CloudDriveRateLimiter(
             },
             () =>
             {
+                CloudDriveMetrics.RecordRateLimitRejected(normalizedCategory);
                 logger.LogWarning(
                     "115 本地限流拒绝请求 UserId={UserId}, CloudAccountUid={CloudAccountUid}, Category={Category}",
                     userId,
@@ -66,6 +70,7 @@ internal sealed class CloudDriveRateLimiter(
             _ => new TokenBucket(GetLimit(config, normalizedCategory), config.RateLimitMaxQueueLength));
 
         bucket.RecordThrottleSignal(config);
+        CloudDriveMetrics.RecordRateLimitThrottleSignal(normalizedCategory);
         logger.LogWarning(
             "115 上游频控信号已记录 UserId={UserId}, CloudAccountUid={CloudAccountUid}, Category={Category}",
             userId,

@@ -16,8 +16,7 @@ public sealed class CloudDriveAccountContextBehaviorTests
             TestQuery.UserIdValue,
             "115001",
             "115001")));
-        var provider = new StubServiceProvider(resolver);
-        var behavior = new CloudDriveAccountContextBehavior<TestQuery, Result<string>>(provider);
+        var behavior = new CloudDriveAccountContextBehavior<TestQuery, Result<string>>(resolver);
         var input = new GetFileListInput();
         var query = new TestQuery(TestQuery.UserIdValue, input);
 
@@ -37,8 +36,7 @@ public sealed class CloudDriveAccountContextBehaviorTests
         var resolver = new StubResolver(Result.Failure<CloudDriveAccountContext>(new Error(
             "cloud_drive_account_context_unavailable",
             "missing")));
-        var provider = new StubServiceProvider(resolver);
-        var behavior = new CloudDriveAccountContextBehavior<TestQuery, Result<string>>(provider);
+        var behavior = new CloudDriveAccountContextBehavior<TestQuery, Result<string>>(resolver);
 
         Result<string> result = await behavior.Handle(
             new TestQuery(TestQuery.UserIdValue, new GetFileListInput()),
@@ -64,11 +62,4 @@ public sealed class CloudDriveAccountContextBehaviorTests
         }
     }
 
-    private sealed class StubServiceProvider(ICloudDriveAccountContextResolver resolver) : IServiceProvider
-    {
-        public object? GetService(Type serviceType)
-        {
-            return serviceType == typeof(ICloudDriveAccountContextResolver) ? resolver : null;
-        }
-    }
 }

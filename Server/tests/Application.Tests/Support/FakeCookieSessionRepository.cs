@@ -51,4 +51,15 @@ internal sealed class FakeCookieSessionRepository : ICookieSessionRepository
             .ToList().AsReadOnly();
         return Task.FromResult(result);
     }
+
+    public Task<IReadOnlyList<CookieSession>> GetAvailableSessionsAsync(CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<CookieSession> result = _store.Values
+            .Where(s => s.Status is Domain.Enums.CookieSessionStatus.Active
+                or Domain.Enums.CookieSessionStatus.Invalidated)
+            .ToList()
+            .AsReadOnly();
+
+        return Task.FromResult(result);
+    }
 }

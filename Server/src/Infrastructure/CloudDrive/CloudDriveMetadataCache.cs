@@ -16,7 +16,11 @@ internal sealed class CloudDriveMetadataCache(
 {
     private readonly ConcurrentDictionary<string, byte> _knownKeys = new(StringComparer.Ordinal);
 
-    public async Task<T?> GetOrSetAsync<T>(string cacheKey, Func<Task<T>> factory, TimeSpan? ttl = null)
+    public async Task<T?> GetOrSetAsync<T>(
+        string cacheKey,
+        Func<CancellationToken, Task<T>> factory,
+        TimeSpan? ttl = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(cacheKey);
         ArgumentNullException.ThrowIfNull(factory);
@@ -25,33 +29,41 @@ internal sealed class CloudDriveMetadataCache(
         TimeSpan effectiveTtl = ttl ?? TimeSpan.FromSeconds(configOptions.Value.CacheTtlSeconds);
         T? value = await cache.GetOrSetAsync(
             cacheKey,
-            async _ => await factory(),
+            async token => await factory(token),
             effectiveTtl,
-            CancellationToken.None);
+            cancellationToken);
         _knownKeys.TryAdd(cacheKey, 0);
         return value;
     }
 
-    public async Task InvalidateDirectoryAsync(Guid userId, string cloudAccountUid, string directoryId)
+    public async Task InvalidateDirectoryAsync(
+        Guid userId,
+        string cloudAccountUid,
+        string directoryId,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(cloudAccountUid);
         ArgumentException.ThrowIfNullOrWhiteSpace(directoryId);
 
         foreach (string key in FindKeys(BuildDirectoryPrefix(userId, cloudAccountUid, directoryId)))
         {
-            await cache.RemoveAsync(key);
+            await cache.RemoveAsync(key, cancellationToken);
             _knownKeys.TryRemove(key, out _);
         }
     }
 
-    public async Task InvalidateFileAsync(Guid userId, string cloudAccountUid, string fileId)
+    public async Task InvalidateFileAsync(
+        Guid userId,
+        string cloudAccountUid,
+        string fileId,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(cloudAccountUid);
         ArgumentException.ThrowIfNullOrWhiteSpace(fileId);
 
         foreach (string key in FindKeys(BuildFilePrefix(userId, cloudAccountUid, fileId)))
         {
-            await cache.RemoveAsync(key);
+            await cache.RemoveAsync(key, cancellationToken);
             _knownKeys.TryRemove(key, out _);
         }
     }
