@@ -145,7 +145,8 @@ public sealed class CookieSessionQueryHandlerTests
         Assert.Equal(10, result.Value.SpaceInfo?.AllTotalBytes);
         Assert.Equal("VIP", result.Value.VipInfo?.LevelName);
         Assert.Equal(["files/index_info", "user/info", "user/vip_limit"], gateway.WebEndpoints.Order());
-        Assert.Equal(["."], gateway.UserCenterEndpoints);
+        Assert.Contains("proapi/3.0/index.php", gateway.UserCenterEndpoints);
+        Assert.Equal(2, gateway.UserCenterEndpoints.Count(endpoint => endpoint == "."));
     }
 
     [Fact]

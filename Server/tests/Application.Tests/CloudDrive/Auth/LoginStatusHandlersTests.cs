@@ -4,7 +4,6 @@ using Application.Abstractions.CloudDrive;
 using Application.CloudDrive;
 using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
-using Application.Commands;
 using Application.Queries;
 using Application.Tests.Support;
 
@@ -14,8 +13,6 @@ using Domain.Exceptions;
 using Domain.Repositories;
 using Domain.Results;
 using Domain.ValueObjects;
-
-using MediatR;
 
 using Microsoft.Extensions.Options;
 
@@ -57,8 +54,7 @@ public sealed class LoginStatusHandlersTests
     {
         var repository = new FakeCookieSessionRepository();
         var gateway = new StubGateway(JsonDocument.Parse("""{"state":true}""").RootElement.Clone());
-        var sender = new RecordingSender();
-        var handler = CreateLoginHandler(repository, gateway, sender, featureEnabled: true);
+        var handler = CreateLoginHandler(repository, gateway, featureEnabled: true);
 
         Result<CloudDriveLoginStatusDto> result = await handler.Handle(
             new GetLoginStatusQuery(Guid.NewGuid(), new CloudDriveAccountScopedInput { CloudAccountUid = "115001" }),
@@ -68,16 +64,14 @@ public sealed class LoginStatusHandlersTests
         Assert.True(result.Value.IsLoggedIn);
         Assert.Equal("files", gateway.LastEndpoint);
         Assert.Equal("auth", gateway.LastContext?.Category);
-        Assert.Empty(sender.SentRequests);
     }
 
     [Fact]
-    public async Task GetLoginStatusQueryHandler_WhenCookieInvalidated_SendsCooldownCommandAndReturnsFalse()
+    public async Task GetLoginStatusQueryHandler_WhenCookieInvalidated_ReturnsFalseWithoutSideEffects()
     {
         var repository = new FakeCookieSessionRepository();
         var gateway = new StubGateway(new CloudDriveCookieInvalidatedException(errorCode: "login_required"));
-        var sender = new RecordingSender();
-        var handler = CreateLoginHandler(repository, gateway, sender, featureEnabled: true);
+        var handler = CreateLoginHandler(repository, gateway, featureEnabled: true);
 
         Guid userId = Guid.NewGuid();
         Result<CloudDriveLoginStatusDto> result = await handler.Handle(
@@ -86,10 +80,8 @@ public sealed class LoginStatusHandlersTests
 
         Assert.True(result.IsSuccess);
         Assert.False(result.Value.IsLoggedIn);
-        EnterCookieCooldownCommand command = Assert.IsType<EnterCookieCooldownCommand>(Assert.Single(sender.SentRequests));
-        Assert.Equal(userId, command.UserId);
-        Assert.Equal("115001", command.Input.CloudAccountUid);
-        Assert.Equal("login_required", command.Input.Reason);
+        Assert.Equal("login_required", result.Value.FailureReason);
+        Assert.Equal("115001", result.Value.CloudAccountUid);
     }
 
     [Fact]
@@ -102,8 +94,7 @@ public sealed class LoginStatusHandlersTests
         await manager.MarkInvalidatedAsync(userId, "115001", "login_required");
 
         var gateway = new StubGateway(JsonDocument.Parse("""{"state":true}""").RootElement.Clone());
-        var sender = new RecordingSender();
-        var handler = CreateLoginHandler(repository, gateway, sender, featureEnabled: true);
+        var handler = CreateLoginHandler(repository, gateway, featureEnabled: true);
 
         Result<CloudDriveLoginStatusDto> result = await handler.Handle(
             new GetLoginStatusQuery(userId, new CloudDriveAccountScopedInput { CloudAccountUid = "115001" }),
@@ -113,7 +104,6 @@ public sealed class LoginStatusHandlersTests
         Assert.False(result.Value.IsLoggedIn);
         Assert.Equal("login_required", result.Value.FailureReason);
         Assert.Null(gateway.LastEndpoint);
-        Assert.Empty(sender.SentRequests);
     }
 
     private static CookieSessionManager CreateManager(FakeCookieSessionRepository repository, bool featureEnabled)
@@ -129,56 +119,12 @@ public sealed class LoginStatusHandlersTests
     private static GetLoginStatusQueryHandler CreateLoginHandler(
         ICookieSessionRepository repository,
         ICloudDriveOpenApiGateway gateway,
-        ISender sender,
         bool featureEnabled)
     {
         return new GetLoginStatusQueryHandler(
             repository,
             gateway,
-            sender,
             Options.Create(new CloudDriveAppConfig { CloudDriveFeatureEnabled = featureEnabled }));
-    }
-
-    private sealed class RecordingSender : ISender
-    {
-        public List<object> SentRequests { get; } = [];
-
-        public Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default)
-        {
-            SentRequests.Add(request);
-            object response = request switch
-            {
-                EnterCookieCooldownCommand => Result.Success(),
-                _ => throw new NotSupportedException(request.GetType().Name),
-            };
-
-            return Task.FromResult((TResponse)response);
-        }
-
-        public Task Send<TRequest>(TRequest request, CancellationToken cancellationToken = default)
-            where TRequest : IRequest
-        {
-            SentRequests.Add(request);
-            return Task.CompletedTask;
-        }
-
-        public Task<object?> Send(object request, CancellationToken cancellationToken = default)
-        {
-            SentRequests.Add(request);
-            return Task.FromResult<object?>(null);
-        }
-
-        public IAsyncEnumerable<TResponse> CreateStream<TResponse>(
-            IStreamRequest<TResponse> request,
-            CancellationToken cancellationToken = default)
-        {
-            throw new NotSupportedException();
-        }
-
-        public IAsyncEnumerable<object?> CreateStream(object request, CancellationToken cancellationToken = default)
-        {
-            throw new NotSupportedException();
-        }
     }
 
     private sealed class StubGateway(object responseOrException) : ICloudDriveOpenApiGateway

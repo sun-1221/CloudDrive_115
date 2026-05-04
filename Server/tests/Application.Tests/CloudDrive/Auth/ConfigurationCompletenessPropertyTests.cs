@@ -222,7 +222,7 @@ public sealed class ConfigurationCompletenessPropertyTests
             metadataCache,
             rateLimiter,
             new UpsertCookieSessionCommandHandler(manager, repository, metadataCache, rateLimiter, disabledHandlerConfig),
-            new GetLoginStatusQueryHandler(repository, gateway, sender, disabledHandlerConfig),
+            new GetLoginStatusQueryHandler(repository, gateway, disabledHandlerConfig),
             new EnterCookieCooldownCommandHandler(manager, disabledHandlerConfig),
             new GetBoundAccountsQueryHandler(manager, disabledHandlerConfig),
             new GetUserInfoQueryHandler(repository, userAggregationService, disabledHandlerConfig),
@@ -262,7 +262,7 @@ public sealed class ConfigurationCompletenessPropertyTests
         return new EnabledHandlerContext(
             userId,
             new UpsertCookieSessionCommandHandler(manager, repository, metadataCache, rateLimiter, config),
-            new GetLoginStatusQueryHandler(repository, gateway, sender, config),
+            new GetLoginStatusQueryHandler(repository, gateway, config),
             new GetBoundAccountsQueryHandler(manager, config),
             new GetUserInfoQueryHandler(repository, userAggregationService, config),
             new RevokeCookieSessionCommandHandler(manager, metadataCache, rateLimiter, config));

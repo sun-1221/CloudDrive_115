@@ -8,5 +8,5 @@ public class CloudDriveAccountScopedInput
     /// <summary>
     /// 获取或设置 115 账号 UID。
     /// </summary>
-    public string CloudAccountUid { get; set; } = string.Empty;
+    public virtual string CloudAccountUid { get; set; } = string.Empty;
 }

@@ -10,8 +10,6 @@ using Domain.Exceptions;
 using Domain.Repositories;
 using Domain.Results;
 
-using MediatR;
-
 using Microsoft.Extensions.Options;
 
 namespace Application.CloudDrive.Auth;
@@ -19,7 +17,6 @@ namespace Application.CloudDrive.Auth;
 internal sealed class GetLoginStatusQueryHandler(
     ICookieSessionRepository cookieSessionRepository,
     ICloudDriveOpenApiGateway openApiGateway,
-    ISender sender,
     IOptions<CloudDriveAppConfig> configOptions)
     : IQueryHandler<GetLoginStatusQuery, CloudDriveLoginStatusDto>
 {
@@ -69,16 +66,9 @@ internal sealed class GetLoginStatusQueryHandler(
         }
         catch (CloudDriveCookieInvalidatedException ex)
         {
-            await sender.Send(
-                new EnterCookieCooldownCommand(
-                    request.UserId,
-                    new EnterCookieCooldownInput
-                    {
-                        CloudAccountUid = request.Input.CloudAccountUid,
-                        Reason = ex.ErrorCode ?? "cookie_invalid",
-                    }),
-                cancellationToken);
-
+            // CloudDriveApiClient 在检测到 401/403 或业务登录失效时已通过
+            // CookieSessionManager.MarkInvalidatedAsync 持久化失效状态和冷却期，
+            // QueryHandler 不再发出写命令，保持无副作用（CD0007）。
             return Result.Success(new CloudDriveLoginStatusDto
             {
                 CloudAccountUid = request.Input.CloudAccountUid,

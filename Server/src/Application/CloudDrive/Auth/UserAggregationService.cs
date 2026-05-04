@@ -29,30 +29,39 @@ public class UserAggregationService(
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
         Task<JsonElement?> profileTask = FetchProfileAsync(userId, cloudAccountUid, cancellationToken);
+        Task<JsonElement?> myProfileTask = FetchMyProfileAsync(userId, cloudAccountUid, cancellationToken);
         Task<JsonElement?> spaceTask = FetchSpaceAsync(userId, cloudAccountUid, cancellationToken);
         Task<JsonElement?> vipLimitTask = FetchVipLimitAsync(userId, cloudAccountUid, cancellationToken);
         Task<JsonElement?> vipCardTask = FetchVipCardAsync(userId, cloudAccountUid, cancellationToken);
+        Task<JsonElement?> balanceTask = FetchBalanceAsync(userId, cloudAccountUid, cancellationToken);
 
-        await Task.WhenAll(profileTask, spaceTask, vipLimitTask, vipCardTask);
+        await Task.WhenAll(profileTask, myProfileTask, spaceTask, vipLimitTask, vipCardTask, balanceTask);
 
         JsonElement? profile = await profileTask;
+        JsonElement? myProfile = await myProfileTask;
         JsonElement? space = await spaceTask;
         JsonElement? vipLimit = await vipLimitTask;
         JsonElement? vipCard = await vipCardTask;
+        JsonElement? balance = await balanceTask;
 
-        if (profile is null && space is null && vipLimit is null && vipCard is null)
+        if (profile is null
+            && myProfile is null
+            && space is null
+            && vipLimit is null
+            && vipCard is null
+            && balance is null)
         {
             throw new CloudDriveApiException(
                 $"115 用户信息聚合全部子接口失败 CloudAccountUid={cloudAccountUid}",
                 "user_aggregation_all_sources_failed");
         }
 
-        CloudDriveUserInfoDto result = profile.HasValue
-            ? MapProfile(profile.Value, cloudAccountUid)
+        CloudDriveUserInfoDto result = profile.HasValue || myProfile.HasValue
+            ? MapProfile(profile, myProfile, cloudAccountUid)
             : new CloudDriveUserInfoDto { CloudAccountUid = cloudAccountUid };
 
         result.SpaceInfo = space.HasValue ? MapSpace(space.Value) : null;
-        result.VipInfo = MapVip(vipLimit, vipCard);
+        result.VipInfo = MapVip(vipLimit, vipCard, balance);
 
         return result;
     }
@@ -73,6 +82,31 @@ public class UserAggregationService(
                 context,
                 cancellationToken),
             "user/info",
+            cloudAccountUid);
+    }
+
+    private Task<JsonElement?> FetchMyProfileAsync(Guid userId, string cloudAccountUid, CancellationToken cancellationToken)
+    {
+        var context = new CloudDriveApiContext
+        {
+            TargetDomain = configOptions.Value.MyApiBaseUrl,
+            Category = "user",
+            QueryParameters = new Dictionary<string, string>
+            {
+                ["method"] = "user_info",
+                ["uid"] = cloudAccountUid,
+            },
+        };
+
+        return FetchAsync(
+            () => openApiGateway.SendUserCenterRequestAsync<JsonElement>(
+                userId,
+                cloudAccountUid,
+                HttpMethod.Get,
+                "proapi/3.0/index.php",
+                context,
+                cancellationToken),
+            "my/user_info",
             cloudAccountUid);
     }
 
@@ -147,6 +181,26 @@ public class UserAggregationService(
             cloudAccountUid);
     }
 
+    private Task<JsonElement?> FetchBalanceAsync(Guid userId, string cloudAccountUid, CancellationToken cancellationToken)
+    {
+        var context = new CloudDriveApiContext
+        {
+            TargetDomain = configOptions.Value.PayApiBaseUrl,
+            Category = "user",
+        };
+
+        return FetchAsync(
+            () => openApiGateway.SendUserCenterRequestAsync<JsonElement>(
+                userId,
+                cloudAccountUid,
+                HttpMethod.Get,
+                ".",
+                context,
+                cancellationToken),
+            "pay/balance",
+            cloudAccountUid);
+    }
+
     private async Task<JsonElement?> FetchAsync(
         Func<Task<JsonElement>> fetch,
         string subEndpoint,
@@ -164,7 +218,7 @@ public class UserAggregationService(
         {
             throw;
         }
-        catch (Exception ex) when (ex is CloudDriveNetworkException or CloudDriveApiException)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(
                 ex,
@@ -176,19 +230,34 @@ public class UserAggregationService(
         }
     }
 
-    private static CloudDriveUserInfoDto MapProfile(JsonElement response, string cloudAccountUid)
+    private static CloudDriveUserInfoDto MapProfile(JsonElement? webProfile, JsonElement? myProfile, string cloudAccountUid)
     {
-        JsonElement source = TryGetObject(response, "data", out JsonElement data) ? data : response;
+        JsonElement? webSource = null;
+        if (webProfile.HasValue)
+        {
+            webSource = TryGetObject(webProfile.Value, "data", out JsonElement data) ? data : webProfile.Value;
+        }
+
+        JsonElement? mySource = null;
+        if (myProfile.HasValue)
+        {
+            mySource = TryGetObject(myProfile.Value, "data", out JsonElement data) ? data : myProfile.Value;
+        }
 
         return new CloudDriveUserInfoDto
         {
             CloudAccountUid = cloudAccountUid,
-            UserName = ReadString(source, "user_name")
-                ?? ReadString(source, "nickname")
+            UserName = ReadString(webSource, "user_name")
+                ?? ReadString(mySource, "user_name")
+                ?? ReadString(webSource, "nickname")
+                ?? ReadString(mySource, "nickname")
                 ?? string.Empty,
-            AvatarSmallUrl = ReadString(source, "user_face_s") ?? ReadString(source, "user_face"),
-            AvatarMediumUrl = ReadString(source, "user_face_m"),
-            AvatarLargeUrl = ReadString(source, "user_face_l"),
+            AvatarSmallUrl = ReadString(webSource, "user_face_s")
+                ?? ReadString(mySource, "user_face_s")
+                ?? ReadString(webSource, "user_face")
+                ?? ReadString(mySource, "user_face"),
+            AvatarMediumUrl = ReadString(webSource, "user_face_m") ?? ReadString(mySource, "user_face_m"),
+            AvatarLargeUrl = ReadString(webSource, "user_face_l") ?? ReadString(mySource, "user_face_l"),
         };
     }
 
@@ -228,7 +297,7 @@ public class UserAggregationService(
         };
     }
 
-    private static CloudDriveVipInfoDto? MapVip(JsonElement? vipLimit, JsonElement? vipCard)
+    private static CloudDriveVipInfoDto? MapVip(JsonElement? vipLimit, JsonElement? vipCard, JsonElement? balance)
     {
         JsonElement? limitSource = null;
         if (vipLimit.HasValue)
@@ -261,6 +330,21 @@ public class UserAggregationService(
             levelName = $"VIP x{vipCount}";
         }
 
+        if (levelName is null
+            && cardSource.HasValue
+            && ReadInt64(cardSource.Value, "00_balance") is long cardBalance)
+        {
+            levelName = $"Balance {cardBalance}";
+        }
+
+        if (levelName is null
+            && balance.HasValue
+            && ReadInt64(TryGetObject(balance.Value, "data", out JsonElement balanceData) ? balanceData : balance.Value, "00_balance")
+                is long payBalance)
+        {
+            levelName = $"Balance {payBalance}";
+        }
+
         if (levelName is null && expire is null)
         {
             return null;
@@ -286,10 +370,11 @@ public class UserAggregationService(
         return false;
     }
 
-    private static string? ReadString(JsonElement source, string propertyName)
+    private static string? ReadString(JsonElement? source, string propertyName)
     {
-        if (source.ValueKind != JsonValueKind.Object
-            || !source.TryGetProperty(propertyName, out JsonElement value))
+        if (!source.HasValue
+            || source.Value.ValueKind != JsonValueKind.Object
+            || !source.Value.TryGetProperty(propertyName, out JsonElement value))
         {
             return null;
         }

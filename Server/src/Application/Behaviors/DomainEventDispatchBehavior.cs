@@ -56,7 +56,7 @@ public sealed class DomainEventDispatchBehavior<TRequest, TResponse>(
 
             foreach (DomainEvent domainEvent in events)
             {
-                await publisher.Publish((object)CreateNotification(domainEvent), cancellationToken);
+                await publisher.Publish((object)DomainEventNotificationFactory.Create(domainEvent), cancellationToken);
             }
 
             entity.ClearDomainEvents();
@@ -65,12 +65,6 @@ public sealed class DomainEventDispatchBehavior<TRequest, TResponse>(
         domainEventSource.Clear();
 
         return response;
-    }
-
-    private static INotification CreateNotification(DomainEvent domainEvent)
-    {
-        Type notificationType = typeof(DomainEventNotification<>).MakeGenericType(domainEvent.GetType());
-        return (INotification)Activator.CreateInstance(notificationType, domainEvent)!;
     }
 
     private static bool DetermineIsCommand()
