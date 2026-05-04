@@ -1,38 +1,40 @@
 # 115 网页端接口文档
 
-> 基于自动化流量采集生成  
-> runId: `20260408145821-oqg9xv`  
-> 自动采集时间: 2026-04-08  
-> 手动补充采集: 2026-04-18（上传 `uplb.115.com` + OSS 直传、转码提交、播放进度读写）
+> 基于自动化流量采集生成
+> 最新自动采集 runId: `20260504073432-ck05g2`
+> 最新自动采集时间: 2026-05-04
+> 历史自动采集 runId: `20260408145821-oqg9xv`（2026-04-08）
+> 手动补充采集: 2026-04-18（上传 `uplb.115.com` + OSS 直传）
 
 ## 概览
 
 | 指标 | 数值 |
 |---|---|
-| 唯一接口数 | 71（65 自动 + 6 手动补充） |
-| GET 接口 | 64 |
+| 唯一接口数 | 76（74 最新自动 + 2 手动上传补充） |
+| GET 接口 | 69 |
 | POST 接口 | 7 |
 | 涉及域名 | 17 |
-| 采集场景 | files, home, offline, recycle, search, share, video, upload¹, transcode¹, video-history¹ |
+| 采集场景 | files, home, offline, recycle, search, share, transcode, video, video-history, upload¹ |
 
-> ¹ 手动补充采集场景（2026-04-18），详见 `collector/output/manual-capture/manual-20260418132315-summary.md`
+> 最新自动采集报告：`collector/output/runs/20260504073432-ck05g2/reports/api-docs.md`。
+> ¹ 上传链路为手动补充采集场景（2026-04-18），详见 `collector/output/manual-capture/manual-20260418132315-summary.md`。
 
 ---
 
 ## webapi.115.com
 
-> 业务接口: 23 个（19 自动 + 4 手动补充）
+> 业务接口: 24 个
 
 ### `GET` /category/shortcut
 
 | 属性 | 值 |
 |---|---|
 | **完整 URL** | `https://webapi.115.com/category/shortcut` |
-| **样本数** | 10 |
+| **样本数** | 12 |
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history, video |
 
 **响应体 Schema:**
 
@@ -50,11 +52,11 @@
 | 属性 | 值 |
 |---|---|
 | **完整 URL** | `https://webapi.115.com/files?aid=1&cid=0&o=user_ptime&asc=0&offset=0&show_dir=1&limit=40&code=&scid=&snap=0&natsort=1&record_open_time=1&count_folders` |
-| **样本数** | 10 |
+| **样本数** | 12 |
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history, video |
 
 **Query 参数:**
 
@@ -81,7 +83,51 @@
 
 ```json
 {
-  "data": "object",
+  "data": {
+    "_type": "array",
+    "_itemShape": {
+      "fid": "string",
+      "cid": "string",
+      "aid": "string",
+      "pid": "string",
+      "n": "string",
+      "s": "number|string",
+      "sta": "number|string",
+      "pt": "string",
+      "pc": "string",
+      "fc": "number",
+      "p": "number",
+      "m": "number|string",
+      "star_time": "number",
+      "t": "string",
+      "te": "string",
+      "tu": "string",
+      "tp": "string",
+      "to": "number",
+      "d": "number",
+      "c": "number|string",
+      "sh": "number|string",
+      "e": "string",
+      "ico": "string",
+      "class": "string",
+      "fdes": "number",
+      "hdf": "number",
+      "sha": "string",
+      "q": "number",
+      "fvs": "number",
+      "check_code": "number",
+      "check_msg": "string",
+      "fuuid": "number",
+      "ec": "number",
+      "fl": "array",
+      "u": "string",
+      "iv": "number",
+      "score": "number",
+      "is_top": "number",
+      "play_long": "number"
+    },
+    "_sampleLength": 8
+  },
   "count": "number",
   "sys_count": "number",
   "file_count": "number",
@@ -125,16 +171,18 @@
 }
 ```
 
+> 2026-05-04 自动采集的根目录样本返回 8 条 `data` item，字段如上；部分字段在文件与文件夹、普通列表与视频筛选样本中存在 number/string 差异，消费方应按已采集字段保守映射，不得把 `fc/type/sta/m` 推断为官方枚举。
+
 ### `GET` /files
 
 | 属性 | 值 |
 |---|---|
 | **完整 URL** | `https://webapi.115.com/files?aid=1&cid=0&o=user_ptime&asc=0&offset=0&show_dir=1&limit=30&code=&scid=&snap=0&natsort=1&star=1&source=&format=json` |
-| **样本数** | 13 |
+| **样本数** | 15 |
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history, video |
 
 **Query 参数:**
 
@@ -206,11 +254,11 @@
 | 属性 | 值 |
 |---|---|
 | **完整 URL** | `https://webapi.115.com/files?aid=1&cid=0&o=user_ptime&asc=0&offset=0&show_dir=0&limit=50&type=4&format=json` |
-| **样本数** | 1 |
-| **置信度** | low |
+| **样本数** | 3 |
+| **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | video |
+| **触发场景** | transcode, video-history, video |
 
 **Query 参数:**
 
@@ -230,58 +278,7 @@
 
 ```json
 {
-  "data": {
-    "_type": "array",
-    "_itemShape": {
-      "fid": "string",
-      "uid": "number",
-      "aid": "number",
-      "cid": "string",
-      "n": "string",
-      "s": "number",
-      "sta": "number",
-      "pt": "string",
-      "pc": "string",
-      "fc": "number",
-      "p": "number",
-      "m": "number",
-      "star_time": "number",
-      "t": "string",
-      "te": "string",
-      "tp": "string",
-      "tu": "string",
-      "to": "number",
-      "d": "number",
-      "c": "number",
-      "sh": "number",
-      "e": "string",
-      "ico": "string",
-      "class": "string",
-      "fatr": "string",
-      "fdes": "number",
-      "sha": "string",
-      "q": "number",
-      "hdf": "number",
-      "et": "number",
-      "epos": "string",
-      "fvs": "number",
-      "check_code": "number",
-      "check_msg": "string",
-      "fuuid": "number",
-      "ec": "number",
-      "fl": {
-        "_type": "array",
-        "_itemShape": null,
-        "_length": 0
-      },
-      "u": "string",
-      "iv": "number",
-      "score": "number",
-      "is_top": "number",
-      "play_long": "number"
-    },
-    "_length": 1
-  },
+  "data": "object",
   "count": "number",
   "sys_count": "number",
   "page_size": "number",
@@ -298,17 +295,7 @@
   "min_size": "number",
   "max_size": "number",
   "record_open_time": "string",
-  "path": {
-    "_type": "array",
-    "_itemShape": {
-      "name": "string",
-      "aid": "string",
-      "cid": "string",
-      "pid": "string",
-      "isp": "string"
-    },
-    "_length": 1
-  },
+  "path": "object",
   "fields": "string",
   "order": "string",
   "fc_mix": "number",
@@ -333,25 +320,101 @@
 }
 ```
 
-### `GET` /files/index_info
+### `GET` /files/history
 
 | 属性 | 值 |
 |---|---|
-| **完整 URL** | `https://webapi.115.com/files/index_info` |
-| **样本数** | 14 |
-| **置信度** | medium |
+| **完整 URL** | `https://webapi.115.com/files/history?pick_code=ekmkz2js4zqfpzfrh&format=json` |
+| **样本数** | 1 |
+| **置信度** | low |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | video-history |
+
+**Query 参数:**
+
+| 参数名 | 类型 |
+|---|---|
+| `pick_code` | string |
+| `format` | string |
 
 **响应体 Schema:**
 
 ```json
 {
   "state": "boolean",
-  "data": "object",
   "error": "string",
-  "code": "number"
+  "data": {
+    "_type": "array",
+    "_itemShape": null,
+    "_length": 0
+  }
+}
+```
+
+### `GET` /files/history
+
+| 属性 | 值 |
+|---|---|
+| **完整 URL** | `https://webapi.115.com/files/history?pick_code=ekmkz2js4zqfpzfrh&fetch=one&format=json` |
+| **样本数** | 1 |
+| **置信度** | low |
+| **状态码** | 200 |
+| **鉴权** | none |
+| **触发场景** | video-history |
+
+**Query 参数:**
+
+| 参数名 | 类型 |
+|---|---|
+| `pick_code` | string |
+| `fetch` | string |
+| `format` | string |
+
+**响应体 Schema:**
+
+```json
+{
+  "state": "boolean",
+  "error": "string",
+  "data": {
+    "_type": "array",
+    "_itemShape": null,
+    "_length": 0
+  }
+}
+```
+
+> 2026-05-04 自动采集的播放进度读取样本均为空数组，未采集到历史记录 item schema。2026-04-18 手动场景曾记录 `fetch=one&category=1` 分支可能返回对象并包含 `file_id`、`file_name`、`hash`、`pick_code`、`time`、`add_time` 等字段；实现应兼容空数组/对象两种形态，只有对象字段实际存在时才映射播放进度。
+
+### `POST` /files/history
+
+| 属性 | 值 |
+|---|---|
+| **完整 URL** | `https://webapi.115.com/files/history` |
+| **样本数** | 1 |
+| **置信度** | low |
+| **状态码** | 200 |
+| **鉴权** | none |
+| **触发场景** | video-history |
+
+**请求体:**
+
+```json
+{
+  "pick_code": "string",
+  "op": "string",
+  "time": "number",
+  "definition": "number"
+}
+```
+
+**响应体 Schema:**
+
+```json
+{
+  "state": "boolean",
+  "error": "string"
 }
 ```
 
@@ -360,11 +423,11 @@
 | 属性 | 值 |
 |---|---|
 | **完整 URL** | `https://webapi.115.com/files/index_info?count_space_nums=1` |
-| **样本数** | 14 |
+| **样本数** | 16 |
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history, video |
 
 **Query 参数:**
 
@@ -383,11 +446,33 @@
 }
 ```
 
+### `GET` /files/index_info
+
+| 属性 | 值 |
+|---|---|
+| **完整 URL** | `https://webapi.115.com/files/index_info` |
+| **样本数** | 16 |
+| **置信度** | medium |
+| **状态码** | 200 |
+| **鉴权** | none |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history, video |
+
+**响应体 Schema:**
+
+```json
+{
+  "state": "boolean",
+  "data": "object",
+  "error": "string",
+  "code": "number"
+}
+```
+
 ### `GET` /files/search
 
 | 属性 | 值 |
 |---|---|
-| **完整 URL** | `https://webapi.115.com/files/search?offset=0&limit=30&search_value=%E8%A7%86%E9%A2%91&date=&aid=1&cid=0&pick_code=&type=&count_folders=1&source=&forma` |
+| **完整 URL** | `https://webapi.115.com/files/search?offset=0&limit=30&search_value=%E8%A7%86%E9%A2%91&date=&aid=1&cid=0&pick_code=&type=&count_folders=1&source=&format=json` |
 | **样本数** | 3 |
 | **置信度** | medium |
 | **状态码** | 200 |
@@ -415,7 +500,47 @@
 ```json
 {
   "count": "number",
-  "data": "object",
+  "data": {
+    "_type": "array",
+    "_itemShape": {
+      "fid": "string",
+      "aid": "string",
+      "cid": "string",
+      "n": "string",
+      "s": "string",
+      "sta": "string",
+      "pt": "string",
+      "pc": "string",
+      "fc": "number",
+      "p": "number",
+      "m": "string",
+      "t": "string",
+      "te": "string",
+      "tp": "string",
+      "d": "number",
+      "c": "string",
+      "sh": "string",
+      "e": "string",
+      "ico": "string",
+      "dp": "string",
+      "ns": "string",
+      "sha": "string",
+      "q": "number",
+      "ih": "string",
+      "nm": "number",
+      "hdf": "number",
+      "coordinate": "string",
+      "address": "string",
+      "ec": "number",
+      "fl": "array",
+      "u": "string",
+      "iv": "number",
+      "score": "number",
+      "is_top": "number",
+      "play_long": "number"
+    },
+    "_sampleLength": 1
+  },
   "cost_time_es": "number",
   "folder": "object",
   "page_size": "number",
@@ -432,16 +557,18 @@
 }
 ```
 
+> 2026-05-04 自动采集 `search_value=mp4` 获得 1 条非空搜索结果，证实 `data` 为数组且 item schema 如上。`search_value=视频` 与不存在关键词样本返回空数组。`ns` 为包含高亮标签的 HTML 片段，消费方不得作为可信 HTML 直接渲染。`type` 参数存在，但本轮样本值仍为空，未采集具体枚举语义。
+
 ### `GET` /files/video
 
 | 属性 | 值 |
 |---|---|
 | **完整 URL** | `https://webapi.115.com/files/video?pickcode=ekmkz2js4zqfpzfrh&share_id=0&local=1&format=json` |
-| **样本数** | 1 |
-| **置信度** | low |
+| **样本数** | 2 |
+| **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | video |
+| **触发场景** | transcode, video |
 
 **Query 参数:**
 
@@ -462,16 +589,47 @@
 }
 ```
 
+### `GET` /files/video_push
+
+| 属性 | 值 |
+|---|---|
+| **完整 URL** | `https://webapi.115.com/files/video_push?pickcode=ekmkz2js4zqfpzfrh&op=vip_push&format=json` |
+| **样本数** | 2 |
+| **置信度** | medium |
+| **状态码** | 200 |
+| **鉴权** | none |
+| **触发场景** | transcode |
+
+**Query 参数:**
+
+| 参数名 | 类型 |
+|---|---|
+| `pickcode` | string |
+| `op` | string |
+| `format` | string |
+
+**响应体 Schema:**
+
+```json
+{
+  "state": "boolean",
+  "error": "string",
+  "errNo": "number",
+  "errno": "number",
+  "request": "string"
+}
+```
+
 ### `GET` /label/list
 
 | 属性 | 值 |
 |---|---|
 | **完整 URL** | `https://webapi.115.com/label/list?user_id=103019297&offset=0&limit=11500` |
-| **样本数** | 14 |
+| **样本数** | 16 |
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history, video |
 
 **Query 参数:**
 
@@ -529,6 +687,36 @@
       "_length": 0
     }
   }
+}
+```
+
+### `GET` /movies/transcode
+
+| 属性 | 值 |
+|---|---|
+| **完整 URL** | `https://webapi.115.com/movies/transcode?pickcode=ekmkz2js4zqfpzfrh&format=json` |
+| **样本数** | 1 |
+| **置信度** | low |
+| **状态码** | 200 |
+| **鉴权** | none |
+| **触发场景** | transcode |
+
+**Query 参数:**
+
+| 参数名 | 类型 |
+|---|---|
+| `pickcode` | string |
+| `format` | string |
+
+**响应体 Schema:**
+
+```json
+{
+  "state": "boolean",
+  "error": "string",
+  "errNo": "number",
+  "errno": "number",
+  "request": "string"
 }
 ```
 
@@ -672,11 +860,11 @@
 | 属性 | 值 |
 |---|---|
 | **完整 URL** | `https://webapi.115.com/user/allow_protocol?action=global` |
-| **样本数** | 14 |
+| **样本数** | 16 |
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history, video |
 
 **Query 参数:**
 
@@ -700,11 +888,11 @@
 | 属性 | 值 |
 |---|---|
 | **完整 URL** | `https://webapi.115.com/user/fingerprint` |
-| **样本数** | 14 |
+| **样本数** | 16 |
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history, video |
 
 **响应体 Schema:**
 
@@ -722,11 +910,11 @@
 | 属性 | 值 |
 |---|---|
 | **完整 URL** | `https://webapi.115.com/user/setting` |
-| **样本数** | 14 |
+| **样本数** | 16 |
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history, video |
 
 **响应体 Schema:**
 
@@ -744,11 +932,11 @@
 | 属性 | 值 |
 |---|---|
 | **完整 URL** | `https://webapi.115.com/user/vip_limit?feature=2` |
-| **样本数** | 14 |
+| **样本数** | 16 |
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history, video |
 
 **Query 参数:**
 
@@ -772,11 +960,11 @@
 | 属性 | 值 |
 |---|---|
 | **完整 URL** | `https://webapi.115.com/usershare/list` |
-| **样本数** | 13 |
+| **样本数** | 15 |
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history, video |
 
 **响应体 Schema:**
 
@@ -789,140 +977,11 @@
 }
 ```
 
-### `GET` /files/video_push
-
-> ⚠️ 手动补充（2026-04-18 transcode 场景）
-
-| 属性 | 值 |
-|---|---|
-| **完整 URL** | `https://webapi.115.com/files/video_push?pickcode={pickcode}&op=vip_push&format=json` |
-| **样本数** | 1 |
-| **置信度** | low（场景脚本参考） |
-| **状态码** | 200 |
-| **鉴权** | cookie |
-| **触发场景** | transcode |
-
-**Query 参数:**
-
-| 参数名 | 类型 |
-|---|---|
-| `pickcode` | string |
-| `op` | string |
-| `format` | string |
-
-**响应体 Schema:**
-
-```json
-{
-  "state": "boolean",
-  "errNo": "number",
-  "error": "string",
-  "errno": "number",
-  "data": "string"
-}
-```
-
-### `GET` /movies/transcode
-
-> ⚠️ 手动补充（2026-04-18 transcode 场景，备选路径）
-
-| 属性 | 值 |
-|---|---|
-| **完整 URL** | `https://webapi.115.com/movies/transcode?pickcode={pickcode}&format=json` |
-| **样本数** | 1 |
-| **置信度** | low（场景脚本参考） |
-| **状态码** | 200 |
-| **鉴权** | cookie |
-| **触发场景** | transcode |
-
-**Query 参数:**
-
-| 参数名 | 类型 |
-|---|---|
-| `pickcode` | string |
-| `format` | string |
-
-**响应体 Schema:**
-
-```json
-{
-  "state": "boolean",
-  "errNo": "number",
-  "error": "string",
-  "errno": "number"
-}
-```
-
-### `GET` /files/history
-
-> ⚠️ 手动补充（2026-04-18 video-history 场景）
-
-| 属性 | 值 |
-|---|---|
-| **完整 URL** | `https://webapi.115.com/files/history?pick_code={pickcode}&fetch=one&category=1&format=json` |
-| **样本数** | 1 |
-| **置信度** | low（场景脚本参考） |
-| **状态码** | 200 |
-| **鉴权** | cookie |
-| **触发场景** | video-history |
-
-**Query 参数:**
-
-| 参数名 | 类型 |
-|---|---|
-| `pick_code` | string |
-| `fetch` | string |
-| `category` | number |
-| `format` | string |
-
-**响应体 Schema:**
-
-```json
-{
-  "state": "boolean",
-  "error": "string",
-  "data": "object"
-}
-```
-
-> 说明：`data` 包含 `file_id`、`file_name`、`hash`、`pick_code`、`time`（已播放秒数）、`add_time`（记录时间戳）
-
-### `POST` /files/history
-
-> ⚠️ 手动补充（2026-04-18 video-history 场景）
-
-| 属性 | 值 |
-|---|---|
-| **完整 URL** | `https://webapi.115.com/files/history` |
-| **样本数** | 1 |
-| **置信度** | low（场景脚本参考） |
-| **状态码** | 200 |
-| **鉴权** | cookie |
-| **触发场景** | video-history |
-
-**请求体（application/x-www-form-urlencoded）:**
-
-| 参数名 | 类型 |
-|---|---|
-| `pick_code` | string |
-| `time` | number |
-| `category` | number |
-| `op` | string |
-
-**响应体 Schema:**
-
-```json
-{
-  "state": "boolean",
-  "error": "string"
-}
-```
-
 ### 静态资源 (1 个)
 
 | 方法 | 路径 | 样本数 | 场景 |
 |---|---|---|---|
-| GET | `/bridge_2.0.html` | 13 | files, offline, recycle, search, share, video |
+| GET | `/bridge_2.0.html` | 15 | files, offline, recycle, search, share, transcode, video-history, video |
 
 ---
 
@@ -935,11 +994,11 @@
 | 属性 | 值 |
 |---|---|
 | **完整 URL** | `https://115.com/?cid=0&offset=0&tab=&mode=wangpan` |
-| **样本数** | 7 |
+| **样本数** | 9 |
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history, video |
 
 **Query 参数:**
 
@@ -955,11 +1014,11 @@
 | 属性 | 值 |
 |---|---|
 | **完整 URL** | `https://115.com/?ct=file&ac=userfile&tpl=view_large&s=0&is_wl_tpl=1&aid=1&cid=0&offset=0&limit=24&tab=` |
-| **样本数** | 7 |
+| **样本数** | 9 |
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history, video |
 
 **Query 参数:**
 
@@ -1145,11 +1204,11 @@
 | 属性 | 值 |
 |---|---|
 | **完整 URL** | `https://115.com/?ac=setting&even=saveedit&is_wl_tpl=1` |
-| **样本数** | 10 |
+| **样本数** | 12 |
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history, video |
 
 **Query 参数:**
 
@@ -1293,7 +1352,7 @@
 
 | 方法 | 路径 | 样本数 | 场景 |
 |---|---|---|---|
-| GET | `/static/cross.html` | 14 | files, offline, recycle, search, share, video |
+| GET | `/static/cross.html` | 16 | files, offline, recycle, search, share, transcode, video-history, video |
 
 ---
 
@@ -1451,11 +1510,11 @@
 | 属性 | 值 |
 |---|---|
 | **完整 URL** | `https://vip.115.com/?ct=order&ac=get_yun_card` |
-| **样本数** | 29 |
+| **样本数** | 32 |
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history, video |
 
 **Query 参数:**
 
@@ -1468,16 +1527,6 @@
 
 ```json
 {
-  "data": {
-    "num": "number",
-    "url": "string",
-    "vip_count": "number",
-    "space_count": "number",
-    "forever_count": "number",
-    "sqcode_count": "string",
-    "sqcode_cancel_count": "string",
-    "00_balance": "number"
-  },
   "state": "boolean"
 }
 ```
@@ -1505,11 +1554,11 @@
 | 属性 | 值 |
 |---|---|
 | **完整 URL** | `https://act.115.com/api/1.0/web/1.0/index/act_switch` |
-| **样本数** | 15 |
+| **样本数** | 17 |
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, home, offline, recycle, search, share, video |
+| **触发场景** | files, home, offline, recycle, search, share, transcode, video-history, video |
 
 **响应体 Schema:**
 
@@ -1691,42 +1740,6 @@
 
 ---
 
-## pay.115.com
-
-> 业务接口: 1 个
-
-### `GET` /
-
-| 属性 | 值 |
-|---|---|
-| **完整 URL** | `https://pay.115.com/?ct=balance&ac=getBalance&from=vip&_=1775660331753` |
-| **样本数** | 14 |
-| **置信度** | medium |
-| **状态码** | 200 |
-| **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
-
-**Query 参数:**
-
-| 参数名 | 类型 |
-|---|---|
-| `ct` | string |
-| `ac` | string |
-| `from` | string |
-
-**响应体 Schema:**
-
-```json
-{
-  "state": "boolean",
-  "code": "number",
-  "msg": "string",
-  "data": "object"
-}
-```
-
----
-
 ## msg.115.com
 
 > 业务接口: 1 个
@@ -1736,11 +1749,11 @@
 | 属性 | 值 |
 |---|---|
 | **完整 URL** | `https://msg.115.com/?ct=contacts&ac=notice&client=web` |
-| **样本数** | 14 |
+| **样本数** | 15 |
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history, video |
 
 **Query 参数:**
 
@@ -1763,6 +1776,42 @@
 
 ---
 
+## pay.115.com
+
+> 业务接口: 1 个
+
+### `GET` /
+
+| 属性 | 值 |
+|---|---|
+| **完整 URL** | `https://pay.115.com/?ct=balance&ac=getBalance&from=vip&_=1777880103616` |
+| **样本数** | 15 |
+| **置信度** | medium |
+| **状态码** | 200 |
+| **鉴权** | none |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history, video |
+
+**Query 参数:**
+
+| 参数名 | 类型 |
+|---|---|
+| `ct` | string |
+| `ac` | string |
+| `from` | string |
+
+**响应体 Schema:**
+
+```json
+{
+  "state": "boolean",
+  "code": "number",
+  "msg": "string",
+  "data": "object"
+}
+```
+
+---
+
 ## yunmsg.115.com
 
 > 业务接口: 1 个
@@ -1772,11 +1821,11 @@
 | 属性 | 值 |
 |---|---|
 | **完整 URL** | `https://yunmsg.115.com/api/1.0/web/1.0/1/job_contacts/applicant` |
-| **样本数** | 14 |
+| **样本数** | 16 |
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history, video |
 
 **响应体 Schema:**
 
@@ -1800,11 +1849,11 @@
 | 属性 | 值 |
 |---|---|
 | **完整 URL** | `https://pmsg.115.com/api/1.0/web/1.0/contact/ls` |
-| **样本数** | 14 |
+| **样本数** | 15 |
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history, video |
 
 **响应体 Schema:**
 
@@ -1832,7 +1881,7 @@
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history, video |
 
 **响应体 Schema:**
 
@@ -1860,7 +1909,7 @@
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history |
 
 **请求体:**
 
@@ -1886,11 +1935,11 @@
 | 属性 | 值 |
 |---|---|
 | **完整 URL** | `https://q.115.com/mapp/?c=user&m=check_yun_once_joined` |
-| **样本数** | 14 |
+| **样本数** | 16 |
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history, video |
 
 **Query 参数:**
 
@@ -1910,7 +1959,7 @@
 }
 ```
 
-### 静态资源 (14 个)
+### 静态资源 (18 个)
 
 | 方法 | 路径 | 样本数 | 场景 |
 |---|---|---|---|
@@ -1926,6 +1975,10 @@
 | GET | `/bridge_assets.html` | 1 | search |
 | GET | `/bridge_assets.html` | 1 | share |
 | GET | `/bridge_assets.html` | 1 | share |
+| GET | `/bridge_assets.html` | 1 | transcode |
+| GET | `/bridge_assets.html` | 1 | transcode |
+| GET | `/bridge_assets.html` | 1 | video-history |
+| GET | `/bridge_assets.html` | 1 | video |
 | GET | `/bridge_assets.html` | 1 | video |
 | GET | `/bridge_assets.html` | 1 | video |
 
@@ -1944,7 +1997,7 @@
 | **置信度** | medium |
 | **状态码** | 200 |
 | **鉴权** | none |
-| **触发场景** | files, offline, recycle, search, share, video |
+| **触发场景** | files, offline, recycle, search, share, transcode, video-history |
 
 **响应体 Schema:**
 
@@ -1967,9 +2020,7 @@
 
 | 方法 | 路径 | 样本数 | 场景 |
 |---|---|---|---|
-| GET | `/bridge.html` | 14 | files, offline, recycle, search, share, video |
-
----
+| GET | `/bridge.html` | 16 | files, offline, recycle, search, share, transcode, video-history, video |
 
 ## uplb.115.com
 
@@ -2023,7 +2074,7 @@
 
 ## fhnfile.oss-cn-shenzhen.aliyuncs.com
 
-> 业务接口: 1 个（手动补充 2026-04-18）  
+> 业务接口: 1 个（手动补充 2026-04-18）
 > 说明：阿里云 OSS 对象存储直传，域名为 `{bucket}.oss-cn-{region}.aliyuncs.com`，bucket 名称可能变化
 
 ### `POST` /

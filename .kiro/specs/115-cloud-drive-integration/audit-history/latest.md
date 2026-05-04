@@ -1,60 +1,77 @@
-# 115 cloud drive 前后端 Specs 修复验证报告
+# 115 cloud drive integration API 对齐复查报告
 
 ## 审核快照
 
-- **审核时间**：2026-05-04 01:09:47
-- **审核轮次**：复查
-- **复查范围**：`.kiro/specs/115-cloud-drive-integration` + `.kiro/specs/115-cloud-drive-frontend` 的前后端契约与 115 API 对齐残留
-- **权威接口依据**：`docs/115-api-docs.md`
-- **上轮审核**：`.kiro/specs/115-cloud-drive-integration/audit-history/2026-05-04-004344-full-frontend-backend.md`
-- **架构边界**：前端只访问后端 `/api/*`；后端 integration 访问 115 网页端 API
+- **审核时间**：2026-05-04 20:03:02 +08:00
+- **审核轮次**：针对 19:27 API 对齐全量复审后的再次复查
+- **官方文档基线**：`docs/115-api-docs.md`（2026-05-04 自动采集 `20260504073432-ck05g2` + 2026-04-18 上传链路手动补充）
+- **Specs 基线**：`.kiro/specs/115-cloud-drive-integration/{requirements,design,tasks}.md`
+- **上轮审核**：`.kiro/specs/115-cloud-drive-integration/audit-history/latest.md`
+- **本轮范围**：纳入 integration 的读/上传/视频/离线/分享/用户接口，及未采集写接口的反向追溯复查
 
-## 联网复核
+## 审核工作量
 
-联网检索未发现比本地 `docs/115-api-docs.md` 更权威的 115 网页端字段级 API 文档。公开资料只能作为旁证，不作为本轮修复依据：
+- **端点总数 N**：20 个纳入业务接口 + 13 类明确排除接口复查
+- **维度数 D**：10
+- **细项总数 I**：48
+- **检查点总数**：960（20 × 48）
 
-- GreasyFork 第三方脚本可旁证 `webapi.115.com/files`、`webapi.115.com/files/history`、`115.com/web/lixian/?ct=lixian&ac=task_lists` 与 `sign/time/uid` 形态：https://greasyfork.org/de/scripts/495474-115/code
-- `115wangpan` 第三方库文档可旁证 Cookie 持久化、搜索、离线任务等能力存在，但未提供本项目所需字段级契约：https://115wangpan.readthedocs.io/en/latest/tutorial.html
+## API 对齐结论
 
-## 修复结果
+本轮未发现新的 115 官方文档对齐违规。19:27 对齐复审结论保持有效：
 
-| 编号 | 上轮问题 | 状态 | 修复位置 |
-|---|---|---|---|
-| H-01 | `/files/index_info` 错误字段类型写错 | 已修复 | `requirements.md` 需求 25 表拆分为 `/user/vip_limit code string + message` 与 `/files/index_info code number + error`；`design.md`/`tasks.md` 同步 |
-| H-02 | 用户聚合引用 docs 不存在的路径 | 已修复 | `design.md`/`tasks.md` 统一为 `my.115.com/proapi/3.0/index.php?method=user_info&uid=...`、`webapi.115.com/user/vip_limit?feature=2`、`webapi.115.com/files/index_info?count_space_nums=1` |
-| H-03 | 待补采集写操作写成具体 115 端点 | 已修复 | `tasks.md` 中文件写操作、回收站写操作、云下载写操作均改为占位 Handler/Job，返回 `cloud_drive_api_not_collected`，不得猜测 115 path |
-| H-04 | 云下载签名算法存在 MD5 占位冲突 | 已修复 | `requirements.md`/`design.md`/`tasks.md` 统一为签名算法未采集时返回 `offline_signature_not_available`，不生成占位签名 |
-| H-05 | 搜索残留开放平台参数 | 已修复 | `design.md` 的 `SearchFileInput` 与 `tasks.md` 的 `GET /api/files/search` 只保留 `search_value/aid/cid/type/date/pick_code/count_folders/source/format/offset/limit` 相关契约 |
-| M-01 | integration requirements 缺 `GET /api/recycle` | 已修复 | `requirements.md` 需求 14 显式增加 `GET /api/recycle` |
-| M-02 | `POST /api/files/refresh` 孤儿公开端点 | 已修复 | `design.md`/`tasks.md` 明确仅保留内部缓存失效能力，不暴露公开刷新端点 |
+- `/files/video` 仍只按当前错误响应 `{ state, errno, error }` 与未采集成功 schema 处理；旧 `videoUrls/availableDefinitions/vipUpgradeRequired` 口径未回归。
+- `/files/search` 仍按 2026-05-04 非空 item schema 映射，排除开放平台 `gte_day/lte_day/fc/file_label` 等参数，并继续把 `ns` 视为不可信 HTML 片段。
+- `/files/index_info` 空间详情仍保持 `CloudDriveSpaceInfoDto.schemaStatus='not_collected'`，不伪造总空间、已用空间或分类占比。
+- 回收站 `GET /rb` 仍只使用已采集顶层字段，item schema 未采集时返回空态。
+- 云下载签名未采集时仍返回 `offline_signature_not_available`；未采集写接口仍返回 `cloud_drive_api_not_collected`。
 
-## 验证命令
+## API 审核矩阵结果
 
-- `rg "user/index_info|webapi\.115\.com/user/info|/user/index_info|sign\s*=\s*md5|NotImplementedException|RefreshDirectoryCommand|RefreshDirectoryInput|errMsg|12 种|12种|requirements\.md:454-470|file_label.*支持|gte_day.*支持|lte_day.*支持|suffix\?}" .kiro/specs/115-cloud-drive-integration/...`
-- `rg "files/add|files/edit|files/move|files/copy|rb/delete|rb/revert|rb/clean|files/star|add_task_url|add_task_urls|del_task|task_clear" .kiro/specs/115-cloud-drive-integration/...`
-- `rg "webapi\.115\.com|115\.com/web|my\.115\.com|vip\.115\.com|pay\.115\.com|uplb\.115\.com|Cookie|sign" .kiro/specs/115-cloud-drive-frontend/...`
+| 编号 | 端点 | D1 | D2 | D3 | D4 | D5 | D6 | D7 | D8 | D9 | D10 | 问题摘要 |
+|---|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:---:|---|
+| A01 | `GET webapi.115.com/files` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | [复查] | 无新增 |
+| A02 | `GET webapi.115.com/files/search` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | [复查] | 已采集 item schema；开放平台参数排除与 `ns` 安全边界正确 |
+| A03 | `POST uplb.115.com/3.0/sampleinitupload.php` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | [复查] | 上传初始化已采集 |
+| A04 | `POST OSS PostObject` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | [复查] | 后端代理上传边界正确 |
+| A05 | `GET webapi.115.com/rb` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | [复查] | item schema 未采集空态正确 |
+| A06 | `GET webapi.115.com/files/video` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | [复查] | 成功播放 schema 未采集边界正确 |
+| A07 | `GET webapi.115.com/files/video_push` / `/movies/transcode` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | [复查] | 转码提交错误 schema 已采集 |
+| A08 | `GET/POST webapi.115.com/files/history` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | [复查] | 空数组/对象双形态保留 |
+| A09 | `GET webapi.115.com/movies/subtitle` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | [复查] | 字幕 item schema 未采集空态正确 |
+| A10 | `115.com/web/lixian task_lists/quota/task_count` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | [复查] | 签名不可用错误码正确 |
+| A11 | `webapi.115.com/share/*` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | [复查] | 分享 item schema 未采集空态正确 |
+| A12 | 用户聚合接口组 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | [复查] | 敏感字段过滤与空间 not_collected 正确 |
+| A13 | 未采集写接口 | N/A | N/A | N/A | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | [复查] | 未发现猜测型 115 path |
 
-## 复查结论
+## 反向追溯结果
 
-- integration spec 已按 `docs/115-api-docs.md` 收敛：已采集接口可以直接由后端访问 115；未采集写接口不再写具体 115 路径。
-- frontend spec 仍保持正确边界：前端不直连 115，不处理 Cookie、签名、错误字段或短字段归一化，只消费后端 `/api/*`。
-- 允许保留的字符串：`POST /api/files/refresh` 仅作为“不暴露公开端点”的说明出现；`CloudDriveFileLabelDto` 是响应 DTO 字段，非搜索请求参数；文件列表 `suffix` 属 `/files` 已采集参数，不属于 `/files/search` 幻影参数。
+- 未发现 specs 正文把开放平台 `gte_day/lte_day/fc/file_label` 当作网页端搜索参数。
+- 未发现 specs 正文把 `limit=1150` 或 `offset+limit≤10000` 当作 115 网页端官方硬限制。
+- 未发现未采集写接口出现猜测型真实 115 path。
+- 未发现前端 spec 要求直连 115；前端仍只消费后端 `/api/*`。
 
-## 2026-05-04 追加复查修复
+## 验证命令结果
 
-用户要求再次检查后，发现并修复 7 个 spec 内部一致性问题：
+```text
+旧字段残留扫描（spec 正文）：无命中
+availableDefinitions / videoUrls / userSelectedDefinition / vipUpgradeRequired / CloudDriveStorageDetailsDto
+```
 
-| 编号 | 问题 | 状态 | 修复位置 |
-|---|---|---|---|
-| F-01 | 公开输入 DTO 仍继承 `CloudDriveAccountScopedInput` | 已修复 | `design.md` 关键输入 DTO 全部移除该基类；`tasks.md` 6.1 改为公开输入 DTO 不得继承或包含 `CloudAccountUid` |
-| F-02 | `VideosController` 引用不存在的 `GetVideoPlayUrlQuery` | 已修复 | `tasks.md` 12.7 改为 `GetVideoPlayUrlCommand`，保留可能触发转码副作用的 CQRS 语义 |
-| F-03 | 云下载 URL/BT/parse torrent 命令命名不一致 | 已修复 | `design.md` 说明 URL/BT 均映射 `AddOfflineTaskCommand` + `TaskKind`；parse torrent 未采集时由 Controller 直接返回 `cloud_drive_api_not_collected` |
-| F-04 | 用户中心 Controller 引用未定义 Query | 已修复 | `design.md` 补 `GetUserProfileQuery`、`GetUserBalanceQuery`、`CloudDriveUserProfileDto`、`CloudDriveBalanceDto`；`tasks.md` storage 改为 `GetUserSpaceQuery` |
-| F-05 | 分享 Controller 使用未定义 `GetShareListQuery` | 已修复 | `tasks.md` 按 `tab` 分派到 `GetMySharesQuery` / `GetShareSendsQuery` / `GetShareReceivesQuery` |
-| F-06 | 文件详情任务写入未采集路径 `webapi.115.com/files/file` | 已修复 | `tasks.md` 改为从列表/缓存/已知 DTO 组装，无法取得时返回 ProblemDetails，不猜测 115 path |
-| F-07 | `/api/offline/stats` 缺 Handler 任务与 DTO 摘要 | 已修复 | `design.md` 补 `GetOfflineStatsQuery` / `CloudDriveOfflineStatsDto`；`tasks.md` 10.9 补 `GetOfflineStatsQueryHandler` |
+```text
+关键对齐字段抽查：
+qualityOptions / audioTracks / restrictionReason / usageRestrictionNotice / playbackSchemaStatus
+CloudDriveSpaceInfoDto / schemaStatus='not_collected' / itemSchemaStatus='not_collected'
+cloud_drive_api_not_collected / offline_signature_not_available
+```
 
-追加验证命令：
+## 覆盖率验证
 
-- `rg "CloudDriveAccountScopedInput|GetVideoPlayUrlQuery|GetShareListQuery|GetUserStorageQuery|AddOfflineUrlTasksCommand|AddOfflineBtTaskCommand|ParseTorrentCommand|webapi\.115\.com/files/file" .kiro/specs/115-cloud-drive-integration/...`
-- `rg "user/index_info|webapi\.115\.com/user/info|/user/index_info|sign\s*=\s*md5|NotImplementedException|RefreshDirectoryCommand|RefreshDirectoryInput|errMsg|12 种|12种|requirements\.md:454-470|file_label.*支持|gte_day.*支持|lte_day.*支持" .kiro/specs/115-cloud-drive-integration/...`
+- **实检检查点数**：960 / 960
+- **未覆盖端点**：无；官方已排除端点按 requirements 范围排除声明复查
+- **结论**：API 对齐门控 ✅
+
+## 剩余风险
+
+- 本报告只审核 specs 与 `docs/115-api-docs.md` 的对齐，不审核 Server 当前实现。
+- 后续执行 task `13.4` 时仍需补齐搜索 DTO/Handler、视频播放与播放历史契约测试。
