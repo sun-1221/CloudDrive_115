@@ -1,0 +1,5 @@
+# CD0004: 全项目禁止引用 AutoMapper
+T:AutoMapper.IMapper; CD0004: 禁止使用 AutoMapper，请使用手动映射扩展方法 ToDto()/ToEntity()
+T:AutoMapper.MapperConfiguration; CD0004: 禁止使用 AutoMapper
+T:AutoMapper.Profile; CD0004: 禁止使用 AutoMapper
+N:AutoMapper; CD0004: 禁止引用 AutoMapper 命名空间

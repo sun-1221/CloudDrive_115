@@ -1,0 +1,17 @@
+# CD0002: Application 层禁止直接依赖 SqlSugar/缓存/HTTP 实现
+
+# ORM 直连
+T:SqlSugar.ISqlSugarClient; CD0002: Application 层禁止直接依赖 SqlSugar，请通过仓储接口
+T:SqlSugar.SqlSugarClient; CD0002: Application 层禁止直接依赖 SqlSugar
+T:SqlSugar.SqlSugarScope; CD0002: Application 层禁止直接依赖 SqlSugar
+
+# 分布式缓存实现
+T:Microsoft.Extensions.Caching.Distributed.IDistributedCache; CD0002: Application 层禁止直接依赖 IDistributedCache，请通过封装接口
+
+# HTTP 客户端实现
+T:System.Net.Http.HttpClient; CD0002: Application 层禁止直接依赖 HttpClient，请通过网关接口
+T:System.Net.Http.IHttpClientFactory; CD0002: Application 层禁止直接依赖 IHttpClientFactory
+
+# Redis
+T:StackExchange.Redis.IConnectionMultiplexer; CD0002: Application 层禁止直接依赖 Redis
+T:StackExchange.Redis.ConnectionMultiplexer; CD0002: Application 层禁止直接依赖 Redis

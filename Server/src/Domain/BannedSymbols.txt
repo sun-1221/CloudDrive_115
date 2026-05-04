@@ -1,0 +1,26 @@
+# CD0001: Domain 层禁止引用基础设施类型
+
+# ORM
+T:SqlSugar.ISqlSugarClient; CD0001: Domain 层禁止引用 SqlSugar
+T:SqlSugar.SqlSugarClient; CD0001: Domain 层禁止引用 SqlSugar
+T:SqlSugar.SqlSugarScope; CD0001: Domain 层禁止引用 SqlSugar
+
+# ASP.NET Core
+N:Microsoft.AspNetCore; CD0001: Domain 层禁止引用 ASP.NET Core
+
+# Redis
+T:StackExchange.Redis.IConnectionMultiplexer; CD0001: Domain 层禁止引用 Redis
+T:StackExchange.Redis.ConnectionMultiplexer; CD0001: Domain 层禁止引用 Redis
+
+# HTTP
+T:System.Net.Http.HttpClient; CD0001: Domain 层禁止引用 HttpClient
+T:System.Net.Http.IHttpClientFactory; CD0001: Domain 层禁止引用 IHttpClientFactory
+
+# 分布式缓存
+T:Microsoft.Extensions.Caching.Distributed.IDistributedCache; CD0001: Domain 层禁止引用 IDistributedCache
+
+# FluentValidation
+N:FluentValidation; CD0001: Domain 层禁止引用 FluentValidation
+
+# Quartz
+N:Quartz; CD0001: Domain 层禁止引用 Quartz

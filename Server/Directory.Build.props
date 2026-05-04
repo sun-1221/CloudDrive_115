@@ -1,0 +1,29 @@
+<Project>
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>10-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <RunAnalyzersDuringBuild>true</RunAnalyzersDuringBuild>
+    <RunAnalyzersDuringLiveAnalysis>true</RunAnalyzersDuringLiveAnalysis>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <CodeAnalysisTreatWarningsAsErrors>false</CodeAnalysisTreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectExtension)' == '.csproj'">
+    <PackageReference Include="StyleCop.Analyzers" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />
+    <PackageReference Include="Roslynator.Analyzers" PrivateAssets="all" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)stylecop.json" Link="stylecop.json"
+                     Condition="Exists('$(MSBuildThisFileDirectory)stylecop.json')" />
+    <!-- 全局 BannedSymbols.txt（Server 目录，所有项目共享） -->
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" Link="BannedSymbols.txt"
+                     Condition="Exists('$(MSBuildThisFileDirectory)BannedSymbols.txt')" />
+    <!-- 项目级 BannedSymbols.txt（每层独立禁用符号） -->
+    <AdditionalFiles Include="$(MSBuildProjectDirectory)\BannedSymbols.txt" Link="BannedSymbols.Local.txt"
+                     Condition="Exists('$(MSBuildProjectDirectory)\BannedSymbols.txt')" />
+  </ItemGroup>
+</Project>
