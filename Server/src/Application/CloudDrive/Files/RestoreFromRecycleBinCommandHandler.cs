@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 using Application.Abstractions.CloudDrive;
 using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
@@ -13,8 +11,6 @@ using Microsoft.Extensions.Options;
 namespace Application.CloudDrive.Files;
 
 internal sealed class RestoreFromRecycleBinCommandHandler(
-    CloudDriveFileManager fileManager,
-    ICloudDriveOpenApiGateway openApiGateway,
     ICloudDriveJobOrchestrator jobOrchestrator,
     IOptions<CloudDriveAppConfig> configOptions)
     : ICommandHandler<RestoreFromRecycleBinCommand, CloudDriveOperationResultDto>
@@ -43,24 +39,7 @@ internal sealed class RestoreFromRecycleBinCommandHandler(
             return Result.Success(CloudDriveFileHandlerSupport.CreateAcceptedResult(jobId, "回收站还原任务已受理。"));
         }
 
-        CloudDriveOperationResultDto result = await fileManager.ExecuteWithCacheInvalidationAsync(
-            request.UserId,
-            request.Input.CloudAccountUid,
-            ["0"],
-            async () =>
-            {
-                await openApiGateway.SendWebApiRequestAsync<JsonElement>(
-                    request.UserId,
-                    request.Input.CloudAccountUid,
-                    HttpMethod.Post,
-                    "rb/revert",
-                    CloudDriveFileHandlerSupport.CreateRecycleBinOperationContext(request.Input, hardDelete: false),
-                    cancellationToken);
-
-                return CloudDriveFileHandlerSupport.CreateSyncResult("回收站还原完成。");
-            },
-            cancellationToken);
-
-        return Result.Success(result);
+        return Result.Failure<CloudDriveOperationResultDto>(
+            CloudDriveFileHandlerSupport.ApiNotCollected("回收站还原"));
     }
 }

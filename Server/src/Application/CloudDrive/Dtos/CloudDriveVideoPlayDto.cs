@@ -8,7 +8,7 @@ public class CloudDriveVideoPlayDto
     /// <summary>
     /// 获取或设置播放状态。
     /// </summary>
-    public VideoPlayStatus Status { get; set; } = VideoPlayStatus.Ready;
+    public VideoPlayStatus Status { get; set; } = VideoPlayStatus.SchemaNotCollected;
 
     /// <summary>
     /// 获取或设置自动提交转码后的后台任务 ID。
@@ -28,7 +28,7 @@ public class CloudDriveVideoPlayDto
     /// <summary>
     /// 获取或设置视频时长秒数。
     /// </summary>
-    public int Duration { get; set; }
+    public int? Duration { get; set; }
 
     /// <summary>
     /// 获取或设置官方记忆的用户上次选中清晰度。
@@ -59,6 +59,11 @@ public class CloudDriveVideoPlayDto
     /// 获取或设置官方播放器元数据。
     /// </summary>
     public Dictionary<string, string>? PlaybackMetadata { get; set; }
+
+    /// <summary>
+    /// 获取或设置播放 schema 采集状态。
+    /// </summary>
+    public string PlaybackSchemaStatus { get; set; } = "not_collected";
 
     /// <summary>
     /// 获取或设置是否为临时资源。

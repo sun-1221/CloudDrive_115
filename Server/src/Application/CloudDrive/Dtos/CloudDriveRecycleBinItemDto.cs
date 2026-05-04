@@ -1,37 +1,12 @@
 namespace Application.CloudDrive.Dtos;
 
 /// <summary>
-/// 115 回收站项。
+/// 115 回收站项占位。
 /// </summary>
-public class CloudDriveRecycleBinItemDto : CloudDriveFileDto
+public class CloudDriveRecycleBinItemDto
 {
     /// <summary>
-    /// 获取或设置回收站项 ID，用于还原或彻底删除的 tid 参数。
+    /// 获取或设置条目 schema 状态。
     /// </summary>
-    public string RecycleBinItemId { get; set; } = string.Empty;
-
-    /// <summary>
-    /// 获取或设置还原状态，-1 表示还原中，0 表示正常。
-    /// </summary>
-    public int RestoreStatus { get; set; }
-
-    /// <summary>
-    /// 获取或设置删除时间。
-    /// </summary>
-    public DateTime DeletedTime { get; set; }
-
-    /// <summary>
-    /// 获取或设置原父目录 ID。
-    /// </summary>
-    public string? OriginalParentId { get; set; }
-
-    /// <summary>
-    /// 获取或设置原父目录名称。
-    /// </summary>
-    public string? OriginalParentName { get; set; }
-
-    /// <summary>
-    /// 获取或设置可安全推导的原路径。
-    /// </summary>
-    public string? OriginalPath { get; set; }
+    public string SchemaStatus { get; set; } = "not_collected";
 }

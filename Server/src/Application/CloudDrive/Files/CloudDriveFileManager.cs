@@ -41,14 +41,14 @@ public sealed class CloudDriveFileManager(
         CloudDriveAppConfig config = configOptions.Value;
         string cacheKey = BuildDirectoryCacheKey(userId, cloudAccountUid, directoryId, "list");
 
-        T? result = await metadataCache.GetOrSetAsync(cacheKey, async () =>
+        T? result = await metadataCache.GetOrSetAsync(cacheKey, async token =>
         {
             using IDisposable permit = await rateLimiter.AcquireAsync(
-                userId, cloudAccountUid, context.Category, cancellationToken);
+                userId, cloudAccountUid, context.Category, token);
 
             return await openApiGateway.SendWebApiRequestAsync<T>(
-                userId, cloudAccountUid, HttpMethod.Get, "files", context, cancellationToken);
-        }, TimeSpan.FromSeconds(config.CacheTtlSeconds));
+                userId, cloudAccountUid, HttpMethod.Get, "files", context, token);
+        }, TimeSpan.FromSeconds(config.CacheTtlSeconds), cancellationToken);
 
         return result!;
     }
@@ -73,14 +73,14 @@ public sealed class CloudDriveFileManager(
         CloudDriveAppConfig config = configOptions.Value;
         string cacheKey = BuildFileCacheKey(userId, cloudAccountUid, fileId, "detail");
 
-        T? result = await metadataCache.GetOrSetAsync(cacheKey, async () =>
+        T? result = await metadataCache.GetOrSetAsync(cacheKey, async token =>
         {
             using IDisposable permit = await rateLimiter.AcquireAsync(
-                userId, cloudAccountUid, context.Category, cancellationToken);
+                userId, cloudAccountUid, context.Category, token);
 
             return await openApiGateway.SendWebApiRequestAsync<T>(
-                userId, cloudAccountUid, HttpMethod.Get, "files/file", context, cancellationToken);
-        }, TimeSpan.FromSeconds(config.CacheTtlSeconds));
+                userId, cloudAccountUid, HttpMethod.Get, "files/file", context, token);
+        }, TimeSpan.FromSeconds(config.CacheTtlSeconds), cancellationToken);
 
         return result!;
     }
@@ -109,7 +109,7 @@ public sealed class CloudDriveFileManager(
         {
             try
             {
-                await metadataCache.InvalidateDirectoryAsync(userId, cloudAccountUid, directoryId);
+                await metadataCache.InvalidateDirectoryAsync(userId, cloudAccountUid, directoryId, cancellationToken);
             }
             catch (Exception ex)
             {

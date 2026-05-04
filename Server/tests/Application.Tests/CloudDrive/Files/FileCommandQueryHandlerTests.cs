@@ -33,13 +33,12 @@ public sealed class FileCommandQueryHandlerTests
                     FileId = "file-1",
                     Name = "clip.mp4",
                     Size = 42,
-                    IsDirectory = false,
                     PickCode = "pick-1",
                 }
             ],
             TotalCount = 1,
             SkipCount = 0,
-            MaxResultCount = 20,
+            MaxResultCount = 50,
         };
         var handler = new GetFileListQueryHandler(context.FileManager, CreateEnabledConfig());
 
@@ -51,7 +50,7 @@ public sealed class FileCommandQueryHandlerTests
                 {
                     CloudAccountUid = TestCloudAccountUid,
                     Offset = 0,
-                    Limit = 20,
+                    Limit = 50,
                 }),
             CancellationToken.None);
 
@@ -103,24 +102,22 @@ public sealed class FileCommandQueryHandlerTests
     {
         // Arrange
         TestContext context = CreateContext();
-        context.Gateway.WebApiResponse = new PagedResultDto<CloudDriveSearchResultDto>
+        context.Gateway.WebApiResponse = new CloudDriveSearchListDto
         {
             Items =
             [
                 new CloudDriveSearchResultDto
                 {
                     FileId = "file-1",
-                    Name = "demo.txt",
+                    FileName = "demo.txt",
                     ParentId = "dir-1",
                 }
             ],
-            TotalCount = 1,
-            MaxResultCount = 50,
         };
         var handler = new SearchFilesQueryHandler(context.Gateway, context.RateLimiter, CreateEnabledConfig());
 
         // Act
-        Result<PagedResultDto<CloudDriveSearchResultDto>> result = await handler.Handle(
+        Result<CloudDriveSearchListDto> result = await handler.Handle(
             new SearchFilesQuery(
                 TestUserId,
                 new SearchFileInput
@@ -128,12 +125,11 @@ public sealed class FileCommandQueryHandlerTests
                     CloudAccountUid = TestCloudAccountUid,
                     Keyword = "demo",
                     DirectoryId = "dir-1",
-                    FileLabel = "label-1",
-                    GteDay = "2026-01-01",
-                    LteDay = "2026-01-02",
-                    Fc = 2,
+                    Date = "2026-01-01",
                     Type = 1,
-                    Suffix = "txt",
+                    PickCode = "pick-1",
+                    CountFolders = 1,
+                    Source = "desktop",
                     Limit = 50,
                 }),
             CancellationToken.None);
@@ -145,8 +141,10 @@ public sealed class FileCommandQueryHandlerTests
         CloudDriveGatewayRequest request = Assert.Single(context.Gateway.WebApiRequests);
         Assert.Equal("files/search", request.Endpoint);
         Assert.Equal("demo", request.Context.QueryParameters!["search_value"]);
-        Assert.Equal("label-1", request.Context.QueryParameters["file_label"]);
-        Assert.Equal("2", request.Context.QueryParameters["fc"]);
+        Assert.Equal("2026-01-01", request.Context.QueryParameters["date"]);
+        Assert.Equal("pick-1", request.Context.QueryParameters["pick_code"]);
+        Assert.False(request.Context.QueryParameters.ContainsKey("gte_day"));
+        Assert.False(request.Context.QueryParameters.ContainsKey("fc"));
     }
 
     [Fact]
@@ -154,7 +152,7 @@ public sealed class FileCommandQueryHandlerTests
     {
         // Arrange
         TestContext context = CreateContext();
-        var handler = new CreateFolderCommandHandler(context.FileManager, context.Gateway, CreateEnabledConfig());
+        var handler = new CreateFolderCommandHandler(CreateEnabledConfig());
 
         // Act & Assert
         await Assert.ThrowsAsync<CloudDriveInvalidNameException>(() => handler.Handle(
@@ -170,12 +168,11 @@ public sealed class FileCommandQueryHandlerTests
     }
 
     [Fact]
-    public async Task CreateFolderCommandHandler_WhenSuccessful_InvalidatesParentDirectory()
+    public async Task CreateFolderCommandHandler_WhenApiNotCollected_ReturnsFailureWithoutGatewayRequest()
     {
         // Arrange
         TestContext context = CreateContext();
-        context.Gateway.WebApiResponse = CreateJson("""{"data":{"file_id":"folder-1","file_name":"Photos"}}""");
-        var handler = new CreateFolderCommandHandler(context.FileManager, context.Gateway, CreateEnabledConfig());
+        var handler = new CreateFolderCommandHandler(CreateEnabledConfig());
 
         // Act
         Result<CloudDriveFolderDto> result = await handler.Handle(
@@ -190,12 +187,10 @@ public sealed class FileCommandQueryHandlerTests
             CancellationToken.None);
 
         // Assert
-        Assert.True(result.IsSuccess);
-        Assert.Equal("folder-1", result.Value.FolderId);
-        Assert.Equal([(TestUserId, TestCloudAccountUid, "parent-1")], context.Cache.InvalidatedDirectories);
-        CloudDriveGatewayRequest request = Assert.Single(context.Gateway.WebApiRequests);
-        Assert.Equal("files/add", request.Endpoint);
-        Assert.Equal("Photos", request.Context.FormFields!["cname"]);
+        Assert.True(result.IsFailure);
+        Assert.Equal("cloud_drive_api_not_collected", result.Error.Code);
+        Assert.Empty(context.Cache.InvalidatedDirectories);
+        Assert.Empty(context.Gateway.WebApiRequests);
     }
 
     [Fact]
@@ -203,7 +198,7 @@ public sealed class FileCommandQueryHandlerTests
     {
         // Arrange
         TestContext context = CreateContext();
-        var handler = new RenameFileCommandHandler(context.FileManager, context.Gateway, CreateEnabledConfig());
+        var handler = new RenameFileCommandHandler(CreateEnabledConfig());
         string tooLong = new('中', 86);
 
         // Act & Assert
@@ -329,13 +324,11 @@ public sealed class FileCommandQueryHandlerTests
     }
 
     [Fact]
-    public async Task MoveFilesCommandHandler_WhenSmallBatch_SendsSyncRequestAndInvalidatesTarget()
+    public async Task MoveFilesCommandHandler_WhenSmallBatchApiNotCollected_ReturnsFailureWithoutGatewayRequest()
     {
         // Arrange
         TestContext context = CreateContext();
         var handler = new MoveFilesCommandHandler(
-            context.FileManager,
-            context.Gateway,
             context.JobOrchestrator,
             CreateEnabledConfig());
         var input = new MoveFilesInput
@@ -351,12 +344,10 @@ public sealed class FileCommandQueryHandlerTests
             CancellationToken.None);
 
         // Assert
-        Assert.True(result.IsSuccess);
-        Assert.False(result.Value.Accepted);
-        Assert.Equal([(TestUserId, TestCloudAccountUid, "target-1")], context.Cache.InvalidatedDirectories);
-        CloudDriveGatewayRequest request = Assert.Single(context.Gateway.WebApiRequests);
-        Assert.Equal("files/move", request.Endpoint);
-        Assert.Equal("file-1,file-2", request.Context.FormFields!["fileIds"]);
+        Assert.True(result.IsFailure);
+        Assert.Equal("cloud_drive_api_not_collected", result.Error.Code);
+        Assert.Empty(context.Cache.InvalidatedDirectories);
+        Assert.Empty(context.Gateway.WebApiRequests);
     }
 
     [Fact]
@@ -365,8 +356,6 @@ public sealed class FileCommandQueryHandlerTests
         // Arrange
         TestContext context = CreateContext();
         var handler = new CopyFilesCommandHandler(
-            context.FileManager,
-            context.Gateway,
             context.JobOrchestrator,
             CreateEnabledConfig());
         var input = new CopyFilesInput
@@ -395,17 +384,18 @@ public sealed class FileCommandQueryHandlerTests
     {
         // Arrange
         TestContext context = CreateContext();
-        context.Gateway.WebApiResponse = new PagedResultDto<CloudDriveRecycleBinItemDto>
+        context.Gateway.WebApiResponse = new CloudDriveRecycleListDto
         {
             Items = [],
-            TotalCount = 0,
-            SkipCount = 0,
-            MaxResultCount = 30,
+            Count = 0,
+            Offset = 0,
+            PageSize = 30,
+            ItemSchemaStatus = "not_collected",
         };
         var handler = new GetRecycleBinListQueryHandler(context.Gateway, CreateEnabledConfig());
 
         // Act
-        Result<PagedResultDto<CloudDriveRecycleBinItemDto>> result = await handler.Handle(
+        Result<CloudDriveRecycleListDto> result = await handler.Handle(
             new GetRecycleBinListQuery(
                 TestUserId,
                 new GetRecycleBinListInput
@@ -419,6 +409,7 @@ public sealed class FileCommandQueryHandlerTests
         // Assert
         Assert.True(result.IsSuccess);
         Assert.Empty(result.Value.Items);
+        Assert.Equal("not_collected", result.Value.ItemSchemaStatus);
         CloudDriveGatewayRequest request = Assert.Single(context.Gateway.WebApiRequests);
         Assert.Equal("rb", request.Endpoint);
         Assert.Equal("7", request.Context.QueryParameters!["aid"]);

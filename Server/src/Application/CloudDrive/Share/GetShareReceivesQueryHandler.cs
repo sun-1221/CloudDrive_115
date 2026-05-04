@@ -15,9 +15,9 @@ namespace Application.CloudDrive.Share;
 internal sealed class GetShareReceivesQueryHandler(
     ICloudDriveOpenApiGateway openApiGateway,
     IOptions<CloudDriveAppConfig> configOptions)
-    : IQueryHandler<GetShareReceivesQuery, PagedResultDto<CloudDriveShareReceiveItemDto>>
+    : IQueryHandler<GetShareReceivesQuery, CloudDriveShareListDto>
 {
-    public async Task<Result<PagedResultDto<CloudDriveShareReceiveItemDto>>> Handle(
+    public async Task<Result<CloudDriveShareListDto>> Handle(
         GetShareReceivesQuery request,
         CancellationToken cancellationToken)
     {
@@ -25,7 +25,7 @@ internal sealed class GetShareReceivesQueryHandler(
 
         if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
         {
-            return Result.Failure<PagedResultDto<CloudDriveShareReceiveItemDto>>(
+            return Result.Failure<CloudDriveShareListDto>(
                 CloudDriveFileHandlerSupport.CloudAccountUidRequired);
         }
 
@@ -37,17 +37,6 @@ internal sealed class GetShareReceivesQueryHandler(
             CloudDriveShareSupport.CreateListContext(request.Input),
             cancellationToken);
 
-        try
-        {
-            return Result.Success(CloudDriveShareSupport.MapList(
-                response,
-                request.Input,
-                CloudDriveShareSupport.ToReceiveItem));
-        }
-        catch (InvalidOperationException)
-        {
-            return Result.Failure<PagedResultDto<CloudDriveShareReceiveItemDto>>(
-                CloudDriveShareSupport.ShareSampleUnavailable);
-        }
+        return Result.Success(CloudDriveShareSupport.MapList(response));
     }
 }

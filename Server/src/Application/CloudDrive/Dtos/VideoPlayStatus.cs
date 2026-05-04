@@ -6,6 +6,11 @@ namespace Application.CloudDrive.Dtos;
 public enum VideoPlayStatus
 {
     /// <summary>
+    /// 成功播放 schema 尚未采集。
+    /// </summary>
+    SchemaNotCollected,
+
+    /// <summary>
     /// 已可播放。
     /// </summary>
     Ready,

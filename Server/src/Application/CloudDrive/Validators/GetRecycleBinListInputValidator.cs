@@ -9,13 +9,19 @@ namespace Application.CloudDrive.Validators;
 /// </summary>
 public sealed class GetRecycleBinListInputValidator : AbstractValidator<GetRecycleBinListInput>
 {
+    private readonly CloudDriveAppConfig _config;
+
     /// <summary>
     /// 初始化 <see cref="GetRecycleBinListInputValidator"/> 类的新实例。
     /// </summary>
-    public GetRecycleBinListInputValidator()
+    public GetRecycleBinListInputValidator(Microsoft.Extensions.Options.IOptions<CloudDriveAppConfig> configOptions)
     {
+        _config = configOptions.Value;
+
         this.RequireCloudAccount();
         RuleFor(input => input.Offset).GreaterThanOrEqualTo(0);
-        RuleFor(input => input.Limit).InclusiveBetween(1, CloudDriveValidationRules.MaxRecycleBinLimit);
+        RuleFor(input => input.Limit)
+            .InclusiveBetween(1, _config.MaxPageSize)
+            .WithMessage(_ => $"Limit 超出系统保护上限 CloudDrive:MaxPageSize={_config.MaxPageSize}。");
     }
 }

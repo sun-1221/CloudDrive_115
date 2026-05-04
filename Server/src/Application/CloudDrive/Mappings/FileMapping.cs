@@ -15,20 +15,16 @@ public static class FileMapping
         return new CloudDriveSearchResultDto
         {
             FileId = file.FileId,
-            Name = file.Name,
+            FileName = file.Name,
             Size = file.Size,
-            FileType = file.FileType,
-            IsDirectory = file.IsDirectory,
-            ModifiedTime = file.ModifiedTime,
             PickCode = file.PickCode,
             Sha1 = file.Sha1,
-            IsStar = file.IsStar,
-            Labels = file.Labels,
+            Ico = file.FileType,
+            IsStarred = file.IsStar,
+            Labels = file.Labels ?? [],
             IsVideo = file.IsVideo,
-            PlayLong = file.PlayLong,
-            VideoDefinition = file.VideoDefinition,
-            ThumbnailUrl = file.ThumbnailUrl,
-            OriginalImageUrl = file.OriginalImageUrl,
+            PlayDuration = file.PlayLong,
+            Thumb = file.ThumbnailUrl ?? file.OriginalImageUrl,
             ParentId = parentId,
         };
     }

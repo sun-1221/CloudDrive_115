@@ -15,9 +15,9 @@ namespace Application.CloudDrive.Offline;
 internal sealed class GetOfflineTaskListQueryHandler(
     ICloudDriveOpenApiGateway openApiGateway,
     IOptions<CloudDriveAppConfig> configOptions)
-    : IQueryHandler<GetOfflineTaskListQuery, PagedResultDto<CloudDriveOfflineTaskDto>>
+    : IQueryHandler<GetOfflineTaskListQuery, CloudDriveOfflineTaskListDto>
 {
-    public async Task<Result<PagedResultDto<CloudDriveOfflineTaskDto>>> Handle(
+    public async Task<Result<CloudDriveOfflineTaskListDto>> Handle(
         GetOfflineTaskListQuery request,
         CancellationToken cancellationToken)
     {
@@ -25,7 +25,7 @@ internal sealed class GetOfflineTaskListQueryHandler(
 
         if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
         {
-            return Result.Failure<PagedResultDto<CloudDriveOfflineTaskDto>>(
+            return Result.Failure<CloudDriveOfflineTaskListDto>(
                 CloudDriveFileHandlerSupport.CloudAccountUidRequired);
         }
 

@@ -26,7 +26,7 @@ public sealed class OfflineHandlerTests
         var handler = new GetOfflineTaskListQueryHandler(gateway, CreateEnabledConfig());
 
         // Act
-        Result<PagedResultDto<CloudDriveOfflineTaskDto>> result = await handler.Handle(
+        Result<CloudDriveOfflineTaskListDto> result = await handler.Handle(
             new GetOfflineTaskListQuery(
                 TestUserId,
                 new GetOfflineTaskListInput
@@ -38,14 +38,16 @@ public sealed class OfflineHandlerTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal("success", result.Value.Items.Single().Status);
+        Assert.Empty(result.Value.Items);
+        Assert.Equal("not_collected", result.Value.ItemSchemaStatus);
+        Assert.Equal(1, result.Value.Count);
         CloudDriveGatewayRequest request = Assert.Single(gateway.OfflineRequests);
         Assert.Equal("task_lists", request.Endpoint);
         Assert.Equal("0", request.Context.FormFields!["stat"]);
     }
 
     [Fact]
-    public async Task GetOfflineQuotaQueryHandler_WhenQuotaAndStatsReturned_MergesStatistics()
+    public async Task GetOfflineQuotaQueryHandler_WhenQuotaReturned_DoesNotCallStats()
     {
         // Arrange
         var gateway = new RecordingCloudDriveOpenApiGateway();
@@ -63,19 +65,37 @@ public sealed class OfflineHandlerTests
         // Assert
         Assert.True(result.IsSuccess);
         Assert.Equal(10, result.Value.Count);
-        Assert.Equal(5, result.Value.Total);
-        Assert.Equal(3, result.Value.Completed);
-        Assert.Equal(["get_quota_package_info", "task_count"], gateway.OfflineRequests.Select(request => request.Endpoint));
+        Assert.Equal(["get_quota_package_info"], gateway.OfflineRequests.Select(request => request.Endpoint));
     }
 
     [Fact]
-    public async Task AddOfflineTaskCommandHandler_WhenSignatureUnavailable_ReturnsBusinessFailure()
+    public async Task GetOfflineStatsQueryHandler_WhenStatsReturned_MapsStatistics()
     {
         // Arrange
-        var gateway = new ThrowingCloudDriveOpenApiGateway(new CloudDriveConfigurationException(
-            "signature unavailable",
-            "offline_signature_not_available"));
-        var handler = new AddOfflineTaskCommandHandler(gateway, CreateEnabledConfig());
+        var gateway = new RecordingCloudDriveOpenApiGateway();
+        gateway.RespondOffline("task_count", """{"state":true,"total_count":5,"failed_count":1,"finished_count":3,"downloading_count":1}""");
+        var handler = new GetOfflineStatsQueryHandler(gateway, CreateEnabledConfig());
+
+        // Act
+        Result<CloudDriveOfflineStatsDto> result = await handler.Handle(
+            new GetOfflineStatsQuery(
+                TestUserId,
+                new CloudDriveAccountScopedInput { CloudAccountUid = TestCloudAccountUid }),
+            CancellationToken.None);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(5, result.Value.Total);
+        Assert.Equal(3, result.Value.Completed);
+        Assert.Equal("task_count", gateway.OfflineRequests.Single().Endpoint);
+    }
+
+    [Fact]
+    public async Task AddOfflineTaskCommandHandler_WhenApiNotCollected_ReturnsBusinessFailureWithoutRequest()
+    {
+        // Arrange
+        var gateway = new RecordingCloudDriveOpenApiGateway();
+        var handler = new AddOfflineTaskCommandHandler(CreateEnabledConfig());
 
         // Act
         Result<CloudDriveOperationResultDto> result = await handler.Handle(
@@ -90,15 +110,16 @@ public sealed class OfflineHandlerTests
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Equal("offline_signature_not_available", result.Error.Code);
+        Assert.Equal("cloud_drive_api_not_collected", result.Error.Code);
+        Assert.Empty(gateway.OfflineRequests);
     }
 
     [Fact]
-    public async Task CancelOfflineTaskCommandHandler_WhenSuccessful_PostsDelTask()
+    public async Task CancelOfflineTaskCommandHandler_WhenApiNotCollected_ReturnsBusinessFailureWithoutRequest()
     {
         // Arrange
         var gateway = new RecordingCloudDriveOpenApiGateway();
-        var handler = new CancelOfflineTaskCommandHandler(gateway, CreateEnabledConfig());
+        var handler = new CancelOfflineTaskCommandHandler(CreateEnabledConfig());
 
         // Act
         Result<CloudDriveOperationResultDto> result = await handler.Handle(
@@ -112,10 +133,9 @@ public sealed class OfflineHandlerTests
             CancellationToken.None);
 
         // Assert
-        Assert.True(result.IsSuccess);
-        CloudDriveGatewayRequest request = Assert.Single(gateway.OfflineRequests);
-        Assert.Equal("del_task", request.Endpoint);
-        Assert.Equal("hash-1", request.Context.FormFields!["hash[0]"]);
+        Assert.True(result.IsFailure);
+        Assert.Equal("cloud_drive_api_not_collected", result.Error.Code);
+        Assert.Empty(gateway.OfflineRequests);
     }
 
     private static IOptions<CloudDriveAppConfig> CreateEnabledConfig()

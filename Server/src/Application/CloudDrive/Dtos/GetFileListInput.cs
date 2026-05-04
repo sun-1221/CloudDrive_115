@@ -18,7 +18,7 @@ public class GetFileListInput : CloudDriveAccountScopedInput
     /// <summary>
     /// 获取或设置最大返回数量。
     /// </summary>
-    public int Limit { get; set; } = 20;
+    public int Limit { get; set; } = 50;
 
     /// <summary>
     /// 获取或设置文件类型筛选。

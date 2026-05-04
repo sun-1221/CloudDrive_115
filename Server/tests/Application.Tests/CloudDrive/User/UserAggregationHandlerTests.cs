@@ -34,7 +34,7 @@ public sealed class UserAggregationHandlerTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal(10, result.Value.AllTotalBytes);
+        Assert.Equal("not_collected", result.Value.SchemaStatus);
         Assert.Contains(gateway.WebApiRequests, request => request.Endpoint == "files/index_info");
     }
 
@@ -64,7 +64,6 @@ public sealed class UserAggregationHandlerTests
     private static RecordingCloudDriveOpenApiGateway CreateUserGateway()
     {
         var gateway = new RecordingCloudDriveOpenApiGateway();
-        gateway.RespondWeb("user/info", """{"state":true,"data":{"user_name":"tester"}}""");
         gateway.RespondWeb("files/index_info", """{"state":true,"data":{"all_total":"10 GB","all_use":"2 GB","all_remain":"8 GB","all_total_size":10,"all_use_size":2,"all_remain_size":8}}""");
         gateway.RespondWeb("user/vip_limit", """{"state":true,"data":{"level_name":"VIP","expire":"1893456000"}}""");
         gateway.RespondUserCenter("proapi/3.0/index.php", """{"state":true,"data":{"user_name":"tester-my","pub_mobile":"must-not-map"}}""");

@@ -31,7 +31,8 @@ internal sealed class RefreshDirectoryCommandHandler(
         await metadataCache.InvalidateDirectoryAsync(
             request.UserId,
             request.Input.CloudAccountUid,
-            directoryId);
+            directoryId,
+            cancellationToken);
 
         var listInput = new GetFileListInput
         {

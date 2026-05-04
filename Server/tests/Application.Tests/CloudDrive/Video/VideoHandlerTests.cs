@@ -16,7 +16,7 @@ public sealed class VideoHandlerTests
     private const string TestCloudAccountUid = "115001";
 
     [Fact]
-    public async Task GetVideoPlayUrlCommandHandler_WhenVideoReady_ReturnsQualityOptions()
+    public async Task GetVideoPlayUrlCommandHandler_WhenVideoSchemaUncollected_ReturnsEmptyPlayback()
     {
         // Arrange
         TestContext context = CreateContext();
@@ -26,7 +26,6 @@ public sealed class VideoHandlerTests
         var handler = new GetVideoPlayUrlCommandHandler(
             context.FileManager,
             context.Gateway,
-            context.JobOrchestrator,
             CreateEnabledConfig());
 
         // Act
@@ -43,9 +42,9 @@ public sealed class VideoHandlerTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal(VideoPlayStatus.Ready, result.Value.Status);
-        Assert.Equal(120, result.Value.Duration);
-        Assert.Equal("https://video.test/1080.mp4", result.Value.QualityOptions.Single().PlayUrl);
+        Assert.Equal(VideoPlayStatus.SchemaNotCollected, result.Value.Status);
+        Assert.Equal("not_collected", result.Value.PlaybackSchemaStatus);
+        Assert.Empty(result.Value.QualityOptions);
         Assert.True(result.Value.IsTemporary);
         Assert.Empty(context.JobOrchestrator.Transcodes);
         CloudDriveGatewayRequest request = Assert.Single(context.Gateway.WebApiRequests);
@@ -70,7 +69,6 @@ public sealed class VideoHandlerTests
         var handler = new GetVideoPlayUrlCommandHandler(
             context.FileManager,
             context.Gateway,
-            context.JobOrchestrator,
             CreateEnabledConfig());
 
         // Act
@@ -86,9 +84,9 @@ public sealed class VideoHandlerTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal(VideoPlayStatus.Transcoding, result.Value.Status);
-        Assert.Equal(context.JobOrchestrator.NextJobId, result.Value.JobId);
-        Assert.Equal("pick-1", context.JobOrchestrator.Transcodes.Single().Input.PickCode);
+        Assert.Equal(VideoPlayStatus.SchemaNotCollected, result.Value.Status);
+        Assert.Null(result.Value.JobId);
+        Assert.Empty(context.JobOrchestrator.Transcodes);
     }
 
     [Fact]
@@ -152,11 +150,42 @@ public sealed class VideoHandlerTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        CloudDriveSubtitleDto subtitle = Assert.Single(result.Value.Items);
-        Assert.Equal("s1", subtitle.SubtitleId);
-        Assert.Equal("cm1", subtitle.CaptionMapId);
-        Assert.True(subtitle.IsCaptionMap);
-        Assert.Equal(3, subtitle.SyncTime);
+        Assert.Null(result.Value.AutoloadSubtitle);
+        Assert.Empty(result.Value.Items);
+        Assert.Equal("not_collected", result.Value.ItemSchemaStatus);
+    }
+
+    [Fact]
+    public async Task GetVideoPlayProgressQueryHandler_WhenHistoryIsEmpty_ReturnsEmptyProgress()
+    {
+        // Arrange
+        TestContext context = CreateContext();
+        context.Gateway.RespondWeb("files/history", """{"state":true,"data":[]}""");
+        var handler = new GetVideoPlayProgressQueryHandler(
+            context.FileManager,
+            context.Gateway,
+            CreateEnabledConfig());
+
+        // Act
+        Result<CloudDriveVideoPlayProgressDto> result = await handler.Handle(
+            new GetVideoPlayProgressQuery(
+                TestUserId,
+                new GetVideoPlayProgressInput
+                {
+                    CloudAccountUid = TestCloudAccountUid,
+                    PickCode = "pick-1",
+                }),
+            CancellationToken.None);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal("pick-1", result.Value.PickCode);
+        Assert.Null(result.Value.FileId);
+        Assert.Null(result.Value.FileName);
+        Assert.Null(result.Value.Hash);
+        Assert.Null(result.Value.PlayedSeconds);
+        Assert.Null(result.Value.AddTime);
+        Assert.Equal("available", result.Value.SchemaStatus);
     }
 
     [Fact]

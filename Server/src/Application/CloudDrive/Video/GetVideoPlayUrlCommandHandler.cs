@@ -15,7 +15,6 @@ namespace Application.CloudDrive.Video;
 internal sealed class GetVideoPlayUrlCommandHandler(
     CloudDriveFileManager fileManager,
     ICloudDriveOpenApiGateway openApiGateway,
-    ICloudDriveJobOrchestrator jobOrchestrator,
     IOptions<CloudDriveAppConfig> configOptions)
     : ICommandHandler<GetVideoPlayUrlCommand, CloudDriveVideoPlayDto>
 {
@@ -50,22 +49,6 @@ internal sealed class GetVideoPlayUrlCommandHandler(
             cancellationToken);
 
         CloudDriveVideoPlayDto dto = CloudDriveVideoSupport.MapVideoPlay(response, request.Input.Definition);
-        if (dto.Status == VideoPlayStatus.Transcoding)
-        {
-            Guid jobId = await jobOrchestrator.EnqueueVideoTranscodeAsync(
-                request.UserId,
-                new SubmitTranscodeInput
-                {
-                    CloudAccountUid = request.Input.CloudAccountUid,
-                    FileId = request.Input.FileId,
-                    PickCode = pickCodeResult.Value,
-                    Op = "vip_push",
-                },
-                cancellationToken);
-
-            dto.JobId = jobId;
-        }
-
         return Result.Success(dto);
     }
 

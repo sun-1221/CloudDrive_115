@@ -14,4 +14,9 @@ public class CloudDriveSubtitleListDto
     /// 获取或设置字幕条目。
     /// </summary>
     public IReadOnlyList<CloudDriveSubtitleDto> Items { get; set; } = [];
+
+    /// <summary>
+    /// 获取或设置字幕条目 schema 状态。
+    /// </summary>
+    public string ItemSchemaStatus { get; set; } = "not_collected";
 }

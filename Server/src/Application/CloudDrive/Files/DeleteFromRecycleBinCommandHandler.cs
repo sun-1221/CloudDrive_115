@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 using Application.Abstractions.CloudDrive;
 using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
@@ -13,7 +11,6 @@ using Microsoft.Extensions.Options;
 namespace Application.CloudDrive.Files;
 
 internal sealed class DeleteFromRecycleBinCommandHandler(
-    ICloudDriveOpenApiGateway openApiGateway,
     ICloudDriveJobOrchestrator jobOrchestrator,
     IOptions<CloudDriveAppConfig> configOptions)
     : ICommandHandler<DeleteFromRecycleBinCommand, CloudDriveOperationResultDto>
@@ -42,14 +39,7 @@ internal sealed class DeleteFromRecycleBinCommandHandler(
             return Result.Success(CloudDriveFileHandlerSupport.CreateAcceptedResult(jobId, "回收站彻底删除任务已受理。"));
         }
 
-        await openApiGateway.SendWebApiRequestAsync<JsonElement>(
-            request.UserId,
-            request.Input.CloudAccountUid,
-            HttpMethod.Post,
-            "rb/delete",
-            CloudDriveFileHandlerSupport.CreateRecycleBinOperationContext(request.Input, hardDelete: true),
-            cancellationToken);
-
-        return Result.Success(CloudDriveFileHandlerSupport.CreateSyncResult("回收站彻底删除完成。"));
+        return Result.Failure<CloudDriveOperationResultDto>(
+            CloudDriveFileHandlerSupport.ApiNotCollected("回收站彻底删除"));
     }
 }

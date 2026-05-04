@@ -4,4 +4,4 @@ using Application.Queries;
 namespace Application.CloudDrive.Share;
 
 public sealed record GetShareReceivesQuery(Guid UserId, GetShareListInput Input)
-    : IQuery<PagedResultDto<CloudDriveShareReceiveItemDto>>;
+    : IQuery<CloudDriveShareListDto>;

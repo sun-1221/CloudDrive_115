@@ -9,4 +9,4 @@ namespace Application.CloudDrive.Files;
 /// <param name="UserId">系统用户 ID。</param>
 /// <param name="Input">文件搜索输入。</param>
 public sealed record SearchFilesQuery(Guid UserId, SearchFileInput Input)
-    : IQuery<PagedResultDto<CloudDriveSearchResultDto>>;
+    : IQuery<CloudDriveSearchListDto>;

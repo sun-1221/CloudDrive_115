@@ -13,9 +13,9 @@ internal sealed class SearchFilesQueryHandler(
     ICloudDriveOpenApiGateway openApiGateway,
     ICloudDriveRateLimiter rateLimiter,
     IOptions<CloudDriveAppConfig> configOptions)
-    : IQueryHandler<SearchFilesQuery, PagedResultDto<CloudDriveSearchResultDto>>
+    : IQueryHandler<SearchFilesQuery, CloudDriveSearchListDto>
 {
-    public async Task<Result<PagedResultDto<CloudDriveSearchResultDto>>> Handle(
+    public async Task<Result<CloudDriveSearchListDto>> Handle(
         SearchFilesQuery request,
         CancellationToken cancellationToken)
     {
@@ -23,13 +23,13 @@ internal sealed class SearchFilesQueryHandler(
 
         if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
         {
-            return Result.Failure<PagedResultDto<CloudDriveSearchResultDto>>(
+            return Result.Failure<CloudDriveSearchListDto>(
                 CloudDriveFileHandlerSupport.CloudAccountUidRequired);
         }
 
         if (string.IsNullOrWhiteSpace(request.Input.Keyword))
         {
-            return Result.Failure<PagedResultDto<CloudDriveSearchResultDto>>(
+            return Result.Failure<CloudDriveSearchListDto>(
                 CloudDriveFileHandlerSupport.InvalidInput(
                     "cloud_drive_search_keyword_required",
                     "搜索关键字不能为空。"));
@@ -42,8 +42,8 @@ internal sealed class SearchFilesQueryHandler(
             context.Category,
             cancellationToken);
 
-        PagedResultDto<CloudDriveSearchResultDto> result =
-            await openApiGateway.SendWebApiRequestAsync<PagedResultDto<CloudDriveSearchResultDto>>(
+        CloudDriveSearchListDto result =
+            await openApiGateway.SendWebApiRequestAsync<CloudDriveSearchListDto>(
                 request.UserId,
                 request.Input.CloudAccountUid,
                 HttpMethod.Get,

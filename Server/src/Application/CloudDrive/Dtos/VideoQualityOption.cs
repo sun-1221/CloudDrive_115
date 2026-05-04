@@ -8,7 +8,7 @@ public class VideoQualityOption
     /// <summary>
     /// 获取或设置清晰度标识。
     /// </summary>
-    public int Definition { get; set; }
+    public int? Definition { get; set; }
 
     /// <summary>
     /// 获取或设置新版清晰度标识。
@@ -23,7 +23,7 @@ public class VideoQualityOption
     /// <summary>
     /// 获取或设置临时播放地址。
     /// </summary>
-    public string PlayUrl { get; set; } = string.Empty;
+    public string? PlayUrl { get; set; }
 
     /// <summary>
     /// 获取或设置视频高度。

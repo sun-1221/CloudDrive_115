@@ -9,15 +9,20 @@ namespace Application.CloudDrive.Validators;
 /// </summary>
 public sealed class GetFileListInputValidator : AbstractValidator<GetFileListInput>
 {
+    private readonly CloudDriveAppConfig _config;
+
     /// <summary>
     /// 初始化 <see cref="GetFileListInputValidator"/> 类的新实例。
     /// </summary>
-    public GetFileListInputValidator()
+    public GetFileListInputValidator(Microsoft.Extensions.Options.IOptions<CloudDriveAppConfig> configOptions)
     {
+        _config = configOptions.Value;
+
         this.RequireCloudAccount();
         RuleFor(input => input.Offset).GreaterThanOrEqualTo(0);
-        RuleFor(input => input.Limit).InclusiveBetween(1, CloudDriveValidationRules.MaxFileListLimit);
-        RuleFor(input => input.Type).Must(CloudDriveValidationRules.IsValidFileListType).WithMessage("Type 必须在 1-7 之间。");
+        RuleFor(input => input.Limit)
+            .InclusiveBetween(1, _config.MaxPageSize)
+            .WithMessage(_ => $"Limit 超出系统保护上限 CloudDrive:MaxPageSize={_config.MaxPageSize}。");
         RuleFor(input => input.Asc).Must(CloudDriveValidationRules.IsValidBinaryFlag).WithMessage("Asc 必须为 0 或 1。");
         RuleFor(input => input.Star).Must(CloudDriveValidationRules.IsValidBinaryFlag).WithMessage("Star 必须为 0 或 1。");
         RuleFor(input => input.ShowDir).Must(CloudDriveValidationRules.IsValidBinaryFlag).WithMessage("ShowDir 必须为 0 或 1。");

@@ -37,14 +37,6 @@ internal sealed class GetOfflineQuotaQueryHandler(
             CloudDriveOfflineSupport.CreateQuotaContext(),
             cancellationToken);
 
-        JsonElement stats = await openApiGateway.SendOfflineApiRequestAsync<JsonElement>(
-            request.UserId,
-            request.Input.CloudAccountUid,
-            HttpMethod.Post,
-            "task_count",
-            CloudDriveOfflineSupport.CreateStatsContext(),
-            cancellationToken);
-
-        return Result.Success(CloudDriveOfflineSupport.MapQuota(quota, stats));
+        return Result.Success(CloudDriveOfflineSupport.MapQuota(quota));
     }
 }

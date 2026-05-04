@@ -26,15 +26,15 @@ internal sealed class GetUserVipQueryHandler(
                 CloudDriveFileHandlerSupport.CloudAccountUidRequired);
         }
 
-        CloudDriveUserInfoDto userInfo = await userAggregationService.AggregateUserInfoAsync(
+        CloudDriveUserProfileDto profile = await userAggregationService.AggregateUserProfileAsync(
             request.UserId,
             request.Input.CloudAccountUid,
             cancellationToken);
 
-        return userInfo.VipInfo is null
+        return profile.Vip is null
             ? Result.Failure<CloudDriveVipInfoDto>(new Error(
                 "cloud_drive_user_vip_unavailable",
                 "用户 VIP 信息暂不可用。"))
-            : Result.Success(userInfo.VipInfo);
+            : Result.Success(profile.Vip);
     }
 }

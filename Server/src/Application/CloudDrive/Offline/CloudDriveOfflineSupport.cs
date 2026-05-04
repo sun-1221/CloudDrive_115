@@ -49,71 +49,29 @@ internal static class CloudDriveOfflineSupport
         };
     }
 
-    public static CloudDriveApiContext CreateAddTaskContext(AddOfflineTaskInput input)
-    {
-        Dictionary<string, string> formFields = new(StringComparer.Ordinal)
-        {
-            ["url"] = input.Urls.Count == 1 ? input.Urls[0] : string.Join('\n', input.Urls),
-        };
-
-        if (!string.IsNullOrWhiteSpace(input.SavePath))
-        {
-            formFields["wp_path_id"] = input.SavePath;
-        }
-
-        return new CloudDriveApiContext
-        {
-            Category = "offline-write",
-            FormFields = formFields,
-        };
-    }
-
-    public static CloudDriveApiContext CreateCancelTaskContext(CancelOfflineTaskInput input)
-    {
-        return new CloudDriveApiContext
-        {
-            Category = "offline-write",
-            FormFields = new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["hash[0]"] = input.InfoHash,
-            },
-        };
-    }
-
-    public static CloudDriveApiContext CreateClearTasksContext(ClearOfflineTasksInput input)
-    {
-        Dictionary<string, string> formFields = new(StringComparer.Ordinal);
-        if (input.Stat.HasValue)
-        {
-            formFields["flag"] = input.Stat.Value.ToString(CultureInfo.InvariantCulture);
-        }
-
-        return new CloudDriveApiContext
-        {
-            Category = "offline-write",
-            FormFields = formFields,
-        };
-    }
-
-    public static PagedResultDto<CloudDriveOfflineTaskDto> MapTaskList(JsonElement response, GetOfflineTaskListInput input)
+    public static CloudDriveOfflineTaskListDto MapTaskList(JsonElement response, GetOfflineTaskListInput input)
     {
         JsonElement source = GetPayload(response);
-        List<CloudDriveOfflineTaskDto> items = ReadTaskArray(source);
-        int pageSize = ReadInt32(source, "page_size") ?? ReadInt32(source, "page_row") ?? items.Count;
 
-        return new PagedResultDto<CloudDriveOfflineTaskDto>
+        return new CloudDriveOfflineTaskListDto
         {
-            Items = items,
-            TotalCount = ReadInt64(source, "count") ?? ReadInt64(source, "total") ?? items.Count,
-            SkipCount = Math.Max(input.Page - 1, 0) * pageSize,
-            MaxResultCount = pageSize,
+            Items = [],
+            Page = ReadInt32(source, "page") ?? input.Page,
+            PageCount = ReadInt32(source, "page_count") ?? 0,
+            PageRow = ReadInt32(source, "page_row") ?? 0,
+            PageSize = ReadInt32(source, "page_size") ?? 0,
+            Count = ReadInt32(source, "count") ?? 0,
+            Quota = ReadInt32(source, "quota") ?? 0,
+            Total = ReadInt32(source, "total") ?? 0,
+            RealState = ReadBoolean(source, "real_state"),
+            ErrType = ReadString(source, "errtype"),
+            ItemSchemaStatus = "not_collected",
         };
     }
 
-    public static CloudDriveOfflineQuotaDto MapQuota(JsonElement quotaResponse, JsonElement? statsResponse)
+    public static CloudDriveOfflineQuotaDto MapQuota(JsonElement quotaResponse)
     {
         JsonElement quota = GetPayload(quotaResponse);
-        JsonElement? stats = statsResponse.HasValue ? GetPayload(statsResponse.Value) : null;
 
         return new CloudDriveOfflineQuotaDto
         {
@@ -124,10 +82,19 @@ internal static class CloudDriveOfflineSupport
             Surplus = ReadInt32(quota, "surplus") ?? 0,
             MaxSize = ReadInt64(quota, "max_size") ?? 0,
             Used = ReadInt64(quota, "used") ?? 0,
-            Total = stats.HasValue ? ReadInt32(stats.Value, "total_count") ?? 0 : 0,
-            Failed = stats.HasValue ? ReadInt32(stats.Value, "failed_count") ?? 0 : 0,
-            Completed = stats.HasValue ? ReadInt32(stats.Value, "finished_count") ?? 0 : 0,
-            Active = stats.HasValue ? ReadInt32(stats.Value, "downloading_count") ?? 0 : 0,
+        };
+    }
+
+    public static CloudDriveOfflineStatsDto MapStats(JsonElement statsResponse)
+    {
+        JsonElement stats = GetPayload(statsResponse);
+
+        return new CloudDriveOfflineStatsDto
+        {
+            Total = ReadInt32(stats, "total_count") ?? 0,
+            Failed = ReadInt32(stats, "failed_count") ?? 0,
+            Completed = ReadInt32(stats, "finished_count") ?? 0,
+            Active = ReadInt32(stats, "downloading_count") ?? 0,
         };
     }
 
@@ -141,11 +108,6 @@ internal static class CloudDriveOfflineSupport
         return string.Equals(exception.ErrorCode, "offline_signature_not_available", StringComparison.Ordinal);
     }
 
-    public static string ResolveAddAction(AddOfflineTaskInput input)
-    {
-        return input.Urls.Count == 1 ? "add_task_url" : "add_task_urls";
-    }
-
     private static JsonElement GetPayload(JsonElement response)
     {
         if (response.ValueKind == JsonValueKind.Object
@@ -156,54 +118,6 @@ internal static class CloudDriveOfflineSupport
         }
 
         return response;
-    }
-
-    private static List<CloudDriveOfflineTaskDto> ReadTaskArray(JsonElement source)
-    {
-        if (!source.TryGetProperty("tasks", out JsonElement tasks)
-            || tasks.ValueKind != JsonValueKind.Array)
-        {
-            return [];
-        }
-
-        List<CloudDriveOfflineTaskDto> result = [];
-        foreach (JsonElement item in tasks.EnumerateArray())
-        {
-            if (item.ValueKind != JsonValueKind.Object)
-            {
-                continue;
-            }
-
-            result.Add(new CloudDriveOfflineTaskDto
-            {
-                InfoHash = ReadString(item, "info_hash") ?? string.Empty,
-                Name = ReadString(item, "name") ?? string.Empty,
-                Size = ReadInt64(item, "size") ?? 0,
-                AddTime = ReadInt64(item, "add_time"),
-                LastUpdate = ReadInt64(item, "last_update"),
-                PercentDone = ReadDecimal(item, "percentDone") ?? ReadDecimal(item, "percent_done"),
-                Url = ReadString(item, "url"),
-                FileId = ReadString(item, "file_id"),
-                ParentId = ReadString(item, "wp_path_id"),
-                VideoDefinition = ReadString(item, "def2"),
-                PlayDuration = ReadInt64(item, "play_long"),
-                Status = NormalizeStatus(ReadInt32(item, "status")),
-            });
-        }
-
-        return result;
-    }
-
-    private static string? NormalizeStatus(int? status)
-    {
-        return status switch
-        {
-            -1 => "failed",
-            0 => "allocating",
-            1 => "downloading",
-            2 => "success",
-            _ => null,
-        };
     }
 
     private static string? ReadString(JsonElement source, string propertyName)
@@ -249,7 +163,7 @@ internal static class CloudDriveOfflineSupport
                 : null;
     }
 
-    private static decimal? ReadDecimal(JsonElement source, string propertyName)
+    private static bool? ReadBoolean(JsonElement source, string propertyName)
     {
         if (source.ValueKind != JsonValueKind.Object
             || !source.TryGetProperty(propertyName, out JsonElement value))
@@ -257,14 +171,18 @@ internal static class CloudDriveOfflineSupport
             return null;
         }
 
-        if (value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out decimal number))
+        if (value.ValueKind is JsonValueKind.True or JsonValueKind.False)
         {
-            return number;
+            return value.GetBoolean();
         }
 
-        return value.ValueKind == JsonValueKind.String
-            && decimal.TryParse(value.GetString(), NumberStyles.Number, CultureInfo.InvariantCulture, out decimal stringNumber)
-                ? stringNumber
-                : null;
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int number))
+        {
+            return number != 0;
+        }
+
+        return value.ValueKind == JsonValueKind.String && bool.TryParse(value.GetString(), out bool parsed)
+            ? parsed
+            : null;
     }
 }

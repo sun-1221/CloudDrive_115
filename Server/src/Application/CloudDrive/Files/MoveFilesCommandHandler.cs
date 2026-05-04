@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 using Application.Abstractions.CloudDrive;
 using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
@@ -13,8 +11,6 @@ using Microsoft.Extensions.Options;
 namespace Application.CloudDrive.Files;
 
 internal sealed class MoveFilesCommandHandler(
-    CloudDriveFileManager fileManager,
-    ICloudDriveOpenApiGateway openApiGateway,
     ICloudDriveJobOrchestrator jobOrchestrator,
     IOptions<CloudDriveAppConfig> configOptions)
     : ICommandHandler<MoveFilesCommand, CloudDriveOperationResultDto>
@@ -43,24 +39,7 @@ internal sealed class MoveFilesCommandHandler(
             return Result.Success(CloudDriveFileHandlerSupport.CreateAcceptedResult(jobId, "移动任务已受理。"));
         }
 
-        CloudDriveOperationResultDto result = await fileManager.ExecuteWithCacheInvalidationAsync(
-            request.UserId,
-            request.Input.CloudAccountUid,
-            [request.Input.TargetDirectoryId],
-            async () =>
-            {
-                await openApiGateway.SendWebApiRequestAsync<JsonElement>(
-                    request.UserId,
-                    request.Input.CloudAccountUid,
-                    HttpMethod.Post,
-                    "files/move",
-                    CloudDriveFileHandlerSupport.CreateMoveContext(request.Input),
-                    cancellationToken);
-
-                return CloudDriveFileHandlerSupport.CreateSyncResult("移动完成。");
-            },
-            cancellationToken);
-
-        return Result.Success(result);
+        return Result.Failure<CloudDriveOperationResultDto>(
+            CloudDriveFileHandlerSupport.ApiNotCollected("文件移动"));
     }
 }

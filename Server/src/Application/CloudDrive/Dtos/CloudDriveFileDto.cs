@@ -28,7 +28,7 @@ public class CloudDriveFileDto
     /// <summary>
     /// 获取或设置是否为目录。
     /// </summary>
-    public bool IsDirectory { get; set; }
+    public bool? IsDirectory { get; set; }
 
     /// <summary>
     /// 获取或设置修改时间。

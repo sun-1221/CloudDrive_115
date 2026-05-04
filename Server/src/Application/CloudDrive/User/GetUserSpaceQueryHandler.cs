@@ -26,15 +26,15 @@ internal sealed class GetUserSpaceQueryHandler(
                 CloudDriveFileHandlerSupport.CloudAccountUidRequired);
         }
 
-        CloudDriveUserInfoDto userInfo = await userAggregationService.AggregateUserInfoAsync(
+        CloudDriveUserProfileDto profile = await userAggregationService.AggregateUserProfileAsync(
             request.UserId,
             request.Input.CloudAccountUid,
             cancellationToken);
 
-        return userInfo.SpaceInfo is null
+        return profile.Storage is null
             ? Result.Failure<CloudDriveSpaceInfoDto>(new Error(
                 "cloud_drive_user_space_unavailable",
                 "用户空间信息暂不可用。"))
-            : Result.Success(userInfo.SpaceInfo);
+            : Result.Success(profile.Storage);
     }
 }

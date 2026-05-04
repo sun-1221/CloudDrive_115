@@ -6,37 +6,32 @@ namespace Application.CloudDrive.Dtos;
 public class CloudDriveUserInfoDto
 {
     /// <summary>
-    /// 获取或设置 115 账号 UID。
+    /// 获取或设置官方 user_id。
     /// </summary>
-    public string CloudAccountUid { get; set; } = string.Empty;
+    public string Uid { get; set; } = string.Empty;
 
     /// <summary>
-    /// 获取或设置官方用户名。
+    /// 获取或设置官方昵称。
     /// </summary>
-    public string UserName { get; set; } = string.Empty;
+    public string Nickname { get; set; } = string.Empty;
 
     /// <summary>
-    /// 获取或设置小尺寸头像地址。
+    /// 获取或设置头像地址。
     /// </summary>
-    public string? AvatarSmallUrl { get; set; }
+    public string? AvatarUrl { get; set; }
 
     /// <summary>
-    /// 获取或设置中尺寸头像地址。
+    /// 获取或设置是否为 VIP。
     /// </summary>
-    public string? AvatarMediumUrl { get; set; }
+    public bool IsVip { get; set; }
 
     /// <summary>
-    /// 获取或设置大尺寸头像地址。
+    /// 获取或设置已脱敏手机号。
     /// </summary>
-    public string? AvatarLargeUrl { get; set; }
+    public string? MaskedPhone { get; set; }
 
     /// <summary>
-    /// 获取或设置空间信息。
+    /// 获取或设置已脱敏邮箱。
     /// </summary>
-    public CloudDriveSpaceInfoDto? SpaceInfo { get; set; }
-
-    /// <summary>
-    /// 获取或设置 VIP 信息。
-    /// </summary>
-    public CloudDriveVipInfoDto? VipInfo { get; set; }
+    public string? MaskedEmail { get; set; }
 }

@@ -15,7 +15,7 @@ public sealed class ShareHandlerTests
     private const string TestCloudAccountUid = "115001";
 
     [Fact]
-    public async Task GetMySharesQueryHandler_WhenListReturned_MapsItems()
+    public async Task GetMySharesQueryHandler_WhenListReturned_ReturnsNotCollectedItems()
     {
         // Arrange
         var gateway = new RecordingCloudDriveOpenApiGateway();
@@ -25,7 +25,7 @@ public sealed class ShareHandlerTests
         var handler = new GetMySharesQueryHandler(gateway, CreateEnabledConfig());
 
         // Act
-        Result<PagedResultDto<CloudDriveShareItemDto>> result = await handler.Handle(
+        Result<CloudDriveShareListDto> result = await handler.Handle(
             new GetMySharesQuery(
                 TestUserId,
                 new GetShareListInput
@@ -38,14 +38,16 @@ public sealed class ShareHandlerTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal("s1", result.Value.Items.Single().ShareCode);
+        Assert.Empty(result.Value.Items);
+        Assert.Equal("not_collected", result.Value.ItemSchemaStatus);
+        Assert.Equal(1, result.Value.Count);
         CloudDriveGatewayRequest request = Assert.Single(gateway.WebApiRequests);
         Assert.Equal("share/slist", request.Endpoint);
         Assert.Equal("json", request.Context.QueryParameters!["format"]);
     }
 
     [Fact]
-    public async Task GetShareSendsQueryHandler_WhenSampleShapeMissing_ReturnsSampleUnavailable()
+    public async Task GetShareSendsQueryHandler_WhenSampleShapeMissing_ReturnsNotCollectedList()
     {
         // Arrange
         var gateway = new RecordingCloudDriveOpenApiGateway();
@@ -53,7 +55,7 @@ public sealed class ShareHandlerTests
         var handler = new GetShareSendsQueryHandler(gateway, CreateEnabledConfig());
 
         // Act
-        Result<PagedResultDto<CloudDriveShareSendItemDto>> result = await handler.Handle(
+        Result<CloudDriveShareListDto> result = await handler.Handle(
             new GetShareSendsQuery(
                 TestUserId,
                 new GetShareListInput
@@ -65,8 +67,9 @@ public sealed class ShareHandlerTests
             CancellationToken.None);
 
         // Assert
-        Assert.True(result.IsFailure);
-        Assert.Equal("share_sample_unavailable", result.Error.Code);
+        Assert.True(result.IsSuccess);
+        Assert.Empty(result.Value.Items);
+        Assert.Equal("not_collected", result.Value.ItemSchemaStatus);
     }
 
     private static IOptions<CloudDriveAppConfig> CreateEnabledConfig()

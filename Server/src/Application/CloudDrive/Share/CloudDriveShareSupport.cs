@@ -10,10 +10,6 @@ namespace Application.CloudDrive.Share;
 
 internal static class CloudDriveShareSupport
 {
-    public static readonly Error ShareSampleUnavailable = new(
-        "share_sample_unavailable",
-        "分享接口当前缺少可用成功样本，待联调补齐字段映射。");
-
     public static CloudDriveApiContext CreateListContext(GetShareListInput input)
     {
         return new CloudDriveApiContext
@@ -28,81 +24,18 @@ internal static class CloudDriveShareSupport
         };
     }
 
-    public static PagedResultDto<TShare> MapList<TShare>(
-        JsonElement response,
-        GetShareListInput input,
-        Func<CloudDriveShareItemDto, TShare> convert)
+    public static CloudDriveShareListDto MapList(JsonElement response)
     {
         JsonElement source = GetPayload(response);
-        if (!source.TryGetProperty("list", out JsonElement list)
-            || list.ValueKind != JsonValueKind.Array)
-        {
-            throw new InvalidOperationException("Share list response does not contain a list array.");
-        }
 
-        List<TShare> items = [];
-        foreach (JsonElement item in list.EnumerateArray())
+        return new CloudDriveShareListDto
         {
-            if (item.ValueKind == JsonValueKind.Object)
-            {
-                items.Add(convert(MapItem(item)));
-            }
-        }
-
-        return new PagedResultDto<TShare>
-        {
-            Items = items,
-            TotalCount = ReadInt64(source, "count") ?? items.Count,
-            SkipCount = input.Offset,
-            MaxResultCount = input.Limit,
-        };
-    }
-
-    public static CloudDriveShareSendItemDto ToSendItem(CloudDriveShareItemDto item)
-    {
-        return new CloudDriveShareSendItemDto
-        {
-            ShareCode = item.ShareCode,
-            ShareTitle = item.ShareTitle,
-            FileId = item.FileId,
-            FileName = item.FileName,
-            PickCode = item.PickCode,
-            FileSize = item.FileSize,
-            CreateTime = item.CreateTime,
-            ExpireTime = item.ExpireTime,
-            Url = item.Url,
-        };
-    }
-
-    public static CloudDriveShareReceiveItemDto ToReceiveItem(CloudDriveShareItemDto item)
-    {
-        return new CloudDriveShareReceiveItemDto
-        {
-            ShareCode = item.ShareCode,
-            ShareTitle = item.ShareTitle,
-            FileId = item.FileId,
-            FileName = item.FileName,
-            PickCode = item.PickCode,
-            FileSize = item.FileSize,
-            CreateTime = item.CreateTime,
-            ExpireTime = item.ExpireTime,
-            Url = item.Url,
-        };
-    }
-
-    private static CloudDriveShareItemDto MapItem(JsonElement item)
-    {
-        return new CloudDriveShareItemDto
-        {
-            ShareCode = ReadString(item, "share_code") ?? ReadString(item, "share_id"),
-            ShareTitle = ReadString(item, "share_title") ?? ReadString(item, "title"),
-            FileId = ReadString(item, "file_id") ?? ReadString(item, "fid"),
-            FileName = ReadString(item, "file_name") ?? ReadString(item, "n"),
-            PickCode = ReadString(item, "pick_code") ?? ReadString(item, "pickcode"),
-            FileSize = ReadInt64(item, "file_size") ?? ReadInt64(item, "size"),
-            CreateTime = ReadInt64(item, "create_time"),
-            ExpireTime = ReadInt64(item, "expire_time"),
-            Url = ReadString(item, "url"),
+            Items = [],
+            Count = ReadInt32(source, "count"),
+            DefineReceiveCode = ReadInt32(source, "define_receive_code"),
+            BindReceiveCode = ReadInt32(source, "bind_receive_code"),
+            Request = ReadString(source, "request"),
+            ItemSchemaStatus = "not_collected",
         };
     }
 
@@ -136,7 +69,7 @@ internal static class CloudDriveShareSupport
         };
     }
 
-    private static long? ReadInt64(JsonElement source, string propertyName)
+    private static int? ReadInt32(JsonElement source, string propertyName)
     {
         if (source.ValueKind != JsonValueKind.Object
             || !source.TryGetProperty(propertyName, out JsonElement value))
@@ -144,13 +77,13 @@ internal static class CloudDriveShareSupport
             return null;
         }
 
-        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out long number))
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int number))
         {
             return number;
         }
 
         return value.ValueKind == JsonValueKind.String
-            && long.TryParse(value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out long stringNumber)
+            && int.TryParse(value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int stringNumber)
                 ? stringNumber
                 : null;
     }

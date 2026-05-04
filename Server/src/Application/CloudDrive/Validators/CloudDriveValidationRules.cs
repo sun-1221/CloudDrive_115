@@ -6,13 +6,8 @@ namespace Application.CloudDrive.Validators;
 
 internal static class CloudDriveValidationRules
 {
-    public const int MaxFileListLimit = 1150;
-    public const int MaxSearchWindow = 10000;
-    public const int MaxRecycleBinLimit = 200;
     public const int MaxDefaultListLimit = 200;
 
-    private static readonly int[] FileListTypes = [1, 2, 3, 4, 5, 6, 7];
-    private static readonly int[] SearchFileTypes = [1, 2, 3, 4, 5, 6];
     private static readonly int[] VideoDefinitions = [1, 2, 3, 4, 5, 100];
     private static readonly char[] InvalidFileNameCharacters = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
 
@@ -54,16 +49,6 @@ internal static class CloudDriveValidationRules
             .WithMessage($"{propertyName} 不能包含空值。");
     }
 
-    public static bool IsValidFileListType(int? value)
-    {
-        return !value.HasValue || FileListTypes.Contains(value.Value);
-    }
-
-    public static bool IsValidSearchFileType(int? value)
-    {
-        return !value.HasValue || SearchFileTypes.Contains(value.Value);
-    }
-
     public static bool IsValidBinaryFlag(int? value)
     {
         return !value.HasValue || value.Value is 0 or 1;
@@ -72,11 +57,6 @@ internal static class CloudDriveValidationRules
     public static bool IsValidVideoDefinition(int? value)
     {
         return !value.HasValue || VideoDefinitions.Contains(value.Value);
-    }
-
-    public static bool IsValidSearchFc(int? value)
-    {
-        return !value.HasValue || value.Value is 1 or 2;
     }
 
     public static bool IsValidFolderName(string? value)
