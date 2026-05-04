@@ -131,7 +131,7 @@
   - [ ] 4.3 fileApi
     - `src/api/fileApi.ts`
     - 读操作：`list({cid, offset, limit, o, asc, type, star})` → `GET /api/files`；`getDetail(fileId)` → `GET /api/files/{fileId}`
-    - 写操作占位（待后端就绪）：`createFolder`、`rename`、`move`、`copy`、`delete`、`download`、`toggleStar`、`upload`
+    - 写操作：`upload()` 已对接后端代理上传；`createFolder`、`rename`、`move`、`copy`、`delete`、`download`、`toggleStar` 按 integration spec 的采集状态处理，未实现时展示 ProblemDetails
     - `upload()` 对接 `POST /api/files/upload`，以 `FormData` / `multipart/form-data` 提交
     - _需求: 2.1, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 4.2, 4.7_
     - _设计: §FileStore, §FileOperationService, §FileDetailsModal_
@@ -152,9 +152,9 @@
     - `src/api/videoApi.ts`
     - `getPlay(pickCode)` → `GET /api/videos/{pickCode}/play`
     - `getSubtitles(pickCode)` → `GET /api/videos/{pickCode}/subtitles`
-    - `getHistory(pickCode)` / `saveHistory(pickCode, progress)`（待后端就绪）
+    - `getHistory(pickCode)` / `saveHistory(pickCode, progress)` → `GET/POST /api/videos/{pickCode}/history`
     - _需求: 8.4, 8.7, 8.12, 8.14_
-    - _设计: §VideoPlayer 组件, §SubtitleSelector 组件, §VideoHistoryService（待后端 API 就绪）_
+    - _设计: §VideoPlayer 组件, §SubtitleSelector 组件, §VideoHistoryService_
 
   - [ ] 4.7 documentApi
     - `src/api/documentApi.ts`：`getPreview(pickCode)` → `GET /api/documents/{pickCode}/preview`
@@ -251,12 +251,12 @@
     - _需求: 3.4_
     - _设计: §FileOperationService_
 
-  - [ ] 6.6 VideoHistoryService（依赖后端 API 就绪）
+  - [ ] 6.6 VideoHistoryService
     - `src/services/videoHistoryService.ts`
     - `getProgress(pickCode)`、`saveProgress(pickCode, progress)`（每 30 秒）
     - 404 → `null`，从 00:00 开始
     - _需求: 8.12, 8.14_
-    - _设计: §VideoHistoryService（待后端 API 就绪）_
+    - _设计: §VideoHistoryService_
 
 - [ ] 7. Composables（design §3.1 `composables/`）
   - [ ] 7.1 useBreakpoint
@@ -630,11 +630,11 @@
     - _需求: 8.7, 8.8_
     - _设计: §SubtitleSelector 组件_
 
-  - [ ] 18.4 VideoHistoryService 集成（待后端就绪）
+  - [ ] 18.4 VideoHistoryService 集成
     - 打开时 `getProgress(pickCode)` 恢复；404 → 从 00:00
     - 每 30 秒 `saveProgress`
     - _需求: 8.12, 8.13, 8.14_
-    - _设计: §VideoHistoryService（待后端 API 就绪）_
+    - _设计: §VideoHistoryService_
 
   - [ ] 18.5 VideoPlayer 快捷键
     - `videoPlayer` 作用域：Space、左/右 10s、上/下 ±5%、Esc
@@ -863,4 +863,4 @@
 - 每个任务引用的需求编号已严格对齐 `requirements.md`（18 个模块，R10 已删除）
 - 每个组件/章节引用已严格对齐 `design.md` 中对应标题
 - 检查点任务用于阶段性验证，确保增量开发正确性
-- 依赖后端待补采集 API 的组件（文件写操作、回收站写操作、视频历史、云下载写操作）已标注"占位"或"待后端就绪"
+- 依赖后端待补采集 API 的组件（文件增删改/下载/星标、回收站写操作、云下载写操作）已标注"占位"或"待后端就绪"；上传、视频播放、字幕、视频历史按 `docs/115-api-docs.md` 已采集契约处理

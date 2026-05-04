@@ -113,8 +113,8 @@ trigger: manual
 - **[当前契约]** 当前前端代理上传流程只使用 `fileApi.upload()`，不使用 `/files/upload/init`
 - **[当前契约]** 上传请求必须组装为 `multipart/form-data`
 - **[当前契约]** 上传字段名固定为 `file`、`directoryId`、`forceAsync`
-- **[当前契约]** `videoApi.getPlayUrl()` 使用 `POST`
-- **[当前契约]** 显式提交转码任务时使用 `submitTranscode()`
+- **[当前契约]** `videoApi.getPlay()` 使用 `GET /api/videos/{pickCode}/play`；后端内部按 `docs/115-api-docs.md` 调用 `GET webapi.115.com/files/video?pickcode=...&share_id=0&local=1&format=json`
+- **[当前契约]** 显式提交转码任务时使用 `submitTranscode()`，对应 `POST /api/videos/{pickCode}/transcode`
 - **[当前契约]** `getSubtitles()` 返回 `ListResult<CloudDriveSubtitleDto>`，消费方必须从 `items` 读取
 - **[当前契约]** `clearRecycleBin()` 当前固定返回后台任务 `jobId`
 

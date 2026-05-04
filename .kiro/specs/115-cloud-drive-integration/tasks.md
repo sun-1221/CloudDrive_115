@@ -153,7 +153,7 @@
   - [x] 4.1 创建 115 网页端 API 响应模型
     - 创建 `CloudDrive115WebResponse<T>` 通用响应包装类（`State`, `Data`, `Message`/`Msg`/`Error`, `Code`/`Errno`/`ErrCode`/`ErrNo`）；其中 `State` 属性使用 `BoolOrNumberJsonConverter` 兼容 bool(true/false) 与 number(0/1)；具体错误字段的选择由 `IErrorFieldAdapter` 按 URL 路径决定，响应模型本身仅以联合字段呈现
     - 创建各 API 端点的具体响应模型（文件列表、文件详情、下载地址、视频播放、字幕、回收站、云下载任务、分享列表、用户中心多源）
-    - 创建字段归一化反序列化适配器处理网页端文件对象字段映射：`fid → FileId`、`n → Name`、`s → Size`、`fc`（0=文件夹, 1=文件）→ `IsDirectory`；回收站接口的 `type`（1=文件, 2=目录）需反向映射；搜索接口的 `fc`（1=仅文件夹, 2=仅文件）作为请求参数独立处理
+    - 创建字段归一化反序列化适配器处理网页端文件对象字段映射：`fid → FileId`、`n → Name`、`s → Size`、`fc`（0=文件夹, 1=文件）→ `IsDirectory`；回收站接口的 `type`（1=文件, 2=目录）需反向映射；搜索接口仅处理 `docs/115-api-docs.md` 已采集的请求参数，不引入开放平台 `fc` 筛选参数
     - _需求: 4, 5, 6, 14, 16, 20, 25_ _设计: §9. 基础设施组件, §DTO 定义_
 
   - [x] 4.2 实现 `CloudDriveApiClient` 基础设施骨架
@@ -173,7 +173,7 @@
 
   - [x] 4.4 实现云下载签名与上传请求封装
     - 实现 `SendOfflineApiRequestAsync`：默认走 `OfflineApiBaseUrl`；调用 `ICookieSignatureStrategy.GenerateAsync` 生成 `{ sign, time, uid }` 三元组，合并到 form body；在请求 URL 上追加 `?ct=lixian&ac={操作符}` 必需查询参数
-    - 在 `ICookieSignatureStrategy` 未提供有效实现（默认 `NotImplementedCookieSignatureStrategy`）时抛出 `CloudDriveConfigurationException`，带 `offline_signature_not_available` 错误码
+    - 在 `ICookieSignatureStrategy` 未提供有效实现（默认 `NotImplementedCookieSignatureStrategy`）时返回 `Result.Failure`，带 `offline_signature_not_available` 错误码，并由 WebApi 映射为明确 ProblemDetails
     - 实现 `UploadFileAsync`：对网页端上传链路返回的 OSS / multipart 上传凭证 URL 发送 `multipart/form-data`；不直接注入 Cookie（仅依赖上传接口返回的临时凭证）
     - 为后台任务恢复保留必要的上下文字段（`TempFilePath` 和官方返回的 `pick_code`）
     - _需求: 5, 20, 21, 26_ _设计: §6. 云下载模块 (Offline), §ICookieSignatureStrategy（云下载签名预留扩展点）, §ICloudDriveOpenApiGateway / CloudDriveApiClient_
@@ -188,15 +188,15 @@
     - _需求: 1, 17, 25, 26_ _设计: §错误码映射, §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
 
   - [x] 4.6 实现 `ErrorFieldAdapter` 注册表与默认规则
-    - 实现 `IErrorFieldAdapter`；内部维护不可变 `IReadOnlyDictionary<string, ErrorFieldDescriptor>`，注册 `requirements.md:454-470` 覆盖的全部错误字段变体
-    - 必须注册的 URL 模式（至少）：`/files/search`（`errCode` number + `errMsg`）、`/movies/subtitle`（大写 `errNo` + `error`）、`/user/vip_limit`（`code` string + `msg`）、`/user/index_info`（`code` string）、`pay.115.com/`（`msg` 非 `message`）、`/share/send`（`errNo` + fallback `errno`）、`/share/receive`（`errNo` + fallback `errno`）、`/share/slist`（`errNo`）、`115.com/web/lixian/`（`errcode` + `error_msg`）、`/rb` 回收站（`errNo` + `error`）、`/files`（`errNo` + `error`）以及 `/files/add`、`/files/edit` 等写入端点
+    - 实现 `IErrorFieldAdapter`；内部维护不可变 `IReadOnlyDictionary<string, ErrorFieldDescriptor>`，注册需求 25 错误字段变体表覆盖的全部 URL 规则
+    - 必须注册的 URL 模式（至少）：`/files/search`（`errCode` number + `error`）、`/movies/subtitle`（大写 `errNo` + `error`）、`/user/vip_limit`（`code` string + `message`）、`/files/index_info`（`code` number + `error`）、`pay.115.com/`（`msg` 非 `message`）、`/share/send`（`errNo` + fallback `errno`）、`/share/receive`（`errNo` + fallback `errno`）、`/share/slist`（`errno`）、`115.com/web/lixian/`（`errtype` + fallback `error_msg`）、`/rb` 回收站（无数字错误码 + `error`）、`/files`（`errNo` + `error`）；未采集写入端点不得注册为可调用规则
     - 默认规则（未命中任一 URL 模式时）：读 `state` + `code` / `errno` + `message` / `error`；全部字段均缺失时仅以 HTTP 状态码判定成败，且标注 `unknown_error_shape` 错误码
     - 注册为 Singleton 生命周期，保证线程安全
     - _需求: 25_ _设计: §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
 
   - [x] 4.7 编写属性测试 - 错误码映射完整性
     - **属性 P6: 错误码映射完整性**
-    - 验证 `ErrorFieldAdapter` 对 12 种错误字段变体（`errNo` / `errCode` / `errno` / `code` / `msg` / `message` / `Message` / `err` / `error` / 大小写混用等）按 URL 路径正确解析
+    - 验证 `ErrorFieldAdapter` 对需求 25 错误字段变体表中的全部 URL 规则（`errNo` / `errCode` / `errno` / `code` / `msg` / `message` / `Message` / `err` / `error` / 大小写混用等）按 URL 路径正确解析
     - 验证 HTTP 401/403/404/429/500 与业务错误码均映射为正确的 `CloudDrive*Exception`
     - 验证 `errNo=login_required` 触发 `CloudDriveCookieInvalidatedException` 且同步调用 `CookieSessionManager.MarkInvalidatedAsync`
     - 验证网络超时与连接失败分别映射为明确的网络异常
@@ -266,27 +266,27 @@
 
 - [x] 6. 应用层 - DTO 定义与手动映射
   - [x] 6.1 创建应用层 DTO
-    - 创建公共 DTO：`CloudDriveOperationResultDto`、`CloudDriveAccountScopedInput`
+    - 创建公共 DTO：`CloudDriveOperationResultDto`；公开前端输入 DTO 不得继承或包含 `CloudAccountUid`
     - 创建分页与列表包装 DTO：`PagedResultDto<T>`、`ListResultDto<T>`（若框架基础设施未提供则在此创建）
     - 创建文件相关 DTO：`CloudDriveFileDto`、`CloudDriveFileDetailDto`、`CloudDrivePathNodeDto`、`CloudDriveFileLabelDto`、`CloudDriveSearchResultDto`、`CloudDriveDownloadDto`、`CloudDriveFolderDto`、`CloudDriveUploadSessionDto`、`CloudDriveUploadedFileDto`、`CloudDriveUploadExecutionDto`、`CloudDriveRecycleBinItemDto`
     - 创建预览相关 DTO 与枚举：`CloudDriveImagePreviewDto`、`CloudDriveDocPreviewDto`、`DocRenderMode` 枚举（Direct, ThirdParty, NotAvailable）
     - 创建视频相关 DTO 与枚举：`CloudDriveVideoPlayDto`（含 `UserDef` 官方记忆清晰度）、`VideoPlayStatus` 枚举（Ready, Transcoding）、`VideoQualityOption`（含 `DefinitionNew` 新版清晰度标识）、`AudioTrackOption`、`CloudDriveVideoTranscodeDto`、`CloudDriveVideoPlayProgressDto`（含 `AddTime`）、`CloudDriveSubtitleListDto`、`CloudDriveSubtitleDto`
-    - 创建认证相关 DTO：`CloudDriveCookieSessionDto`（`CloudAccountUid`、`Status`、`CreationTime`、`LastModificationTime`、`CooldownUntil`）、`CloudDriveLoginStatusDto`（`CloudAccountUid`、`IsLoggedIn?`、`LastCheckedAt`、`CooldownUntil?`、`FailureReason?`）、`CloudDriveUserInfoDto`、`CloudDriveSpaceInfoDto`、`CloudDriveVipInfoDto`、`CloudDriveAccountSummaryDto`
-    - 创建云下载 DTO：`CloudDriveOfflineTaskDto`、`CloudDriveOfflineQuotaDto`（字段归一化 `total_count → Total`、`failed_count → Failed`、`finished_count → Completed`、`downloading_count → Active`）
+    - 创建认证/用户相关 DTO：`CloudDriveCookieSessionDto`（运维 DTO，含 `CloudAccountUid`、`Status`、`CreationTime`、`LastModificationTime`、`CooldownUntil`）、公开认证 DTO `CloudDriveAuthCheckDto`（`IsAuthenticated`、`FailureReason?`）、`CloudDriveUserProfileDto`、`CloudDriveUserInfoDto`、`CloudDriveSpaceInfoDto`、`CloudDriveVipInfoDto`、`CloudDriveBalanceDto`
+    - 创建云下载 DTO：`CloudDriveOfflineTaskDto`、`CloudDriveOfflineQuotaDto`、`CloudDriveOfflineStatsDto`（字段归一化 `total_count → Total`、`failed_count → Failed`、`finished_count → Completed`、`downloading_count → Active`）
     - 创建分享管理 DTO：`CloudDriveShareItemDto`、`CloudDriveShareSendItemDto`、`CloudDriveShareReceiveItemDto`
     - 创建任务相关 DTO：`CloudDriveJobDto`
     - 不再创建 `CloudDriveTokenDto` 与 `CloudDrivePkceAuthorizationDto`（OAuth 方案遗留 DTO，Cookie 方案不使用）
     - _需求: 1, 3, 19, 20, 21, 22, 23_ _设计: §DTO 定义_
 
   - [x] 6.2 创建应用层输入 DTO 与 FluentValidation 验证器
-    - 创建基础 Input：`CloudDriveAccountScopedInput`
-    - 创建 Cookie 会话管理 Input：`UpsertCookieSessionInput`（`CloudAccountUid`、`Uid`、`Cid`、`Ussid`、`ExtraFields?`）、`EnterCookieCooldownInput`（继承 `CloudDriveAccountScopedInput`，含 `Reason`、`CooldownSeconds?`）、`RevokeCookieSessionInput`（继承 `CloudDriveAccountScopedInput`）
-    - 创建文件 Input：`GetFileListInput`、`GetFileInput`、`CreateFolderInput`、`InitUploadInput`、`UploadFileInput`、`GetDownloadUrlInput`、`MoveFilesInput`、`CopyFilesInput`、`DeleteFilesInput`、`RenameFileInput`、`ClearRecycleBinInput`、`SearchFileInput`、`GetRecycleBinListInput`、`RecycleBinOperationInput`、`RefreshDirectoryInput`、`ToggleStarInput`
+    - 创建内部账号上下文解析接口 `ICloudDriveAccountContextResolver`，公开前端端点的输入 DTO 不包含 `CloudAccountUid`
+    - 创建 Cookie 会话管理 Input：`UpsertCookieSessionInput`（运维专用，含 `CloudAccountUid`、`Uid`、`Cid`、`Ussid`、`ExtraFields?`）、`EnterCookieCooldownInput`（运维专用，含 `CloudAccountUid`、`Reason`、`CooldownSeconds?`）、`RevokeCookieSessionInput`（运维专用，含 `CloudAccountUid`）
+    - 创建文件 Input：`GetFileListInput`、`GetFileInput`、`CreateFolderInput`、`InitUploadInput`、`UploadFileInput`、`GetDownloadUrlInput`、`MoveFilesInput`、`CopyFilesInput`、`DeleteFilesInput`、`RenameFileInput`、`ClearRecycleBinInput`、`SearchFileInput`、`GetRecycleBinListInput`、`RecycleBinOperationInput`、`ToggleStarInput`
     - 创建预览与视频 Input：`GetPreviewInput`、`GetVideoPlayInput`、`SubmitTranscodeInput`、`GetSubtitlesInput`、`GetVideoPlayProgressInput`、`RememberVideoPlayProgressInput`
-    - 创建云下载 Input：`GetOfflineTaskListInput`、`AddOfflineTaskInput`（含 `Urls: List<string>`、`SavePath?`）、`CancelOfflineTaskInput`、`ClearOfflineTasksInput`
+    - 创建云下载 Input：`GetOfflineTaskListInput`、`AddOfflineTaskInput`（含 `TaskKind`、`Urls?`、`InfoHash?`、`Wanted?`、`SavePath?`、`TorrentSha1?`、`PickCode?`、`SaveDirectoryId?`）、`CancelOfflineTaskInput`、`ClearOfflineTasksInput`
     - 创建分享 Input：`GetShareListInput`
     - 创建任务 Input：`GetJobStatusInput`、`GetJobListInput`
-    - 除运维端点（`UpsertCookieSessionInput`、任务列表全量查询）与登录态探测外，所有输入 DTO 继承 `CloudDriveAccountScopedInput` 并校验 `CloudAccountUid`
+    - 除运维 Cookie 管理输入外，所有公开前端输入 DTO 均不得包含 `CloudAccountUid`；Handler 内部统一调用 `ICloudDriveAccountContextResolver` 获取当前唯一账号上下文
     - 为每个输入 DTO 创建对应的 `AbstractValidator<T>` 验证器，由框架 `ValidationBehavior` 自动拦截
     - _需求: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23_ _设计: §DTO 定义, §关键输入 DTO（节选）_
 
@@ -332,17 +332,16 @@
     - _需求: 3_ _设计: §1. 认证与会话管理模块 (Auth), §LoginCheckHandler（需求 3 登录态检测）_
 
   - [x] 7.3 实现 `EnterCookieCooldownCommandHandler`
-    - 接收 `EnterCookieCooldownInput`（含 `CloudAccountUid`、`Reason`、`CooldownSeconds?`）
+    - 接收运维专用 `EnterCookieCooldownInput`（含 `CloudAccountUid`、`Reason`、`CooldownSeconds?`）；基础设施侧检测到 Cookie 失效时通过内部账号上下文调用同一应用能力
     - 委托 `CookieSessionManager.EnterCooldownAsync`：调用聚合根 `EnterCooldown(cooldownSeconds)`，触发仓储 Update 以便 `CookieInvalidated` 领域事件经 `DomainEventDispatchBehavior` 自动分发
     - 冷却时长优先使用输入参数 `CooldownSeconds`，否则使用 `CloudDriveAppConfig.CookieCooldownSeconds`（默认 60 秒）
     - 用于 `CloudDriveApiClient` 侧面检测到 Cookie 失效时的内部状态同步，以及运维手动标记失效的入口
     - _需求: 1, 3_ _设计: §CookieSessionManager_
 
-  - [x] 7.4 实现 `GetBoundAccountsQueryHandler`、`GetUserInfoQueryHandler` 与 `RevokeCookieSessionCommandHandler`
-    - 实现 `GetBoundAccountsQueryHandler`：基于当前用户的 `CookieSession` 记录返回已绑定 115 账号摘要列表（仅 `CloudAccountUid`、`Status`、`CreationTime`、`LastModificationTime`、`CooldownUntil`；**绝不包含 Cookie 原文**）
-    - 实现 `GetUserInfoQueryHandler`：获取指定 `CloudAccountUid` 的 115 账号信息；委托 `UserAggregationService.AggregateUserInfoAsync` 并行调用 `webapi.115.com/user/info` + `webapi.115.com/user/vip_limit` + 其他多源接口
-    - 实现 `RevokeCookieSessionCommandHandler`：接收 `RevokeCookieSessionInput`；委托 `CookieSessionManager.RevokeAsync`，标记 `CookieSession.Revoke()` 并清理关联缓存与限流桶；**不调用远程登出接口**（网页端无对应接口）
-    - 多账号绑定场景下，缺失 `CloudAccountUid` 时返回明确错误
+  - [x] 7.4 实现 `GetUserInfoQueryHandler` 与运维 Cookie 撤销能力
+    - 实现 `GetUserInfoQueryHandler`：通过 `ICloudDriveAccountContextResolver` 获取当前唯一账号上下文；委托 `UserAggregationService.AggregateUserInfoAsync` 并行调用 `my.115.com/proapi/3.0/index.php?method=user_info&uid=...` + `webapi.115.com/user/vip_limit?feature=2` + 其他多源接口
+    - 实现 `RevokeCookieSessionCommandHandler`：接收运维专用 `RevokeCookieSessionInput`；委托 `CookieSessionManager.RevokeAsync`，标记 `CookieSession.Revoke()` 并清理关联缓存与限流桶；**不调用远程登出接口**（网页端无对应接口）
+    - 当当前用户不存在唯一 Active Cookie 会话时返回明确 ProblemDetails，提示由运维修复 Cookie 配置
     - 若当前 `CookieSession.Status != Active`，`GetUserInfoQueryHandler` 返回明确的 `cookie_not_active` 业务错误，提示由运维重新注入 Cookie
     - _需求: 1, 3, 19, 23_ _设计: §CookieSessionManager, §8. 用户中心聚合模块 (UserAggregator)_
 
@@ -353,11 +352,11 @@
     - 验证正确配置下 `CloudDriveFeatureEnabled == true` 且 Handler 正常执行
     - _需求: 2_
 
-  - [x] 7.6 编写 Cookie 会话多账号上下文单元测试
-    - 验证 `UpsertCookieSessionCommandHandler` 写入 `CookieSession` 后 `CloudAccountUid` 与 `UserId` 双维度隔离，同一用户下不同账号互不影响
-    - 验证 `RevokeCookieSessionCommandHandler` 仅影响指定 `CloudAccountUid` 的记录与缓存/限流桶，不波及其他账号
-    - 验证 `GetBoundAccountsQueryHandler` 仅返回当前用户的 `CookieSession` 记录，不跨用户泄漏
-    - 验证 `GetUserInfoQueryHandler` 对缺失 `CloudAccountUid` 的请求返回明确错误（除运维/登录态端点外所有已授权请求必须显式传递 `CloudAccountUid`）
+  - [x] 7.6 编写 Cookie 会话单账号上下文单元测试
+    - 验证 `UpsertCookieSessionCommandHandler` 写入 `CookieSession` 后按 `UserId + CloudAccountUid` 双维度唯一隔离
+    - 验证 `RevokeCookieSessionCommandHandler` 仅影响运维指定 `CloudAccountUid` 的记录与缓存/限流桶，不波及其他用户
+    - 验证 `ICloudDriveAccountContextResolver` 在当前用户无 Active 会话或存在多条 Active 会话时返回明确业务错误
+    - 验证公开前端 Handler 不从请求 DTO 读取 `CloudAccountUid`，而是统一使用 `ICloudDriveAccountContextResolver` 的解析结果
     - _需求: 1, 19, 23_ _设计: §CookieSessionManager, §1. 认证与会话管理模块 (Auth)_
 
 - [x] 8. 应用层 - 后台任务编排与任务查询
@@ -383,14 +382,14 @@
 
   - [x] 8.3 实现 `CloudDriveBatchOperationJob` (Quartz IJob - Infrastructure 层)
     - 实现 `IJob.Execute()`，处理批量复制、移动、删除、回收站批量还原（`BatchRecycleBinRestore`）和回收站批量彻底删除（`BatchRecycleBinDelete`）任务。Job 类定义在 Infrastructure 层
-    - 根据 `CloudDriveJobType` 分派到对应的 115 网页端 API（具体路径以 `requirements.md` 采集为准）：`BatchCopy` → `webapi.115.com/files/copy`、`BatchMove` → `webapi.115.com/files/move`、`BatchDelete` → `webapi.115.com/rb/delete`（移至回收站，`aid=7`）、`BatchRecycleBinRestore` → `webapi.115.com/rb/revert`、`BatchRecycleBinDelete` → `webapi.115.com/rb/delete`（`ignore_warn=1` 彻底删除）；所有请求通过 `ICloudDriveOpenApiGateway.SendWebApiRequestAsync` 统一发出，Cookie 由网关内部自动注入
+    - 根据 `CloudDriveJobType` 分派任务；对于 `docs/115-api-docs.md` 尚未采集的批量复制、移动、删除、回收站还原与彻底删除，Job 必须返回 `cloud_drive_api_not_collected` ProblemDetails/任务失败状态，不得猜测 115 网页端路径；已采集路径（如上传、视频转码探测）才通过 `ICloudDriveOpenApiGateway` 发出
     - 持续更新进度、错误摘要与任务状态
     - 对支持安全重试的批量任务记录已完成项与最近安全检查点
     - 任务完成后失效源目录与目标目录缓存
     - _需求: 8, 9, 10, 11, 21, 27_ _设计: §5. 后台任务模块 (Quartz.NET Job), §CloudDriveJob（聚合根 - 领域层）_
 
   - [x] 8.4 实现 `CloudDriveClearRecycleBinJob` (Quartz IJob - Infrastructure 层)
-    - 实现 `IJob.Execute()`，处理清空回收站任务（通过 `webapi.115.com/rb/clean` 或需求采集中确认的等效端点）。Job 类定义在 Infrastructure 层
+    - 实现 `IJob.Execute()`，处理清空回收站任务；因清空回收站 115 网页端写接口尚未在 `docs/115-api-docs.md` 中采集，当前 Job 返回 `cloud_drive_api_not_collected` 失败状态，待补采集后再接入真实路径。Job 类定义在 Infrastructure 层
     - 记录任务状态与错误摘要
     - 任务完成后统一触发相关缓存失效
     - _需求: 11, 21, 27_ _设计: §5. 后台任务模块 (Quartz.NET Job)_
@@ -402,8 +401,8 @@
     - _需求: 15, 21_ _设计: §5. 后台任务模块 (Quartz.NET Job), §4. 视频模块 (Video)_
 
   - [x] 8.6 实现 `GetJobStatusQueryHandler` 与 `GetJobListQueryHandler`
-    - 实现 `GetJobStatusQueryHandler`：通过 `GetJobStatusInput` 查询任务状态，并校验 `jobId` 归属当前用户与账号上下文
-    - 实现 `GetJobListQueryHandler`：获取任务列表；`cloudAccountUid` 为空时查询当前用户下全部账号任务，非空时按账号过滤
+    - 实现 `GetJobStatusQueryHandler`：通过 `GetJobStatusInput` 查询任务状态，并校验 `jobId` 归属当前用户与解析出的单账号上下文
+    - 实现 `GetJobListQueryHandler`：获取当前用户当前账号下任务列表；公开前端端点不支持按 `cloudAccountUid` 查询全部账号
     - _需求: 21, 28_ _设计: §5. 后台任务模块 (Quartz.NET Job)_
 
   - [x] 8.7 实现后台任务审计与脱敏日志
@@ -417,28 +416,28 @@
     - 对不可恢复任务标记为 `Failed` 并记录失败原因，避免任务永久悬挂
     - _需求: 21, 28_ _设计: §P13: 后台任务重启恢复协调, §5. 后台任务模块 (Quartz.NET Job)_
 
-- [ ] 9. 应用层 - 文件管理 Command/Query Handler
-  - [ ] 9.1 实现 `GetFileListQueryHandler` 与 `GetFileDetailQueryHandler`
+- [x] 9. 应用层 - 文件管理 Command/Query Handler
+  - [x] 9.1 实现 `GetFileListQueryHandler` 与 `GetFileDetailQueryHandler`
     - 实现 `GetFileListQueryHandler`：获取指定目录文件列表（分页，默认根目录 `cid=0`）；网页端 API `GET webapi.115.com/files`（必填 `aid=1`）
-    - 实现 `GetFileDetailQueryHandler`：获取文件详情（网页端 `GET webapi.115.com/files/file`）
+    - 实现 `GetFileDetailQueryHandler`：优先从文件列表响应、缓存或已知 `CloudDriveFileDto` 字段组装文件详情；若无法从已采集接口取得详情，则返回明确 ProblemDetails，不得猜测 `docs/115-api-docs.md` 未采集的 115 详情路径
     - 响应字段由 Infrastructure 层归一化适配器转换（`fid → FileId`、`n → Name`、`s → Size`、`fc` 值域转换 → `IsDirectory`）
     - Query Handler 仅执行数据查询，不触发副作用（CD0007）
     - _需求: 4, 6_ _设计: §2. 文件管理模块 (File), §CloudDriveFileManager_
 
-  - [ ] 9.2 实现 `CreateFolderCommandHandler`
-    - 新建文件夹（网页端 `POST webapi.115.com/files/add` 或等效端点，具体路径依据需求采集）并复用 `CloudDriveFileNameValidator.ValidateNewFolderName`（255 字符）
+  - [x] 9.2 实现 `CreateFolderCommandHandler`
+    - 新建文件夹接口尚未在 `docs/115-api-docs.md` 中采集；当前 Handler 复用 `CloudDriveFileNameValidator.ValidateNewFolderName`（255 字符）完成输入校验后返回 `cloud_drive_api_not_collected` ProblemDetails，待补采集后再接入真实路径
     - 成功后失效受影响目录缓存
     - 领域事件由仓储 `Track(entity)` + `DomainEventDispatchBehavior` 自动分发，Handler 内部不手动调用 `IMediator.Publish()`
     - _需求: 7, 27_ _设计: §2. 文件管理模块 (File), §CloudDriveFileManager_
 
-  - [ ] 9.3 实现 `InitUploadCommandHandler`
+  - [x] 9.3 实现 `InitUploadCommandHandler`
     - 调用 `ICloudDriveOpenApiGateway.SendUploadInitRequestAsync` 发送 `POST uplb.115.com/3.0/sampleinitupload.php`（body: `userid={uid}&filename={name}&filesize={bytes}&target=U_1_{cid}`），返回 `CloudDriveUploadSessionDto`
     - 通过共享的 `CloudDriveUploadInitContract` 统一初始化协议；秒传时响应含 `file_id` 且无 OSS 凭证 → 直接返回文件信息，非秒传时返回 `host/object/accessid/policy/signature/expire/callback` 等 OSS 直传凭证
     - 处理二次认证（如需）：按签名校验指定的字节范围计算 SHA1 后携带签名参数重新请求（具体流程依据网页端采集证实）
     - 校验 `DirectoryId`、`FileSha1` 非空、上传前置条件与输入参数，并在目标目录不存在时返回明确错误
     - _需求: 7_ _设计: §2. 文件管理模块 (File), §CloudDriveFileManager_
 
-  - [ ] 9.4 实现 `UploadFileCommandHandler` - 同步上传与检查点持久化
+  - [x] 9.4 实现 `UploadFileCommandHandler` - 同步上传与检查点持久化
     - 执行同步上传流程：`SendUploadInitRequestAsync` → 秒传判断 → 非秒传时调用 `UploadFileAsync` 执行 OSS PostObject 直传（`POST {host}/`，携带 `key/policy/OSSAccessKeyId/signature/callback/file`）→ 解析 callback 透传的 115 业务 JSON → 返回 `FileId`、名称与路径
     - 复用与 `InitUploadCommandHandler` / `CloudDriveUploadJob` 相同的上传初始化契约，避免同步/异步路径使用不同的初始化协议
     - 支持断点续传：当提供 `PickCode` 时优先通过本地恢复检查点重新发起上传（网页端未发现专用远端分片续传接口）
@@ -446,73 +445,73 @@
     - 上传成功后失效目标目录缓存
     - _需求: 7, 27_ _设计: §2. 文件管理模块 (File), §CloudDriveFileManager_
 
-  - [ ] 9.5 实现 `UploadFileCommandHandler` - 异步上传编排
+  - [x] 9.5 实现 `UploadFileCommandHandler` - 异步上传编排
     - 当文件大小超过 `LargeFileAsyncThresholdBytes` 或客户端显式请求异步执行时，委托 `CloudDriveJobOrchestrator` 创建后台上传任务
     - 返回 `Accepted = true` 的 `CloudDriveUploadExecutionDto` 与 `JobId`
     - _需求: 7, 21_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
 
-  - [ ] 9.6 实现 `GetDownloadUrlQueryHandler`
+  - [x] 9.6 实现 `GetDownloadUrlQueryHandler`
     - 通过文件的 `pickcode` 调用网页端下载接口（具体路径以 `requirements.md` 采集为准）获取下载地址
     - 返回网页端临时下载 URL 或受控代理下载信息，并将结果标记为临时授权资源（`IsTemporary = true`）
     - 在文件不存在或地址获取失败时返回明确错误原因
     - Query Handler 不触发副作用（CD0007）
     - _需求: 6_ _设计: §2. 文件管理模块 (File), §P9: 临时资源标识_
 
-  - [ ] 9.7 实现 `MoveFilesCommandHandler`
-    - 实现文件移动逻辑（网页端 `POST webapi.115.com/files/move`）
+  - [x] 9.7 实现 `MoveFilesCommandHandler`
+    - 文件移动接口尚未在 `docs/115-api-docs.md` 中采集；当前 Handler 校验输入并返回 `cloud_drive_api_not_collected` ProblemDetails，待补采集后再接入真实路径
     - 同步完成后失效源目录与目标目录缓存
     - 在超过同步执行阈值时委托 `CloudDriveJobOrchestrator` 创建后台任务；同步完成时返回 `Accepted = false`，异步受理时返回 `JobId`
     - _需求: 8, 21, 27_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
 
-  - [ ] 9.8 实现 `CopyFilesCommandHandler`
-    - 实现文件复制逻辑（网页端 `POST webapi.115.com/files/copy`）
+  - [x] 9.8 实现 `CopyFilesCommandHandler`
+    - 文件复制接口尚未在 `docs/115-api-docs.md` 中采集；当前 Handler 校验输入并返回 `cloud_drive_api_not_collected` ProblemDetails，待补采集后再接入真实路径
     - 同步完成后失效目标目录缓存
     - 在超过同步执行阈值时委托 `CloudDriveJobOrchestrator` 创建后台任务；同步完成时返回 `Accepted = false`，异步受理时返回 `JobId`
     - _需求: 9, 21, 27_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
 
-  - [ ] 9.9 实现 `DeleteFilesCommandHandler`
-    - 实现文件删除逻辑（移至回收站，网页端 `POST webapi.115.com/rb/delete` 或等效端点）
+  - [x] 9.9 实现 `DeleteFilesCommandHandler`
+    - 文件删除接口尚未在 `docs/115-api-docs.md` 中采集；当前 Handler 校验输入并返回 `cloud_drive_api_not_collected` ProblemDetails，待补采集后再接入真实路径
     - 同步完成后失效源目录缓存
     - 在超过同步执行阈值时委托 `CloudDriveJobOrchestrator` 创建后台任务；同步完成时返回 `Accepted = false`，异步受理时返回 `JobId`
     - _需求: 10, 21, 27_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
 
-  - [ ] 9.10 实现 `RenameFileCommandHandler`
-    - 实现文件/文件夹重命名逻辑（网页端 `POST webapi.115.com/files/edit` 或等效端点）并复用 `CloudDriveFileNameValidator.ValidateRenameFileName`（255 字节）
+  - [x] 9.10 实现 `RenameFileCommandHandler`
+    - 文件/文件夹重命名接口尚未在 `docs/115-api-docs.md` 中采集；当前 Handler 复用 `CloudDriveFileNameValidator.ValidateRenameFileName`（255 字节）完成输入校验后返回 `cloud_drive_api_not_collected` ProblemDetails，待补采集后再接入真实路径
     - 成功后失效受影响目录缓存
     - _需求: 12, 27_ _设计: §2. 文件管理模块 (File), §CloudDriveFileManager_
 
-  - [ ] 9.10a 实现 `ToggleStarCommandHandler`
-    - 调用网页端星标切换接口（具体路径以 `requirements.md` 采集为准，一般为 `webapi.115.com/files/star` 或通过 `/files/edit` 传递 `star` 参数）1=星标, 0=取消
+  - [x] 9.10a 实现 `ToggleStarCommandHandler`
+    - 星标切换接口尚未在 `docs/115-api-docs.md` 中采集；当前 Handler 校验 `starred` 输入并返回 `cloud_drive_api_not_collected` ProblemDetails，待补采集后再接入真实路径
     - 成功后失效受影响目录缓存
     - _需求: 13a, 27_ _设计: §2. 文件管理模块 (File)_
 
-  - [ ] 9.11 实现 `SearchFilesQueryHandler`
+  - [x] 9.11 实现 `SearchFilesQueryHandler`
     - 实现文件搜索（网页端 `GET webapi.115.com/files/search`，分页，关键词验证，返回 `parent_id` 与可选路径）
-    - 支持网页端全部筛选参数：`file_label`（文件标签）、`cid`（目录范围）、`gte_day`/`lte_day`（时间范围）、`fc`（1=仅文件夹,2=仅文件；**注意此值域与文件列表 `fc` 不同**）、`type`（文件类型大分类）、`suffix`（后缀名）
+    - 支持 `docs/115-api-docs.md` 已采集的网页端筛选参数：`search_value`、`aid`、`cid`、`type`、`date`、`pick_code`、`count_folders`、`source`、`format`、`offset`、`limit`；不支持开放平台参数 `file_label`、`gte_day`/`lte_day`、`fc`、`suffix`
     - 搜索请求不走 `CloudDriveMetadataCache`（搜索关键词组合多变且实时性要求高，缓存命中率低），直接经 `ICloudDriveRateLimiter` 限流后通过 `ICloudDriveOpenApiGateway.SendWebApiRequestAsync` 发出
-    - 错误字段解析由 `ErrorFieldAdapter` 按 `/files/search` URL 规则处理（`errCode` number + `errMsg`）
+    - 错误字段解析由 `ErrorFieldAdapter` 按 `/files/search` URL 规则处理（`errCode` number + `error`）
     - 仅返回网页端可提供的 `parent_id` 与系统可安全推导的路径信息
     - Query Handler 不触发副作用（CD0007）
     - _需求: 5, 25_ _设计: §2. 文件管理模块 (File), §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
 
-  - [ ] 9.12 实现回收站查询与还原 Handler
+  - [x] 9.12 实现回收站查询与还原 Handler
     - 实现 `GetRecycleBinListQueryHandler`：获取回收站列表（网页端 `GET webapi.115.com/rb`，必填 `aid=7` / `cid=0` / `format=json`）；空回收站时网页端不返回 `data` 键，已包含 `data` 时为动态键对象（键为文件 ID string）
-    - 实现 `RestoreFromRecycleBinCommandHandler`（网页端 `POST webapi.115.com/rb/revert`）：返回 `CloudDriveOperationResultDto`，并失效受影响目录缓存
+    - 实现 `RestoreFromRecycleBinCommandHandler` 占位：回收站还原接口尚未在 `docs/115-api-docs.md` 中采集，当前返回 `cloud_drive_api_not_collected` ProblemDetails，待补采集后再接入真实路径
     - 在批量还原超过同步执行阈值时委托 `CloudDriveJobOrchestrator` 创建后台任务；同步完成时返回 `Accepted = false`，异步受理时返回 `JobId`
     - _需求: 14, 21, 27_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
 
-  - [ ] 9.13 实现回收站彻底删除与清空 Handler
-    - 实现 `DeleteFromRecycleBinCommandHandler`（网页端 `POST webapi.115.com/rb/delete`，`ignore_warn=1` 彻底删除）：返回 `CloudDriveOperationResultDto`
+  - [x] 9.13 实现回收站彻底删除与清空 Handler
+    - 实现 `DeleteFromRecycleBinCommandHandler` 占位：回收站彻底删除接口尚未在 `docs/115-api-docs.md` 中采集，当前返回 `cloud_drive_api_not_collected` ProblemDetails，待补采集后再接入真实路径
     - 在批量彻底删除超过同步执行阈值时委托 `CloudDriveJobOrchestrator` 创建后台任务；同步完成时返回 `Accepted = false`，异步受理时返回 `JobId`
-    - 实现 `ClearRecycleBinCommandHandler`（网页端 `webapi.115.com/rb/clean` 或需求采集中确认的等效端点）：返回 `CloudDriveOperationResultDto`；当前实现统一通过 `CloudDriveJobOrchestrator` 创建后台任务，并返回 `Accepted = true` 与 `JobId`
+    - 实现 `ClearRecycleBinCommandHandler` 占位：清空回收站接口尚未在 `docs/115-api-docs.md` 中采集；当前实现可统一通过 `CloudDriveJobOrchestrator` 创建后台任务并返回 `Accepted = true` 与 `JobId`，任务执行时返回 `cloud_drive_api_not_collected` 失败状态，待补采集后再接入真实路径
     - _需求: 14, 21_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
 
-  - [ ] 9.14 实现 `RefreshDirectoryCommandHandler`
-    - 手动刷新目录缓存
-    - 支持跳过缓存直接重新拉取网页端元数据；手动刷新仍经 `ICloudDriveRateLimiter` 统一治理
+  - [x] 9.14 实现内部目录缓存失效能力
+    - 实现应用层内部目录缓存失效/重载协作，不暴露公开 `POST /api/files/refresh` 端点
+    - 前端刷新当前目录时重新调用 `GET /api/files`；后端需要绕过缓存的内部流程仍经 `ICloudDriveRateLimiter` 统一治理
     - _需求: 27_ _设计: §2. 文件管理模块 (File), §CloudDriveMetadataCache_
 
-  - [ ] 9.15 编写文件管理 Handler 单元测试
+  - [x] 9.15 编写文件管理 Handler 单元测试
     - 测试文件列表分页逻辑与字段归一化映射
     - 测试文件名验证（创建文件夹 255 字符边界、重命名 255 字节边界）
     - 测试缓存失效触发逻辑
@@ -521,8 +520,8 @@
     - 测试回收站空响应（无 `data` 键）的容错处理
     - _需求: 4, 5, 6, 7, 8, 9, 10, 11, 12, 13a, 14, 21, 27_ _设计: §2. 文件管理模块 (File)_
 
-- [ ] 10. 应用层 - 预览、视频、云下载、分享与用户聚合 Handler
-  - [ ] 10.1 实现 `GetImagePreviewQueryHandler` 与 `GetDocPreviewQueryHandler`
+- [x] 10. 应用层 - 预览、视频、云下载、分享与用户聚合 Handler
+  - [x] 10.1 实现 `GetImagePreviewQueryHandler` 与 `GetDocPreviewQueryHandler`
     - 实现 `GetImagePreviewQueryHandler`：获取图片预览信息，返回网页端临时地址或受控代理地址，并仅支持 `JPG/JPEG/PNG/GIF/BMP/WEBP`
     - 实现 `GetDocPreviewQueryHandler`：获取文档预览信息（按渲染方式分类：Direct/ThirdParty/NotAvailable），返回网页端临时地址或受控代理地址
     - 实现文件扩展名到预览类型的路由逻辑
@@ -530,7 +529,7 @@
     - Query Handler 不触发副作用（CD0007）
     - _需求: 14, 16_ _设计: §3. 预览模块 (Preview)_
 
-  - [ ] 10.2 编写属性测试 - 预览类型路由正确性
+  - [x] 10.2 编写属性测试 - 预览类型路由正确性
     - **属性 P7: 预览类型路由正确性**
     - 验证各文件扩展名被正确分类到对应的 `DocRenderMode`
     - 验证视频文件不会被误分类为图片或文档预览，而是进入视频播放链路
@@ -538,7 +537,7 @@
     - 验证不支持的格式返回错误
     - _需求: 14, 15, 16_
 
-  - [ ] 10.3 实现 `GetVideoPlayUrlCommandHandler`
+  - [x] 10.3 实现 `GetVideoPlayUrlCommandHandler`
     - 通过文件的 `pickcode` 调用 `GET webapi.115.com/files/video?pickcode={pickcode}&share_id=0` 获取播放地址（含多清晰度与网页端播放元数据）
     - 若视频尚未完成转码（通过重复调用上述接口的可播放性探测判定）则自动提交转码并返回 `Transcoding` 状态；本次调用成功创建后台转码任务时必须返回 `JobId`
     - 对非视频类型或文件不存在场景返回明确错误
@@ -546,13 +545,13 @@
     - 使用 Command 而非 Query，因为该操作可能触发转码提交副作用（创建后台任务），遵循 CD0007 约束
     - _需求: 15_ _设计: §4. 视频模块 (Video), §5. 后台任务模块 (Quartz.NET Job)_
 
-  - [ ] 10.4 实现 `SubmitTranscodeCommandHandler`
+  - [x] 10.4 实现 `SubmitTranscodeCommandHandler`
     - 通过文件的 `pickcode` 提交视频转码：`GET webapi.115.com/files/video_push?pickcode={pickcode}&op=vip_push&format=json`（备选路径：`GET webapi.115.com/movies/transcode?pickcode={pickcode}&format=json`）
     - 统一复用 `CloudDriveJobOrchestrator` 创建转码任务
     - 校验文件存在且类型为视频
     - _需求: 15, 21_ _设计: §4. 视频模块 (Video), §5. 后台任务模块 (Quartz.NET Job)_
 
-  - [ ] 10.5 实现 `GetSubtitlesQueryHandler`
+  - [x] 10.5 实现 `GetSubtitlesQueryHandler`
     - 通过文件的 `pickcode` 调用 `GET webapi.115.com/movies/subtitle` 获取视频字幕列表，返回 `CloudDriveSubtitleListDto`（包含自动加载字幕与字幕项列表）
     - 映射 `caption_map_id`、`is_caption_map`、`sync_time`、`sha1`、`file_id` 等公开字段
     - 处理字幕不存在、自动加载字幕缺失或暂不可用的返回语义
@@ -560,42 +559,43 @@
     - Query Handler 不触发副作用（CD0007）
     - _需求: 15, 25_ _设计: §4. 视频模块 (Video), §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
 
-  - [ ] 10.6 实现 `GetVideoPlayProgressQueryHandler`
+  - [x] 10.6 实现 `GetVideoPlayProgressQueryHandler`
     - 通过文件的 `pickcode` 调用 `GET webapi.115.com/files/history?pick_code={pickcode}&fetch=one&category=1&format=json` 获取网页端记忆的播放进度
     - 若仅有 `FileId`，先通过 `CloudDriveFileManager` 解析出 `pickcode`
     - 返回 `CloudDriveVideoPlayProgressDto`（含 `file_id`、`file_name`、`hash`、`pickcode`、已播放时长、`add_time` 记录添加时间戳）
     - Query Handler 不触发副作用（CD0007）
     - _需求: 18_ _设计: §4. 视频模块 (Video)_
 
-  - [ ] 10.7 实现 `RememberVideoPlayProgressCommandHandler`
+  - [x] 10.7 实现 `RememberVideoPlayProgressCommandHandler`
     - 通过文件的 `pickcode` 调用 `POST webapi.115.com/files/history`（form: `pick_code={pickcode}&time={seconds}&category=1&op=update`）记忆播放进度
     - 若仅有 `FileId`，先通过 `CloudDriveFileManager` 解析出 `pickcode`
     - 校验 `Time >= 0`
     - 支持 `WatchEnd` 标记播放完毕
     - _需求: 18_ _设计: §4. 视频模块 (Video)_
 
-  - [ ] 10.8 补充 `GetVideoPlayUrlCommandHandler` 的受限状态与用途标识
+  - [x] 10.8 补充 `GetVideoPlayUrlCommandHandler` 的受限状态与用途标识
     - 当网页端返回 4K / 原画受限状态或升级引导资源时，映射明确的受限原因到 `RestrictionReason`
     - 在返回 `CloudDriveVideoPlayDto` 时显式设置 `IsTemporary = true`
     - 填充 `UsageRestrictionNotice`，明确该播放资源仅限当前已绑定用户在系统内短时使用，不得视为永久公开外链
     - _需求: 15, 16_ _设计: §4. 视频模块 (Video), §P9: 临时资源标识_
 
-  - [ ] 10.9 实现云下载查询 Handler（Offline Query）
+  - [x] 10.9 实现云下载查询 Handler（Offline Query）
     - 实现 `GetOfflineTaskListQueryHandler`：获取云下载任务列表，调用 `ICloudDriveOpenApiGateway.SendOfflineApiRequestAsync` 发送 `115.com/web/lixian/?ct=lixian&ac=task_lists` 请求（自动通过 `ICookieSignatureStrategy` 生成 `sign + time + uid` 签名）
     - 响应字段归一化：`total_count → Total`、`failed_count → Failed`、`finished_count → Completed`、`downloading_count → Active`
     - 实现 `GetOfflineQuotaQueryHandler`：获取云下载空间配额与统计（`115.com/web/lixian/?ct=lixian&ac=get_quota_package_info` 或需求采集中确认的等效端点）
+    - 实现 `GetOfflineStatsQueryHandler`：调用 `POST 115.com/web/lixian/?ct=lixian&ac=task_count`，将 `total_count`、`failed_count`、`finished_count`、`downloading_count` 归一化为 `CloudDriveOfflineStatsDto`
     - Query Handler 不触发副作用（CD0007）
     - _需求: 20_ _设计: §6. 云下载模块 (Offline), §ICookieSignatureStrategy（云下载签名预留扩展点）_
 
-  - [ ] 10.10 实现云下载写操作 Handler（Offline Commands）
-    - 实现 `AddOfflineTaskCommandHandler`：接收 `AddOfflineTaskInput`（`Urls: List<string>`, `SavePath?`），批量提交云下载任务（`115.com/web/lixian/?ct=lixian&ac=add_task_url` 或 `add_task_urls`）；签名由 `ICookieSignatureStrategy.GenerateAsync` 生成
-    - 实现 `CancelOfflineTaskCommandHandler`：删除（取消）指定任务（`?ct=lixian&ac=del_task`）
-    - 实现 `ClearOfflineTasksCommandHandler`：清空已完成/已失败任务（`?ct=lixian&ac=task_clear`）
+  - [x] 10.10 实现云下载写操作 Handler（Offline Commands）
+    - 实现 `AddOfflineTaskCommandHandler` 占位：云下载创建任务接口尚未在 `docs/115-api-docs.md` 中采集，当前校验输入后返回 `cloud_drive_api_not_collected` ProblemDetails，待补采集后再接入真实路径
+    - 实现 `CancelOfflineTaskCommandHandler` 占位：云下载删除/取消任务接口尚未采集，当前返回 `cloud_drive_api_not_collected`
+    - 实现 `ClearOfflineTasksCommandHandler` 占位：云下载清空任务接口尚未采集，当前返回 `cloud_drive_api_not_collected`
     - 当 `ICookieSignatureStrategy` 未提供有效实现时返回 `Result.Failure` 带 `offline_signature_not_available` 错误码，而非抛出未处理异常
-    - 错误字段解析由 `ErrorFieldAdapter` 按 `115.com/web/lixian/` URL 规则处理
+    - 已采集的云下载读取接口错误字段解析由 `ErrorFieldAdapter` 按 `115.com/web/lixian/` URL 规则处理；写操作占位在补采集真实接口前不得发出 115 请求
     - _需求: 21_ _设计: §6. 云下载模块 (Offline), §ICookieSignatureStrategy（云下载签名预留扩展点）, §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
 
-  - [ ] 10.11 实现分享管理 Handler（Share Queries）
+  - [x] 10.11 实现分享管理 Handler（Share Queries）
     - 实现 `GetMySharesQueryHandler`：查询我的分享列表（`GET webapi.115.com/share/slist`，必填 `format=json`）
     - 实现 `GetShareSendsQueryHandler`：查询分享发送记录（`GET webapi.115.com/share/send`，必填 `format=json`）
     - 实现 `GetShareReceivesQueryHandler`：查询分享接收记录（`GET webapi.115.com/share/receive`，必填 `format=json`）
@@ -604,21 +604,21 @@
     - Query Handler 不触发副作用（CD0007）
     - _需求: 22, 25_ _设计: §7. 分享管理模块 (Share), §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
 
-  - [ ] 10.12 实现用户中心聚合 Handler（UserAggregation Queries）
-    - 实现 `GetUserSpaceQueryHandler`：获取用户空间详情，通过 `UserAggregationService` 并行调用 `webapi.115.com/user/info` 与相关接口
+  - [x] 10.12 实现用户中心聚合 Handler（UserAggregation Queries）
+    - 实现 `GetUserSpaceQueryHandler`：获取用户空间详情，通过 `UserAggregationService` 调用 `webapi.115.com/files/index_info?count_space_nums=1` 与相关接口
     - 实现 `GetUserVipQueryHandler`：获取 VIP 详情与特权，通过 `UserAggregationService` 并行调用 `webapi.115.com/user/vip_limit` + `vip.115.com/*` 多源接口
     - Query Handler 不触发副作用（CD0007）— 详细实现举见 `UserAggregationService`（任务 10.13）
     - _需求: 23_ _设计: §8. 用户中心聚合模块 (UserAggregator)_
 
-  - [ ] 10.13 实现 `UserAggregationService`（并行多源聚合）
-    - 实现 `AggregateUserInfoAsync(userId, cloudAccountUid, ct)`：使用 `Task.WhenAll` 并行调用多源接口（`webapi.115.com/user/info`、`webapi.115.com/user/vip_limit`、`webapi.115.com/user/index_info`、`vip.115.com/*`、`my.115.com/*`、`pay.115.com/`）
+  - [x] 10.13 实现 `UserAggregationService`（并行多源聚合）
+    - 实现 `AggregateUserInfoAsync(userId, cloudAccountUid, ct)`：使用 `Task.WhenAll` 并行调用多源接口（`my.115.com/proapi/3.0/index.php?method=user_info&uid=...`、`webapi.115.com/user/vip_limit?feature=2`、`webapi.115.com/files/index_info?count_space_nums=1`、`vip.115.com/*`、`pay.115.com/`）
     - 实施敏感字段过滤：通过 `CloudDriveSensitiveFieldsFilter` 统一注出需求 23 的 34 个黑名单敏感字段（手机号、邮箱、身份证、住址、生日、人口、职业、兴趣等 8 类）
     - VIP 响应中 `00_balance` 字段（以数字开头）因 C# 属性命名限制，映射时统一归一化为 `Balance`；其余数字开头字段也需遵循此归一化策略
     - 聚合失败策略：任一子接口失败时该字段置空并在日志中记录 `sub_endpoint_failed` 条目（含脱敏的错误摘要）；只有所有子接口都失败时才返回 `Result.Failure`
-    - 错误字段解析由 `ErrorFieldAdapter` 按 URL 规则处理：`user/vip_limit` 用 string 型 `code`；`user/index_info` 用 string 型 `code`；`pay.115.com/` 用 `msg`（非 `message`）
+    - 错误字段解析由 `ErrorFieldAdapter` 按 URL 规则处理：`user/vip_limit` 用 string 型 `code` + `message`；`files/index_info` 用 number 型 `code` + `error`；`pay.115.com/` 用 `msg`（非 `message`）
     - _需求: 23, 25, 26_ _设计: §8. 用户中心聚合模块 (UserAggregator), §UserAggregationService, §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
 
-- [ ] 11. 检查点 - 应用层完成验证
+- [x] 11. 检查点 - 应用层完成验证
   - 当前阶段通过条件：
     - 认证（Cookie 会话管理）、文件、预览、视频、云下载、分享、用户聚合、任务 Handler 的必做测试通过
     - 大文件上传、批量操作、清空回收站、视频转码的同步/异步边界已可验证
@@ -630,96 +630,100 @@
     - 所有 Command Handler 通过 `TransactionBehavior` 自动管理 SqlSugar 事务
     - 所有输入 DTO 通过 `ValidationBehavior` + FluentValidation 自动校验
 
-- [ ] 12. 表现层 - API 控制器
+- [x] 12. 表现层 - API 控制器
   - Controller 仅通过 `ISender` / `IMediator.Send()` 分发 Command/Query，严禁直接注入仓储、ORM 客户端或领域服务（CD0003）
-  - 除运维 Cookie 注入、登录态探测、已绑定账号列表查询以及任务列表全量查询外，所有已授权端点均需通过 query 或 body 显式传递 `cloudAccountUid`；任务列表查询留空时表示当前用户下全部账号任务，不进行默认账号推断
+  - 公开给前端的 `/api/*` 端点不得通过 query、body 或 header 接收 `cloudAccountUid`；账号上下文由应用层 `ICloudDriveAccountContextResolver` 根据当前用户唯一 Active Cookie 会话解析
   - 为 Controller / Endpoint 适配层实现统一 `Result` → HTTP 响应映射：`Result.Failure` 输出非 2xx 的 `application/problem+json`，不得以 HTTP 200 表示失败
   - 日志输出与 ProblemDetails 响应统一通过 `CloudDriveSensitiveFieldsFilter` 脱敏 Cookie / UID / CID / USSID / 签名密钥
-  - [ ] 12.1 实现 `CloudDriveAuthAdminController`（运维专用端点）
+  - [x] 12.1 实现 `CloudDriveAuthAdminController`（运维专用端点）
     - 所有端点需通过策略或授权属性（如 `[Authorize(Roles = "Admin")]`）限制访问；**严禁** 暴露给普通用户
-    - POST /api/cloud-drive/admin/cookie-sessions → `IMediator.Send(new UpsertCookieSessionCommand(this.GetAuthenticatedUserId(), input))`（body: `UpsertCookieSessionInput` 含 UID/CID/USSID + ExtraFields）
-    - POST /api/cloud-drive/admin/cookie-sessions/{cloudAccountUid}/cooldown → `IMediator.Send(new EnterCookieCooldownCommand(this.GetAuthenticatedUserId(), input))`（body: Reason, CooldownSeconds?）
-    - DELETE /api/cloud-drive/admin/cookie-sessions/{cloudAccountUid} → `IMediator.Send(new RevokeCookieSessionCommand(this.GetAuthenticatedUserId(), input))`
+    - POST /api/admin/cloud-drive/cookie-sessions → `IMediator.Send(new UpsertCookieSessionCommand(this.GetAuthenticatedUserId(), input))`（body: `UpsertCookieSessionInput` 含 `CloudAccountUid`、UID/CID/USSID + ExtraFields）
+    - POST /api/admin/cloud-drive/cookie-sessions/{cloudAccountUid}/cooldown → `IMediator.Send(new EnterCookieCooldownCommand(this.GetAuthenticatedUserId(), input))`（body: Reason, CooldownSeconds?）
+    - DELETE /api/admin/cloud-drive/cookie-sessions/{cloudAccountUid} → `IMediator.Send(new RevokeCookieSessionCommand(this.GetAuthenticatedUserId(), input))`
     - 请求 body 经过 `CloudDriveSensitiveFieldsFilter` 确保 Cookie 原文不进入日志；ProblemDetails 响应不返回 Cookie 或加密密文
     - _需求: 1, 2_ _设计: §1. 认证与会话管理模块 (Auth), §CookieSessionManager_
 
-  - [ ] 12.2 实现 `CloudDriveAuthController`（已绑定用户可访问）
-    - GET /api/cloud-drive/auth/accounts → `IMediator.Send(new GetBoundAccountsQuery(this.GetAuthenticatedUserId()))`（不要求 `cloudAccountUid`，返回当前用户下所有已绑定账号摘要）
-    - GET /api/cloud-drive/auth/login-status?cloudAccountUid={cloudAccountUid} → `IMediator.Send(new GetLoginStatusQuery(this.GetAuthenticatedUserId(), input))`（登录态探测，对应需求 3 的 `/api/auth/check`）
-    - GET /api/cloud-drive/auth/user-info?cloudAccountUid={cloudAccountUid} → `IMediator.Send(new GetUserInfoQuery(this.GetAuthenticatedUserId(), input))`（用户信息多源聚合）
+  - [x] 12.2 实现 `AuthController`（前端登录态检测）
+    - GET /api/auth/check → `IMediator.Send(new GetLoginStatusQuery(this.GetAuthenticatedUserId()))`；返回公开 DTO `{ isAuthenticated, failureReason? }`
+    - 用户信息由 `UserController` 提供，前端不调用账号列表或 login-status 旧端点
     - 不再提供 OAuth 的 /authorize、/pkce/session、/pkce/session/{sessionId}/status、/callback、/disconnect 端点 — Cookie 注入与撤销由运维端点（`CloudDriveAuthAdminController`）处理
     - _需求: 3, 19, 23_ _设计: §1. 认证与会话管理模块 (Auth), §LoginCheckHandler（需求 3 登录态检测）, §8. 用户中心聚合模块 (UserAggregator)_
 
-  - [ ] 12.3 实现 `CloudDriveFileController` - 查询类端点
-    - GET /api/cloud-drive/files?cloudAccountUid={cloudAccountUid}&directoryId={directoryId?}&offset={offset}&limit={limit}&type={type?}&suffix={suffix?}&asc={asc?}&orderBy={orderBy?}&customOrder={customOrder?}&stdir={stdir?}&star={star?}&cur={cur?}&showDir={showDir?} → `IMediator.Send(new GetFileListQuery(this.GetAuthenticatedUserId(), input))`
-    - GET /api/cloud-drive/files/{fileId}?cloudAccountUid={cloudAccountUid} → `IMediator.Send(new GetFileDetailQuery(this.GetAuthenticatedUserId(), input))`
-    - GET /api/cloud-drive/files/search?cloudAccountUid={cloudAccountUid}&keyword={keyword}&offset={offset}&limit={limit}&fileLabel={fileLabel?}&directoryId={directoryId?}&gteDay={gteDay?}&lteDay={lteDay?}&fc={fc?}&type={type?}&suffix={suffix?} → `IMediator.Send(new SearchFilesQuery(this.GetAuthenticatedUserId(), input))`
-    - GET /api/cloud-drive/files/{fileId}/download?cloudAccountUid={cloudAccountUid} → `IMediator.Send(new GetDownloadUrlQuery(this.GetAuthenticatedUserId(), input))`
-    - 所有查询端点均需通过 query parameter 显式传递 `cloudAccountUid`
+  - [x] 12.3 实现 `FilesController` - 查询类端点
+    - GET /api/files?cid={cid?}&offset={offset}&limit={limit}&type={type?}&suffix={suffix?}&asc={asc?}&o={o?}&star={star?}&showDir={showDir?}&natsort={natsort?}&snap={snap?}&countFolders={countFolders?} → `IMediator.Send(new GetFileListQuery(this.GetAuthenticatedUserId(), input))`
+    - GET /api/files/{fileId} → `IMediator.Send(new GetFileDetailQuery(this.GetAuthenticatedUserId(), input))`
+    - GET /api/files/search?searchValue={searchValue}&offset={offset}&limit={limit}&cid={cid?}&date={date?}&type={type?}&pickCode={pickCode?}&countFolders={countFolders?}&source={source?} → `IMediator.Send(new SearchFilesQuery(this.GetAuthenticatedUserId(), input))`
+    - GET /api/files/{pickCode}/download → `IMediator.Send(new GetDownloadUrlQuery(this.GetAuthenticatedUserId(), input))`（该 115 下载地址接口仍待补采集；未实现时返回明确 ProblemDetails）
+    - 所有查询端点均不得显式接收 `cloudAccountUid`
     - _需求: 4, 5, 6_ _设计: §2. 文件管理模块 (File)_
 
-  - [ ] 12.4 实现 `CloudDriveFileController` - 写入与上传端点
-    - POST /api/cloud-drive/files/folder → `IMediator.Send(new CreateFolderCommand(this.GetAuthenticatedUserId(), input))`
-    - POST /api/cloud-drive/files/upload/init → `IMediator.Send(new InitUploadCommand(this.GetAuthenticatedUserId(), input))`
-    - POST /api/cloud-drive/files/upload → `IMediator.Send(new UploadFileCommand(this.GetAuthenticatedUserId(), input, fileStream))`
-    - 上传端点使用 `multipart/form-data` 接收 `IFormFile file`、`cloudAccountUid`、`directoryId`、`fileSha1`（文件 SHA1）与可选 `preSha1`、`pickCode`、`forceAsync`
+  - [x] 12.4 实现 `FilesController` - 写入与上传端点
+    - POST /api/files/folders → `IMediator.Send(new CreateFolderCommand(this.GetAuthenticatedUserId(), input))`（115 新建文件夹接口待补采集；当前 Handler 返回 `cloud_drive_api_not_collected` ProblemDetails）
+    - POST /api/files/upload → `IMediator.Send(new UploadFileCommand(this.GetAuthenticatedUserId(), input, fileStream))`
+    - 上传端点使用 `multipart/form-data` 接收 `IFormFile file`、`directoryId`、`forceAsync`；后端按 `docs/115-api-docs.md` 先调用 `uplb.115.com/3.0/sampleinitupload.php`，再执行 OSS PostObject 直传。当前前端代理上传不暴露 `/api/files/upload/init`
     - Controller 将 `IFormFile` 的 `Stream` 传递给 `UploadFileCommand`，由 `UploadFileCommandHandler` 通过 `IUploadFileStagingService` 在应用层完成临时文件落盘与异步上传编排（保持 Controller 轻量）
-    - POST /api/cloud-drive/files/move → `IMediator.Send(new MoveFilesCommand(this.GetAuthenticatedUserId(), input))`
-    - POST /api/cloud-drive/files/copy → `IMediator.Send(new CopyFilesCommand(this.GetAuthenticatedUserId(), input))`
-    - POST /api/cloud-drive/files/delete → `IMediator.Send(new DeleteFilesCommand(this.GetAuthenticatedUserId(), input))`
-    - PUT /api/cloud-drive/files/{fileId}/rename → `IMediator.Send(new RenameFileCommand(this.GetAuthenticatedUserId(), input))`
-    - POST /api/cloud-drive/files/refresh → `IMediator.Send(new RefreshDirectoryCommand(this.GetAuthenticatedUserId(), input))`
-    - PUT /api/cloud-drive/files/{fileId}/star → `IMediator.Send(new ToggleStarCommand(this.GetAuthenticatedUserId(), input))`（body 中携带 `cloudAccountUid`、`star`）
+    - POST /api/files/move → `IMediator.Send(new MoveFilesCommand(this.GetAuthenticatedUserId(), input))`（115 移动接口待补采集；当前 Handler 返回 `cloud_drive_api_not_collected`）
+    - POST /api/files/copy → `IMediator.Send(new CopyFilesCommand(this.GetAuthenticatedUserId(), input))`（115 复制接口待补采集；当前 Handler 返回 `cloud_drive_api_not_collected`）
+    - DELETE /api/files → `IMediator.Send(new DeleteFilesCommand(this.GetAuthenticatedUserId(), input))`（body: `fileIds[]`；115 删除接口待补采集；当前 Handler 返回 `cloud_drive_api_not_collected`）
+    - PATCH /api/files/{fileId} → `IMediator.Send(new RenameFileCommand(this.GetAuthenticatedUserId(), input))`（body: `newFileName`；115 重命名接口待补采集；当前 Handler 返回 `cloud_drive_api_not_collected`）
+    - POST /api/files/{fileId}/star → `IMediator.Send(new ToggleStarCommand(this.GetAuthenticatedUserId(), input))`（body 中携带 `starred`；115 星标写接口待补采集；当前 Handler 返回 `cloud_drive_api_not_collected`）
     - _需求: 7, 8, 9, 10, 12, 13a, 21, 27_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
 
-  - [ ] 12.5 实现 `CloudDriveRecycleBinController`
-    - GET /api/cloud-drive/recycle-bin?cloudAccountUid={cloudAccountUid}&offset={offset}&limit={limit} → `IMediator.Send(new GetRecycleBinListQuery(this.GetAuthenticatedUserId(), input))`
-    - POST /api/cloud-drive/recycle-bin/restore → `IMediator.Send(new RestoreFromRecycleBinCommand(this.GetAuthenticatedUserId(), input))`（body 中携带 `cloudAccountUid`）
-    - POST /api/cloud-drive/recycle-bin/delete → `IMediator.Send(new DeleteFromRecycleBinCommand(this.GetAuthenticatedUserId(), input))`（body 中携带 `cloudAccountUid`）
-    - POST /api/cloud-drive/recycle-bin/clear → `IMediator.Send(new ClearRecycleBinCommand(this.GetAuthenticatedUserId(), input))`（body 中携带 `cloudAccountUid`）
+  - [x] 12.5 实现 `RecycleBinController`
+    - GET /api/recycle?offset={offset}&limit={limit} → `IMediator.Send(new GetRecycleBinListQuery(this.GetAuthenticatedUserId(), input))`
+    - POST /api/recycle/restore → `IMediator.Send(new RestoreFromRecycleBinCommand(this.GetAuthenticatedUserId(), input))`（还原接口待补采集；当前 Handler 返回 `cloud_drive_api_not_collected`）
+    - DELETE /api/recycle/{id} → `IMediator.Send(new DeleteFromRecycleBinCommand(this.GetAuthenticatedUserId(), input))`（彻底删除接口待补采集；当前 Handler 返回 `cloud_drive_api_not_collected`）
+    - DELETE /api/recycle → `IMediator.Send(new ClearRecycleBinCommand(this.GetAuthenticatedUserId(), input))`（清空接口待补采集，异步返回 jobId；Job 执行时返回 `cloud_drive_api_not_collected`）
     - _需求: 14, 21_ _设计: §2. 文件管理模块 (File), §5. 后台任务模块 (Quartz.NET Job)_
 
-  - [ ] 12.6 实现 `CloudDrivePreviewController`
-    - GET /api/cloud-drive/preview/image/{fileId}?cloudAccountUid={cloudAccountUid} → `IMediator.Send(new GetImagePreviewQuery(this.GetAuthenticatedUserId(), input))`
-    - GET /api/cloud-drive/preview/doc/{fileId}?cloudAccountUid={cloudAccountUid} → `IMediator.Send(new GetDocPreviewQuery(this.GetAuthenticatedUserId(), input))`
+  - [x] 12.6 实现 `PreviewController` / `DocumentsController`
+    - GET /api/files/{pickCode}/preview → `IMediator.Send(new GetImagePreviewQuery(this.GetAuthenticatedUserId(), input))`
+    - GET /api/documents/{pickCode}/preview → `IMediator.Send(new GetDocPreviewQuery(this.GetAuthenticatedUserId(), input))`
     - _需求: 14, 16_ _设计: §3. 预览模块 (Preview)_
 
-  - [ ] 12.7 实现 `CloudDriveVideoController`
-    - POST /api/cloud-drive/video/{fileId}/play → `IMediator.Send(new GetVideoPlayUrlCommand(this.GetAuthenticatedUserId(), input))`（body 中携带 `cloudAccountUid`；使用 POST 因为可能触发转码副作用）
-    - POST /api/cloud-drive/video/{fileId}/transcode → `IMediator.Send(new SubmitTranscodeCommand(this.GetAuthenticatedUserId(), input))`（body 中携带 `cloudAccountUid`）
-    - GET /api/cloud-drive/video/{fileId}/subtitles?cloudAccountUid={cloudAccountUid} → `IMediator.Send(new GetSubtitlesQuery(this.GetAuthenticatedUserId(), input))`
+  - [x] 12.7 实现 `VideosController`
+    - GET /api/videos/{pickCode}/play → `IMediator.Send(new GetVideoPlayUrlCommand(this.GetAuthenticatedUserId(), input))`（后端按 `docs/115-api-docs.md` 调用 `GET webapi.115.com/files/video?pickcode=...&share_id=0&local=1&format=json`；该 Command 允许在未转码时提交后台转码任务）
+    - POST /api/videos/{pickCode}/transcode → `IMediator.Send(new SubmitTranscodeCommand(this.GetAuthenticatedUserId(), input))`（显式转码提交，调用 `webapi.115.com/files/video_push` 或备选 `movies/transcode`）
+    - GET /api/videos/{pickCode}/subtitles → `IMediator.Send(new GetSubtitlesQuery(this.GetAuthenticatedUserId(), input))`
     - _需求: 15_ _设计: §4. 视频模块 (Video)_
 
-  - [ ] 12.8 补充 `CloudDriveVideoController` 播放进度端点
-    - GET /api/cloud-drive/video/{fileId}/progress?cloudAccountUid={cloudAccountUid} → `IMediator.Send(new GetVideoPlayProgressQuery(this.GetAuthenticatedUserId(), input))`
-    - POST /api/cloud-drive/video/{fileId}/progress → `IMediator.Send(new RememberVideoPlayProgressCommand(this.GetAuthenticatedUserId(), input))`（body 中携带 `cloudAccountUid`、`time`、`watchEnd`）
+  - [x] 12.8 补充 `CloudDriveVideoController` 播放进度端点
+    - GET /api/videos/{pickCode}/history → `IMediator.Send(new GetVideoPlayProgressQuery(this.GetAuthenticatedUserId(), input))`
+    - POST /api/videos/{pickCode}/history → `IMediator.Send(new RememberVideoPlayProgressCommand(this.GetAuthenticatedUserId(), input))`（body 中携带 `time`、`watchEnd`）
     - _需求: 18_ _设计: §4. 视频模块 (Video)_
 
-  - [ ] 12.9 实现 `CloudDriveOfflineController`
-    - GET /api/cloud-drive/offline/tasks?cloudAccountUid={cloudAccountUid}&offset={offset}&limit={limit} → `IMediator.Send(new GetOfflineTaskListQuery(this.GetAuthenticatedUserId(), input))`
-    - GET /api/cloud-drive/offline/quota?cloudAccountUid={cloudAccountUid} → `IMediator.Send(new GetOfflineQuotaQuery(this.GetAuthenticatedUserId(), input))`
-    - POST /api/cloud-drive/offline/tasks → `IMediator.Send(new AddOfflineTaskCommand(this.GetAuthenticatedUserId(), input))`（body: `Urls: List<string>`, `SavePath?`, `cloudAccountUid`）
-    - DELETE /api/cloud-drive/offline/tasks/{taskId} → `IMediator.Send(new CancelOfflineTaskCommand(this.GetAuthenticatedUserId(), input))`（body 或 query 中携带 `cloudAccountUid`）
-    - POST /api/cloud-drive/offline/tasks/clear → `IMediator.Send(new ClearOfflineTasksCommand(this.GetAuthenticatedUserId(), input))`（body 中携带 `cloudAccountUid`）
+  - [x] 12.9 实现 `OfflineController`
+    - GET /api/offline/tasks?page={page} → `IMediator.Send(new GetOfflineTaskListQuery(this.GetAuthenticatedUserId(), input))`
+    - GET /api/offline/quota → `IMediator.Send(new GetOfflineQuotaQuery(this.GetAuthenticatedUserId()))`
+    - GET /api/offline/stats → `IMediator.Send(new GetOfflineStatsQuery(this.GetAuthenticatedUserId()))`
+    - POST /api/offline/tasks/urls → `IMediator.Send(new AddOfflineTaskCommand(this.GetAuthenticatedUserId(), input with TaskKind=Url))`（创建接口待补采集；当前 Handler 返回 `cloud_drive_api_not_collected`）
+    - POST /api/offline/tasks/bt → `IMediator.Send(new AddOfflineTaskCommand(this.GetAuthenticatedUserId(), input with TaskKind=Bt))`（BT 创建接口待补采集；当前 Handler 返回 `cloud_drive_api_not_collected`）
+    - POST /api/offline/parse-torrent → 当前 `docs/115-api-docs.md` 未采集解析接口；Controller 直接返回 `cloud_drive_api_not_collected` ProblemDetails，不定义猜测型 Application Command
+    - DELETE /api/offline/tasks/{infoHash} → `IMediator.Send(new CancelOfflineTaskCommand(this.GetAuthenticatedUserId(), input))`（删除接口待补采集；当前 Handler 返回 `cloud_drive_api_not_collected`）
+    - POST /api/offline/tasks:clear → `IMediator.Send(new ClearOfflineTasksCommand(this.GetAuthenticatedUserId(), input))`（清空接口待补采集；当前 Handler 返回 `cloud_drive_api_not_collected`）
     - 当签名实现未就绪时返回 HTTP 503 + `offline_signature_not_available` ProblemDetails
     - _需求: 20, 21_ _设计: §6. 云下载模块 (Offline)_
 
-  - [ ] 12.10 实现 `CloudDriveShareController`
-    - GET /api/cloud-drive/shares?cloudAccountUid={cloudAccountUid}&offset={offset}&limit={limit} → `IMediator.Send(new GetMySharesQuery(this.GetAuthenticatedUserId(), input))`
-    - GET /api/cloud-drive/shares/sends?cloudAccountUid={cloudAccountUid}&offset={offset}&limit={limit} → `IMediator.Send(new GetShareSendsQuery(this.GetAuthenticatedUserId(), input))`
-    - GET /api/cloud-drive/shares/receives?cloudAccountUid={cloudAccountUid}&offset={offset}&limit={limit} → `IMediator.Send(new GetShareReceivesQuery(this.GetAuthenticatedUserId(), input))`
+  - [x] 12.10 实现 `SharesController`
+    - GET /api/shares?tab=slist&offset={offset}&limit={limit} → `IMediator.Send(new GetMySharesQuery(this.GetAuthenticatedUserId(), input))`
+    - GET /api/shares?tab=send&offset={offset}&limit={limit} → `IMediator.Send(new GetShareSendsQuery(this.GetAuthenticatedUserId(), input))`
+    - GET /api/shares?tab=receive&offset={offset}&limit={limit} → `IMediator.Send(new GetShareReceivesQuery(this.GetAuthenticatedUserId(), input))`
+    - tab=slist 调用 `webapi.115.com/share/slist`；tab=send 调用 `/share/send`；tab=receive 调用 `/share/receive`
     - 采集样本不可用时返回 HTTP 503 + `share_sample_unavailable` ProblemDetails，提示后续联调补齐
     - _需求: 22_ _设计: §7. 分享管理模块 (Share)_
 
-  - [ ] 12.11 实现 `CloudDriveUserCenterController`
-    - GET /api/cloud-drive/user-center/space?cloudAccountUid={cloudAccountUid} → `IMediator.Send(new GetUserSpaceQuery(this.GetAuthenticatedUserId(), input))`
-    - GET /api/cloud-drive/user-center/vip?cloudAccountUid={cloudAccountUid} → `IMediator.Send(new GetUserVipQuery(this.GetAuthenticatedUserId(), input))`
+  - [x] 12.11 实现 `UserController`
+    - GET /api/user/profile → `IMediator.Send(new GetUserProfileQuery(this.GetAuthenticatedUserId()))`
+    - GET /api/user/info → `IMediator.Send(new GetUserInfoQuery(this.GetAuthenticatedUserId()))`
+    - GET /api/user/vip → `IMediator.Send(new GetUserVipQuery(this.GetAuthenticatedUserId()))`
+    - GET /api/user/balance → `IMediator.Send(new GetUserBalanceQuery(this.GetAuthenticatedUserId()))`
+    - GET /api/user/storage → `IMediator.Send(new GetUserSpaceQuery(this.GetAuthenticatedUserId()))`
     - 响应经 `CloudDriveSensitiveFieldsFilter` 过滤需求 23 的 34 个黑名单敏感字段，保证不泄漏手机号/邮箱/身份证等
     - _需求: 23, 26_ _设计: §8. 用户中心聚合模块 (UserAggregator)_
 
-  - [ ] 12.12 实现 `CloudDriveJobController`
-    - GET /api/cloud-drive/jobs/{jobId}?cloudAccountUid={cloudAccountUid} → `IMediator.Send(new GetJobStatusQuery(this.GetAuthenticatedUserId(), input))`
-    - GET /api/cloud-drive/jobs?cloudAccountUid={cloudAccountUid?}&status={status?}&offset={offset}&limit={limit} → `IMediator.Send(new GetJobListQuery(this.GetAuthenticatedUserId(), input))`（`cloudAccountUid` 留空时查询全部账号）
+  - [x] 12.12 实现 `JobsController`
+    - GET /api/jobs/{jobId} → `IMediator.Send(new GetJobStatusQuery(this.GetAuthenticatedUserId(), input))`
+    - GET /api/jobs?status={status?}&offset={offset}&limit={limit} → `IMediator.Send(new GetJobListQuery(this.GetAuthenticatedUserId(), input))`
     - _需求: 21, 28_ _设计: §5. 后台任务模块 (Quartz.NET Job)_
 
 - [ ] 13. 模块注册与集成
@@ -742,7 +746,7 @@
     - 将 `CloudDriveRateLimiter` 集成到 `CloudDriveApiClient` 的请求管道中（`SendWebApiRequestAsync` / `SendUserCenterRequestAsync` / `SendOfflineApiRequestAsync` 入口统一 `AcquireAsync`）
     - 配置 `CloudDriveMetadataCache` 使用 `IDistributedCache` + `DistributedCacheExtensions`
     - 配置 `RateLimitOverflowStrategy`、队列长度、限流/瞬态异常重试参数，并输出排队/拒绝/重试/失败计数到日志与 metrics
-    - 确保限流器与缓存协同工作，且按 `UserId + CloudAccountUid` 维度隔离，减少重复高频 API 调用
+    - 确保限流器与缓存协同工作，且按 `UserId + CloudAccountUid` 内部维度隔离，减少重复高频 API 调用；公开前端 API 不接收 `cloudAccountUid`
     - 确保仅幂等请求进入自动重试链路，非幂等写请求遵循设计定义的重试边界
     - 云下载请求通过独立的 `Cloud115Offline` 限流桶隔离，避免与普通读请求竞争配额
     - _需求: 17, 24, 27_ _设计: §CloudDriveRateLimiter, §CloudDriveMetadataCache_
@@ -750,7 +754,7 @@
   - [ ] 13.3 执行模块级装配验证
     - 验证配置缺失时启动期校验与运行期保护同时生效（`CookieEncryptionKeyName` / `WebApiBaseUrl` 缺失即可触发）
     - 验证主要 Handler、Controller、Quartz Job 可从容器成功解析
-    - 验证 `ErrorFieldAdapter` 注册表在启动时完整加载 `requirements.md:454-470` 对应的全部错误字段变体
+    - 验证 `ErrorFieldAdapter` 注册表在启动时完整加载需求 25 错误字段变体表对应的全部 URL 规则
     - 验证缓存命中请求不会触发重复高频官方调用，手动刷新时绕过旧缓存且仍受限流器治理
     - 验证 Controller 仅通过 `ISender` 分发，未直接注入仓储或领域服务（CD0003）
     - 验证 `CloudDriveAuthAdminController` 端点受管理员策略保护，Cookie 原文不进入 ProblemDetails 响应

@@ -1,137 +1,60 @@
-# 115-cloud-drive-integration Specs 审核报告（第 2 轮 — 修复验证）
+# 115 cloud drive 前后端 Specs 修复验证报告
 
 ## 审核快照
 
-- **审核时间**：2026-04-18 12:31:11
-- **审核轮次**：**第 2 轮**（修复验证）
-- **官方文档基线**：`e:\Code\115web\docs\115-api-docs.md`（2026-04-08 采集，`runId: 20260408145821-oqg9xv`，未变更）
-- **Specs 基线**：`e:\Code\115web\.kiro\specs\115-cloud-drive-integration\requirements.md`（605 行，第 1 轮修复后）
-- **上轮审核**：`audit-history/2026-04-18-121351.md` — 首次审核发现 **22 项问题**
-- **本轮范围**：验证第 1 轮 22 项修复是否到位 + 回归检查（无需重做全量矩阵）
+- **审核时间**：2026-05-04 01:09:47
+- **审核轮次**：复查
+- **复查范围**：`.kiro/specs/115-cloud-drive-integration` + `.kiro/specs/115-cloud-drive-frontend` 的前后端契约与 115 API 对齐残留
+- **权威接口依据**：`docs/115-api-docs.md`
+- **上轮审核**：`.kiro/specs/115-cloud-drive-integration/audit-history/2026-05-04-004344-full-frontend-backend.md`
+- **架构边界**：前端只访问后端 `/api/*`；后端 integration 访问 115 网页端 API
 
-## 审核工作量
+## 联网复核
 
-- 上轮遗留问题：22 项全部检查
-- 本轮范围：逐项修复验证（每项附 spec 修复位置）
-- 回归检查：验证新增内容未破坏原有需求结构
+联网检索未发现比本地 `docs/115-api-docs.md` 更权威的 115 网页端字段级 API 文档。公开资料只能作为旁证，不作为本轮修复依据：
 
----
+- GreasyFork 第三方脚本可旁证 `webapi.115.com/files`、`webapi.115.com/files/history`、`115.com/web/lixian/?ct=lixian&ac=task_lists` 与 `sign/time/uid` 形态：https://greasyfork.org/de/scripts/495474-115/code
+- `115wangpan` 第三方库文档可旁证 Cookie 持久化、搜索、离线任务等能力存在，但未提供本项目所需字段级契约：https://115wangpan.readthedocs.io/en/latest/tutorial.html
 
-## 修复状态矩阵
+## 修复结果
 
-### 🔴 高优先级（8 项全部修复）
+| 编号 | 上轮问题 | 状态 | 修复位置 |
+|---|---|---|---|
+| H-01 | `/files/index_info` 错误字段类型写错 | 已修复 | `requirements.md` 需求 25 表拆分为 `/user/vip_limit code string + message` 与 `/files/index_info code number + error`；`design.md`/`tasks.md` 同步 |
+| H-02 | 用户聚合引用 docs 不存在的路径 | 已修复 | `design.md`/`tasks.md` 统一为 `my.115.com/proapi/3.0/index.php?method=user_info&uid=...`、`webapi.115.com/user/vip_limit?feature=2`、`webapi.115.com/files/index_info?count_space_nums=1` |
+| H-03 | 待补采集写操作写成具体 115 端点 | 已修复 | `tasks.md` 中文件写操作、回收站写操作、云下载写操作均改为占位 Handler/Job，返回 `cloud_drive_api_not_collected`，不得猜测 115 path |
+| H-04 | 云下载签名算法存在 MD5 占位冲突 | 已修复 | `requirements.md`/`design.md`/`tasks.md` 统一为签名算法未采集时返回 `offline_signature_not_available`，不生成占位签名 |
+| H-05 | 搜索残留开放平台参数 | 已修复 | `design.md` 的 `SearchFileInput` 与 `tasks.md` 的 `GET /api/files/search` 只保留 `search_value/aid/cid/type/date/pick_code/count_folders/source/format/offset/limit` 相关契约 |
+| M-01 | integration requirements 缺 `GET /api/recycle` | 已修复 | `requirements.md` 需求 14 显式增加 `GET /api/recycle` |
+| M-02 | `POST /api/files/refresh` 孤儿公开端点 | 已修复 | `design.md`/`tasks.md` 明确仅保留内部缓存失效能力，不暴露公开刷新端点 |
 
-| 编号 | 问题 | 上轮状态 | 本轮状态 | Spec 修复位置 | 验证结论 |
-|------|------|:-------:|:-------:|--------------|---------|
-| H-01 | `/files/search` 错误码 `errCode` | ❌ | ✅ | `requirements.md:459` 错误变体表第 2 行 | 已单独列为第 2 行，使用 `errCode`（number） |
-| H-02 | `/movies/subtitle` 错误码 `errNo` 大写 | ❌ | ✅ | `requirements.md:461` 错误变体表第 4 行 | 已单独列为第 4 行，标注"大写 N" |
-| H-03 | `user/vip_limit`、`index_info` 的 `code` 类型 | ❌ | ✅ | `requirements.md:465` 错误变体表第 8 行 | 标注 `code（string）`，明确区分 proapi 的 `code（number）` |
-| H-04 | `pay.115.com/` 错误变体表遗漏 | ❌ | ✅ | `requirements.md:468` 错误变体表第 11 行 | 新增第 11 行，使用 `msg`（非 `message`） |
-| H-05 | `/web/lixian/*` 漏 `ct=lixian` | ❌ | ✅ | `requirements.md:365, 369, 370` | 三端点均补充 `?ct=lixian&ac=xxx` |
-| H-06 | `/files/search` 幻影参数 `gte_day/lte_day` | ❌ | ✅ | `requirements.md:125` | 替换为 `date`，并标注开放平台参数不采用 |
-| H-07 | `/files/video` 漏 `share_id` | ❌ | ✅ | `requirements.md:302` | 已加入 `&share_id=0` 及说明 |
-| H-08 | `/files` 漏 `aid=1` 必填参数 | ❌ | ✅ | `requirements.md:109` | 已补充，并说明回收站为 `aid=7` |
+## 验证命令
 
-### 🟠 中高优先级（4 项全部修复）
+- `rg "user/index_info|webapi\.115\.com/user/info|/user/index_info|sign\s*=\s*md5|NotImplementedException|RefreshDirectoryCommand|RefreshDirectoryInput|errMsg|12 种|12种|requirements\.md:454-470|file_label.*支持|gte_day.*支持|lte_day.*支持|suffix\?}" .kiro/specs/115-cloud-drive-integration/...`
+- `rg "files/add|files/edit|files/move|files/copy|rb/delete|rb/revert|rb/clean|files/star|add_task_url|add_task_urls|del_task|task_clear" .kiro/specs/115-cloud-drive-integration/...`
+- `rg "webapi\.115\.com|115\.com/web|my\.115\.com|vip\.115\.com|pay\.115\.com|uplb\.115\.com|Cookie|sign" .kiro/specs/115-cloud-drive-frontend/...`
 
-| 编号 | 问题 | 上轮状态 | 本轮状态 | Spec 修复位置 | 验证结论 |
-|------|------|:-------:|:-------:|--------------|---------|
-| M-01 | 用户敏感字段黑名单不完整 | ❌ | ✅ | `requirements.md:416-425, 491-499` | 扩展至 **8 类 34 个字段**（联系方式/支付/住址/生日/人口/职业/兴趣/其他隐私）；需求 23 与需求 26 黑名单同步 |
-| M-02 | `/rb` 漏 `aid=7/cid=0/format` | ❌ | ✅ | `requirements.md:269` | 已补充三个必填参数 |
-| M-03 | `/share/*` 漏 `format=json` | ❌ | ✅ | `requirements.md:395-397` | 三端点均补充 `&format=json` |
-| M-04 | `task_lists` Body 漏 `stat` | ❌ | ✅ | `requirements.md:365-366` | Body 参数补充为 `{ page, stat, uid, sign, time }`，并说明 `stat=0` 默认全部 |
+## 复查结论
 
-### 🟡 中优先级（7 项全部修复）
+- integration spec 已按 `docs/115-api-docs.md` 收敛：已采集接口可以直接由后端访问 115；未采集写接口不再写具体 115 路径。
+- frontend spec 仍保持正确边界：前端不直连 115，不处理 Cookie、签名、错误字段或短字段归一化，只消费后端 `/api/*`。
+- 允许保留的字符串：`POST /api/files/refresh` 仅作为“不暴露公开端点”的说明出现；`CloudDriveFileLabelDto` 是响应 DTO 字段，非搜索请求参数；文件列表 `suffix` 属 `/files` 已采集参数，不属于 `/files/search` 幻影参数。
 
-| 编号 | 问题 | 上轮状态 | 本轮状态 | Spec 修复位置 | 验证结论 |
-|------|------|:-------:|:-------:|--------------|---------|
-| L-01 | `limit=1150` 无来源 | ❌ | ✅ | `requirements.md:31, 110` | 简介新增"硬上限来源说明"；需求 4.2 标注"保护限值来自开放平台文档推断" |
-| L-02 | `offset+limit≤10000` 无来源 | ❌ | ✅ | `requirements.md:31, 126` | 同 L-01 |
-| L-03 | 回收站动态键说明不精准 | ❌ | ✅ | `requirements.md:270-271` | 明确说明"有数据时 `data` 为对象，键为文件 ID (string)"、"空回收站时官方不返回 `data` 键" |
-| L-04 | `task_count` 字段映射未细化 | ❌ | ✅ | `requirements.md:370` | 补充 `total_count→total`、`failed_count→failed`、`finished_count→completed`、`downloading_count→active` |
-| L-05 | `get_quota_package_info` DTO 缺失 | ❌ | ✅ | `requirements.md:369` | 新增 `CloudDriveOfflineQuotaDto { package, count, surplus, maxSize, used }` |
-| L-06 | 13 个官方未使用 API 无排除声明 | ❌ | ✅ | `requirements.md:19-29` | 简介新增"官方 API 范围排除声明"，显式列出 13 个端点与排除原因 |
-| L-07 | `sta/hdf/class/fvs` 值域映射无依据 | ❌ | ✅ | `requirements.md:112, 368` | 需求 4.4 标注"基于开放平台文档推断，以真实响应为准验证"；需求 20.5 同步 |
+## 2026-05-04 追加复查修复
 
-### 🟢 低优先级（3 项全部修复）
+用户要求再次检查后，发现并修复 7 个 spec 内部一致性问题：
 
-| 编号 | 问题 | 上轮状态 | 本轮状态 | Spec 修复位置 | 验证结论 |
-|------|------|:-------:|:-------:|--------------|---------|
-| S-01 | Cookie 冷却时间无默认值 | ❌ | ✅ | `requirements.md:74` | 新增"默认 60 秒，可通过 `CookieCooldownSeconds` 配置" |
-| S-02 | `vip.115.com/` DTO 说明缺失 | ❌ | ✅ | `requirements.md:426` | 新增完整字段结构 `{ num, url, vip_count, space_count, forever_count, sqcode_count, sqcode_cancel_count, 00_balance }`，并说明 `00_balance` 索引访问归一化为 `balance` |
-| S-03 | `share/send/receive` 双 errNo/errno 处理策略 | ❌ | ✅ | `requirements.md:464` | 错误变体表第 7 行明确"优先读 `errNo`，fallback `errno`" |
+| 编号 | 问题 | 状态 | 修复位置 |
+|---|---|---|---|
+| F-01 | 公开输入 DTO 仍继承 `CloudDriveAccountScopedInput` | 已修复 | `design.md` 关键输入 DTO 全部移除该基类；`tasks.md` 6.1 改为公开输入 DTO 不得继承或包含 `CloudAccountUid` |
+| F-02 | `VideosController` 引用不存在的 `GetVideoPlayUrlQuery` | 已修复 | `tasks.md` 12.7 改为 `GetVideoPlayUrlCommand`，保留可能触发转码副作用的 CQRS 语义 |
+| F-03 | 云下载 URL/BT/parse torrent 命令命名不一致 | 已修复 | `design.md` 说明 URL/BT 均映射 `AddOfflineTaskCommand` + `TaskKind`；parse torrent 未采集时由 Controller 直接返回 `cloud_drive_api_not_collected` |
+| F-04 | 用户中心 Controller 引用未定义 Query | 已修复 | `design.md` 补 `GetUserProfileQuery`、`GetUserBalanceQuery`、`CloudDriveUserProfileDto`、`CloudDriveBalanceDto`；`tasks.md` storage 改为 `GetUserSpaceQuery` |
+| F-05 | 分享 Controller 使用未定义 `GetShareListQuery` | 已修复 | `tasks.md` 按 `tab` 分派到 `GetMySharesQuery` / `GetShareSendsQuery` / `GetShareReceivesQuery` |
+| F-06 | 文件详情任务写入未采集路径 `webapi.115.com/files/file` | 已修复 | `tasks.md` 改为从列表/缓存/已知 DTO 组装，无法取得时返回 ProblemDetails，不猜测 115 path |
+| F-07 | `/api/offline/stats` 缺 Handler 任务与 DTO 摘要 | 已修复 | `design.md` 补 `GetOfflineStatsQuery` / `CloudDriveOfflineStatsDto`；`tasks.md` 10.9 补 `GetOfflineStatsQueryHandler` |
 
----
+追加验证命令：
 
-## 回归检查
-
-### 结构完整性
-
-- **需求条目**：1-30 全部保留（含 13a 星标子需求），无缺失 ✅
-- **非功能性需求**：性能/安全/可观测性/部署/测试覆盖 5 个子节完整 ✅
-- **术语表**：14 个术语完整 ✅
-- **前置要求与约束**：5 条保留 ✅
-
-### 语义一致性
-
-- **敏感字段黑名单同步**：需求 23.4（应用层过滤）与需求 26.1（日志层过滤）黑名单完全一致，避免两处定义不同步 ✅
-- **错误变体表 vs 实际错误字段**：12 行表格与 17 个端点的官方采集响应逐一核对，无遗漏 ✅
-- **命名约定**：所有 DTO 使用 `CloudDrive*Dto` 前缀（`CloudDriveOfflineTaskDto`、`CloudDriveOfflineTaskListDto`、`CloudDriveOfflineQuotaDto`、`CloudDriveUserInfoDto` 等），风格统一 ✅
-
-### 新增内容质量
-
-- **简介"官方 API 范围排除声明"**：13 个端点逐一列出并说明排除原因，精确对应 `docs/115-api-docs.md` 中的 B01-B13 ✅
-- **简介"硬上限来源说明"**：明确标注限值来自开放平台文档推断，需以真实响应为准 ✅
-- **错误变体表"指针"注解**：补充 `ErrorFieldAdapter` 注册表设计思路，为 design.md 阶段提供落地指引 ✅
-- **需求 26.1 黑名单与需求 23.4 同步**：通过"黑名单与需求 23 同步"注解强制一致性 ✅
-
-### 未引入新问题
-
-- 所有修复未破坏原有需求的验收标准（acceptance criteria）结构
-- 所有修复保持 EARS 语法（WHEN/IF/THE ... SHALL ...）规范
-- 所有修复保留了原有的"待补采集"状态标记
-
----
-
-## 覆盖率验证
-
-- **上轮问题总数**：22 项
-- **本轮已修复**：**22 / 22 = 100%** ✅
-- **新发现问题**：0 项
-- **遗留问题**：0 项
-- **回归问题**：0 项
-
----
-
-## 下轮审核建议
-
-本 requirements.md 已达到**可进入 design.md 阶段**的质量要求。后续审核重点：
-
-1. **design.md 阶段**：
-   - 审核 DTO 字段与 requirements 归一化映射表一致性（需求 4.4、14.4、20.4、23.3 等）
-   - 审核 `ErrorFieldAdapter` 注册表实现是否覆盖错误变体表 12 行
-   - 审核 `CloudDriveSensitiveFieldsFilter`（或等价组件）是否覆盖 34 个敏感字段
-   - 审核 Gateway 层签名生成是否包含 `page/stat/uid/sign/time` 五项 Body 参数
-
-2. **tasks.md 阶段**：
-   - 审核任务颗粒度是否覆盖 30 条需求的所有验收标准
-   - 审核"待补采集"项目的任务是否预留占位
-
-3. **实现阶段**：
-   - 真实 Cookie 场景联调时验证以下开放平台推断项：
-     - `sta/hdf/class/fvs` 字段值域（需求 4.4）
-     - 云下载 `status` 值域（需求 20.5）
-     - `limit=1150`、`offset+limit≤10000` 实际硬上限（需求 4.2、5.3）
-     - 云下载签名算法（需求 20.3）
-
----
-
-## 修复工作量实际统计
-
-| 优先级 | 预估 | 实际修改行数 | 状态 |
-|-------|-----|------------|------|
-| 🔴 高 | ~30 行 | 约 18 行编辑 + 简介新增约 18 行 | ✅ |
-| 🟠 中高 | ~20 行 | 约 14 行编辑 + 敏感字段扩展约 18 行 | ✅ |
-| 🟡 中 | ~20 行 | 简介新增约 13 行 + 分散编辑约 10 行 | ✅ |
-| 🟢 低 | ~10 行 | 约 5 行编辑 | ✅ |
-| **合计** | **~80 行** | **requirements.md 从 568 行增至 605 行（+37 行净增长）** | **100% 完成** |
+- `rg "CloudDriveAccountScopedInput|GetVideoPlayUrlQuery|GetShareListQuery|GetUserStorageQuery|AddOfflineUrlTasksCommand|AddOfflineBtTaskCommand|ParseTorrentCommand|webapi\.115\.com/files/file" .kiro/specs/115-cloud-drive-integration/...`
+- `rg "user/index_info|webapi\.115\.com/user/info|/user/index_info|sign\s*=\s*md5|NotImplementedException|RefreshDirectoryCommand|RefreshDirectoryInput|errMsg|12 种|12种|requirements\.md:454-470|file_label.*支持|gte_day.*支持|lte_day.*支持" .kiro/specs/115-cloud-drive-integration/...`

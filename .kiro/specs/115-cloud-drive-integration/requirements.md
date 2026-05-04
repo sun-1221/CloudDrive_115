@@ -6,7 +6,7 @@
 
 > **架构定位**：本 spec 定义 115 网盘**后端业务模块**，基于 `.kiro/specs/115-cloud-drive-net10/` 已搭建的 .NET 10 DDD 四层框架实现。前端 Vue 3 应用通过本模块提供的 `/api/*` REST 端点访问 115 网盘数据。
 
-> **数据源权威性**：本系统仅对接 **115 网页端原生 API**，以 `docs/115-api-docs.md`（2026-04-08 采集，`runId: 20260408145821-oqg9xv`，覆盖 65 个接口）为权威数据源。开放平台文档（`/open/*`）仅作为参数含义、业务约束、特殊行为的补充参考。**不**通过 OAuth 换取 Access/Refresh Token 直接调用开放平台 API。
+> **数据源权威性**：本系统仅对接 **115 网页端原生 API**，以 `docs/115-api-docs.md`（2026-04-08 自动采集 + 2026-04-18 手动补充，`runId: 20260408145821-oqg9xv`，共 71 个唯一接口）为权威数据源。开放平台文档（`/open/*`）仅作为参数含义、业务约束、特殊行为的补充参考。**不**通过 OAuth 换取 Access/Refresh Token 直接调用开放平台 API。
 
 > **认证方式**：采用 **Cookie-based 认证**（UID/CID/USSID），由管理员从已登录的 115 网页端导出 Cookie 注入系统配置；后端通过 ASP.NET Core Data Protection 加密存储，请求 115 API 时自动注入。**不使用 OAuth 2.0、AppID/AppSecret、PKCE 流程**。
 
@@ -14,7 +14,7 @@
 
 > **账号模型**：**单账号模型**。系统仅维护一个 115 账号的 Cookie 会话，不支持多账号切换。
 
-> **API 覆盖说明**：已通过自动化采集获取 65+ 个网页端接口，本系统使用其中 **20 个业务接口**（含 2026-04-18 补充采集的上传初始化 `uplb.115.com/3.0/sampleinitupload.php`、视频转码 `webapi.115.com/files/video_push`、播放进度 `webapi.115.com/files/history`）。**部分写操作接口**（文件增删改、下载地址、云下载创建/删除/清空、回收站还原/彻底删除/清空等）**尚未采集**，标注为「待补采集」。上传链路涉及外部 OSS 域名 `*.oss-cn-*.aliyuncs.com`（阿里云对象存储直传）。
+> **API 覆盖说明**：已通过 `docs/115-api-docs.md` 获取 71 个网页端接口，本系统使用其中 **20 个业务接口**（含 2026-04-18 补充采集的上传初始化 `uplb.115.com/3.0/sampleinitupload.php`、OSS 直传、视频转码 `webapi.115.com/files/video_push`、播放进度 `webapi.115.com/files/history`）。对文档中已有采集证据的接口，后端 SHALL 直接按该文档访问 115；不得改写成开放平台 OAuth 口径或继续标注为待联调。**部分写操作接口**（文件增删改、下载地址、云下载创建/删除/清空、回收站还原/彻底删除/清空等）**尚未在该文档中采集**，仍标注为「待补采集」。上传链路涉及外部 OSS 域名 `*.oss-cn-*.aliyuncs.com`（阿里云对象存储直传）。
 
 > **官方 API 范围排除声明**：以下 13 个官方网页端端点**明确不纳入本系统**，避免引入不必要的数据收集或侵入性调用：
 > - `webapi.115.com/category/shortcut`（快捷分类，非核心功能）
@@ -270,14 +270,15 @@
 
 #### 验收标准
 
-1. WHEN 用户请求查看回收站时，THE File_Service SHALL 调用 `GET webapi.115.com/rb`，必填参数 `aid=7`（回收站档案）、`cid=0`、`format=json`，采用 `offset + limit` 分页（默认 `limit=30`，最大 200保护限值）
-2. THE File_Service SHALL 处理 115 响应的**动态键结构**：当有回收站记录时 `data` 为对象，**键为文件 ID（string）**，值为详情对象；归一化为 `CloudDriveRecycleItemDto[]` 数组
-3. IF 响应缺失 `data` 字段（**空回收站时官方不返回 `data` 键**），THEN 归一化为空数组，不抛异常
-4. THE File_Service SHALL 归一化字段：`id→id, file_name→fileName, type→category(1=file,2=folder), file_size→fileSize, dtime→deletedTime, thumb_url→thumbnailUrl, cid→originalParentId, parent_name→originalParentName, pick_code→pickCode, status→restoreStatus(0=normal,-1=restoring)`
-5. THE File_Service SHALL 将响应的 `count` 字段从 string 转 number
-6. THE WebApi_Layer SHALL 预留 `POST /api/recycle/restore` 端点（还原，待采集）
-7. THE WebApi_Layer SHALL 预留 `DELETE /api/recycle/{id}` 端点（彻底删除，待采集）
-8. THE WebApi_Layer SHALL 预留 `DELETE /api/recycle` 端点（清空，待采集）；清空 SHALL 提交为 Background_Job 异步执行
+1. THE WebApi_Layer SHALL 提供 `GET /api/recycle` 端点，支持 query 参数 `offset`/`limit`
+2. WHEN 用户请求查看回收站时，THE File_Service SHALL 调用 `GET webapi.115.com/rb`，必填参数 `aid=7`（回收站档案）、`cid=0`、`format=json`，采用 `offset + limit` 分页（默认 `limit=30`，最大 200保护限值）
+3. THE File_Service SHALL 处理 115 响应的**动态键结构**：当有回收站记录时 `data` 为对象，**键为文件 ID（string）**，值为详情对象；归一化为 `CloudDriveRecycleItemDto[]` 数组
+4. IF 响应缺失 `data` 字段（**空回收站时官方不返回 `data` 键**），THEN 归一化为空数组，不抛异常
+5. THE File_Service SHALL 归一化字段：`id→id, file_name→fileName, type→category(1=file,2=folder), file_size→fileSize, dtime→deletedTime, thumb_url→thumbnailUrl, cid→originalParentId, parent_name→originalParentName, pick_code→pickCode, status→restoreStatus(0=normal,-1=restoring)`
+6. THE File_Service SHALL 将响应的 `count` 字段从 string 转 number
+7. THE WebApi_Layer SHALL 预留 `POST /api/recycle/restore` 端点（还原，待采集）
+8. THE WebApi_Layer SHALL 预留 `DELETE /api/recycle/{id}` 端点（彻底删除，待采集）
+9. THE WebApi_Layer SHALL 预留 `DELETE /api/recycle` 端点（清空，待采集）；清空 SHALL 提交为 Background_Job 异步执行
 
 ### 需求 15：图片文件预览
 
@@ -313,6 +314,7 @@
 8. IF 文件不是视频类型，THEN 返回 HTTP 400 ProblemDetails
 9. IF 文件不存在，THEN 返回 HTTP 404 ProblemDetails
 10. THE Video_Service SHALL 在响应中标识播放地址的临时性
+11. THE WebApi_Layer SHALL 将主动转码提交暴露为独立端点 `POST /api/videos/{pickCode}/transcode`；播放地址获取端点本身 SHALL 保持 `GET /api/videos/{pickCode}/play`
 
 ### 需求 17：视频字幕
 
@@ -368,7 +370,7 @@
 
 1. THE WebApi_Layer SHALL 提供 `GET /api/offline/tasks` 端点，参数 `page`（默认 1）
 2. THE Offline_Service SHALL 调用 `POST 115.com/web/lixian/?ct=lixian&ac=task_lists`（必填 Query 参数 `ct=lixian&ac=task_lists`；**Body 需签名参数** `page/stat/uid/sign/time`）
-3. THE Offline_Service SHALL 使用 `Signature_Service` 生成 POST Body `{ page, stat, uid, sign, time }`（`stat` 为任务状态过滤参数，默认 0 表示全部）；签名算法待采集器补充验证，当前按 `sign = md5(uid + time + ...)` 规则占位
+3. THE Offline_Service SHALL 使用 `Signature_Service` 生成 POST Body `{ page, stat, uid, sign, time }`（`stat` 为任务状态过滤参数，默认 0 表示全部）；签名算法尚未在 `docs/115-api-docs.md` 中采集，默认实现 SHALL 返回 `offline_signature_not_available` ProblemDetails，直到通过真实 Cookie 场景补采集并验证签名算法
 4. THE Offline_Service SHALL 归一化任务为 `CloudDriveOfflineTaskDto`：`info_hash→infoHash, name→name, size→size, add_time→addTime, last_update→lastUpdate, percentDone→percentDone, url→url, file_id→fileId, wp_path_id→parentId, def2→videoDefinition, play_long→playDuration`；**顶层 `real_state/errtype/quota/total` 字段归一化为 `CloudDriveOfflineTaskListDto` 的状态与配额字段**
 5. THE Offline_Service SHALL 归一化任务 `status` 字段：`-1→'failed'`/`0→'allocating'`/`1→'downloading'`/`2→'success'`（**值域映射来自开放平台文档推断，待真实响应验证**）
 6. THE WebApi_Layer SHALL 提供 `GET /api/offline/quota` 端点，调用 `GET 115.com/web/lixian/?ct=lixian&ac=get_quota_package_info`；归一化响应为 `CloudDriveOfflineQuotaDto { package: object, count, surplus, maxSize, used }`
@@ -467,11 +469,12 @@
    | 5 | `webapi.115.com/rb` | boolean | *（无）* | `error` |
    | 6 | `webapi.115.com/share/slist` | boolean | `errno`（小写，number） | `error` |
    | 7 | `webapi.115.com/share/send`、`/share/receive` | boolean | **同时返回 `errNo` 和 `errno`** 两字段（优先读 `errNo`，fallback `errno`） | `error` |
-   | 8 | `webapi.115.com/user/vip_limit`、`/files/index_info`、`/user/fingerprint` | boolean | **`code`（string）** | `message` |
-   | 9 | `my.115.com/proapi/*` | boolean | `code`（number） | `message` |
-   | 10 | `vip.115.com/` | boolean | *（无）* | *（无）* |
-   | 11 | **`pay.115.com/`** | boolean | `code`（number） | **`msg`**（非 `message`） |
-   | 12 | `act.115.com/*` | **number** | `code`（number） | `message` |
+   | 8 | `webapi.115.com/user/vip_limit`、`/user/fingerprint` | boolean | **`code`（string）** | `message` |
+   | 9 | `webapi.115.com/files/index_info` | boolean | `code`（number） | `error` |
+   | 10 | `my.115.com/proapi/*` | boolean | `code`（number） | `message` |
+   | 11 | `vip.115.com/` | boolean | *（无）* | *（无）* |
+   | 12 | **`pay.115.com/`** | boolean | `code`（number） | **`msg`**（非 `message`） |
+   | 13 | `act.115.com/*` | **number** | `code`（number） | `message` |
 
    > **指针**：实现时在 `ExceptionHandlingMiddleware` 中定义 `ErrorFieldAdapter` 注册表，按 URL 路径 hostname + path 精确匹配；若新增接口未注册则 fallback 到通用 `{ state, error?, code?, message? }` 解析器，并记录 Warning 日志。
 
@@ -530,7 +533,7 @@
 
 #### 验收标准
 
-1. THE File_Service 与 Offline_Service SHALL 支持提交 Background_Job：大文件上传、批量复制/移动/删除、清空回收站、云下载清空任务、主动视频转码（已采集：`GET webapi.115.com/files/video_push?pickcode=...&op=vip_push`，见需求 16 第 6a 条）
+1. THE File_Service 与 Offline_Service SHALL 支持提交 Background_Job：大文件上传、主动视频转码（已采集：`GET webapi.115.com/files/video_push?pickcode=...&op=vip_push`，见需求 16 第 6a 条），并可为批量复制/移动/删除、清空回收站、云下载清空任务等未采集写操作创建任务占位；未采集写操作的任务执行结果 SHALL 返回 `cloud_drive_api_not_collected`，直到 `docs/115-api-docs.md` 补充真实 115 网页端接口证据
 2. THE Background_Job SHALL 记录任务类型、关联资源标识、状态、进度、起止时间、错误信息
 3. THE Cloud_Drive_Service SHALL 提供 `GET /api/jobs/{jobId}` 供客户端轮询
 4. WHEN 操作被受理为 Background_Job 时，THE WebApi_Layer SHALL 返回 HTTP 202 Accepted 并携带 `jobId`
@@ -564,6 +567,7 @@
 5. THE Cloud_Drive_Service SHALL 支持 CORS 配置，允许前端域名访问
 6. THE WebApi_Layer SHALL NOT 将 115 的短字段名（`n`/`s`/`fc`/`pc` 等）暴露至前端响应；所有响应字段 SHALL 使用归一化 DTO 的长字段名
 7. THE WebApi_Layer SHALL NOT 将 Cookie、签名 `sign`、`UID` 等敏感字段暴露至前端响应
+8. THE WebApi_Layer SHALL NOT 在公开前端端点中要求或暴露 `CloudAccountUid`；单账号上下文由后端根据已配置 Cookie 会话解析。`CloudAccountUid` 仅允许出现在受保护的运维端点、内部实体、缓存键、限流键和审计记录中。
 
 ## 非功能性需求
 
@@ -606,4 +610,3 @@
 3. Gateway 层使用 `HttpMessageHandler` mock 测试 115 API 调用与归一化
 4. WebApi 层集成测试覆盖 ProblemDetails、CORS、认证失败、频控 6 个关键场景
 5. 契约测试：OpenAPI schema 与前端 TypeScript 类型定义对齐
-

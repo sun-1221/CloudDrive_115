@@ -148,9 +148,13 @@ web/src/
 
 ### 3.2 数据流向
 
-`View → Store → Service → API → Backend /api/* → 115 Remote`
+`View → Store/Composable → API → Backend /api/* → 115 Remote`
 
-前端只关心到 `Backend /api/*` 边界，`/api/*` 之后由后端承担。
+需要跨资源编排、同步/异步双态处理、临时资源重试、连续下载保护或任务轮询的流程使用：
+
+`View → Store/Composable → Service → API → Backend /api/* → 115 Remote`
+
+前端只关心到 `Backend /api/*` 边界，`/api/*` 之后由后端承担。Store 直接调用 `authApi`、`fileApi`、`searchApi` 等 API 层封装是允许的；组件层不得散落原始 Axios 调用。
 
 _覆盖需求: 19.2, 19.3_
 
@@ -268,7 +272,7 @@ _覆盖需求: 19.2, 19.3, 19.4, 19.5, 19.6_
 
 ### 4.3 文件操作（需求 3）
 
-> **说明**：本节功能大部分依赖后端待补采集的写操作 API，组件接口已定义，实现等待后端 API 就绪。
+> **说明**：上传链路已由后端依据 `docs/115-api-docs.md` 采集并封装为 `POST /api/files/upload`。下载地址、文件增删改、移动、复制、星标等 115 写操作仍以 integration spec 的采集状态为准；未实现时后端返回 ProblemDetails，前端按统一错误处理展示。
 
 #### FileOperationService
 - **职责**：封装文件 CRUD 的统一调度
@@ -278,7 +282,7 @@ _覆盖需求: 19.2, 19.3, 19.4, 19.5, 19.6_
   - `move(fileIds, targetDirectoryId)` → `POST /api/files/move` _（待后端就绪）_
   - `copy(fileIds, targetDirectoryId)` → `POST /api/files/copy` _（待后端就绪）_
   - `delete(fileIds)` → `DELETE /api/files` _（待后端就绪）_
-  - `download(pickCode)` → `GET /api/files/{pickCode}/download` _（待后端就绪）_
+  - `download(pickCode)` → `GET /api/files/{pickCode}/download` _（115 下载地址接口仍待后端补采集）_
   - `toggleStar(fileId, starred)` → `POST /api/files/{fileId}/star` _（待后端就绪）_
 - **202 Accepted 处理**：大文件上传、批量操作返回 `{ jobId }` 时，通过 `jobsApi.poll(jobId, { intervalMs: 2000 })` 每 2 秒轮询 `GET /api/jobs/{jobId}` 直到终态
 - **连续下载保护**：批量下载逐个顺序执行；若检测到浏览器拦截连续下载或窗口句柄为空，立即通过 Toast 提示用户允许连续下载或改为手动下载
@@ -405,7 +409,7 @@ _覆盖需求: 19.2, 19.3, 19.4, 19.5, 19.6_
 - **空状态**：列表为空时隐藏控件或展示"无字幕"
 - **覆盖需求**：_覆盖需求: 8.7, 8.8_
 
-#### VideoHistoryService（待后端 API 就绪）
+#### VideoHistoryService
 - **职责**：保存/读取视频播放进度
 - **API**：`GET /api/videos/{pickCode}/history`、`POST /api/videos/{pickCode}/history`
 - **覆盖需求**：_覆盖需求: 8.12, 8.14_
@@ -1345,7 +1349,7 @@ _覆盖需求: 19.5_
 
 ### 10.1 依赖后端待补采集 API 的功能
 
-以下组件已定义接口，实现等待后端 integration spec 完成对应 API 的采集与实现：
+以下组件已定义接口，实现等待后端 integration spec 完成对应 115 API 的采集与实现；已在 `docs/115-api-docs.md` 中采集的上传、视频播放、字幕、播放历史不列为待补采集：
 
 | 组件/方法 | 后端 API | 覆盖需求 |
 |----------|---------|----------|
@@ -1355,9 +1359,7 @@ _覆盖需求: 19.5_
 | `FileOperationService.delete()` | `DELETE /api/files` | _覆盖需求: 3.6_ |
 | `FileOperationService.download()` | `GET /api/files/{pickCode}/download` | _覆盖需求: 3.7_ |
 | `FileOperationService.toggleStar()` | `POST /api/files/{fileId}/star` | _覆盖需求: 4.2_ |
-| `UploadZone` + 上传流程 | `POST /api/files/upload` | _覆盖需求: 3.1, 3.2_ |
 | 回收站还原/彻底删除/清空 | `POST /api/recycle/restore` / `DELETE /api/recycle/{id}` / `DELETE /api/recycle` | _覆盖需求: 6.3, 6.4, 6.5_ |
-| 视频播放进度保存/读取 | `GET/POST /api/videos/{pickCode}/history` | _覆盖需求: 8.12, 8.13_ |
 | 云下载创建/删除/清空 | `POST /api/offline/tasks/*` / `DELETE /api/offline/tasks/{infoHash}` | _覆盖需求: 15.5, 15.6, 15.7, 15.8_ |
 
 ### 10.2 不纳入当前迭代（已排除）

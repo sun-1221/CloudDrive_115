@@ -10,7 +10,7 @@
 
 > **Cookie 安全边界：** Cookie-based 仅说明会话承载方式，不代表自动具备安全防护。后端 integration 服务 SHALL 对会话 Cookie 设置 `HttpOnly`、`Secure` 与明确的 `SameSite` 策略，并对状态变更请求实施 CSRF 防护；前端不得读取、写入或覆盖会话 Cookie。
 
-> **API 契约权威性：** 本 spec 依赖的后端 `/api/*` 端点契约以 `.kiro/specs/115-cloud-drive-integration/requirements.md`（版本基线：2026-04-08 采集）为准。前端 DTO SHALL 与 OpenAPI 规范（`/openapi/v1.json`）同步生成 TypeScript 类型。
+> **API 契约权威性：** 本 spec 依赖的后端 `/api/*` 端点契约以 `.kiro/specs/115-cloud-drive-integration/requirements.md` 与后端 OpenAPI 规范（`/openapi/v1.json`）为准；integration 服务访问 115 的外部接口以 `docs/115-api-docs.md`（2026-04-08 自动采集 + 2026-04-18 手动补充）为依据。前端 DTO SHALL 与 OpenAPI 规范同步生成 TypeScript 类型。
 
 > **文档版本基线：** 本需求文档对齐后端 integration spec 的 30 条需求。后续增量审核以此基线为锚。
 
@@ -21,7 +21,7 @@
 - **Frontend_App**：115 网盘前端应用，负责用户界面渲染与交互
 - **Backend_API**：后端 integration 服务提供的 `/api/*` REST 端点
 - **File_Browser**：文件浏览器组件，展示文件列表、网格视图、面包屑导航
-- **Upload_Zone**：拖拽上传区域组件 _（依赖后端上传 API，待补采集）_
+- **Upload_Zone**：拖拽上传区域组件 _（后端已按 `docs/115-api-docs.md` 采集上传链路；前端只调用 `/api/files/upload`）_
 - **Context_Menu**：右键上下文菜单组件
 - **Search_Bar**：搜索栏组件
 - **Recycle_Bin_View**：回收站视图
@@ -107,12 +107,12 @@
 
 **用户故事：** 作为用户，我希望能够对网盘文件进行上传、下载、新建文件夹、重命名、移动、复制和删除操作，以便高效管理我的网盘内容。
 
-> **说明：** 文件写操作（上传/下载/新建/移动/复制/删除/重命名）的后端 API 尚未采集，前端仅预留交互入口和错误占位提示。
+> **说明：** 上传链路已在 `docs/115-api-docs.md` 中完成采集，前端可通过 `POST /api/files/upload` 交给后端代理上传。下载地址、文件增删改、移动、复制、星标等 115 写操作仍以 integration spec 的采集状态为准；未实现时后端返回明确 ProblemDetails，前端展示统一错误提示。
 
 #### 验收标准
 
-1. THE Upload_Zone SHALL 支持拖拽上传，调用 `POST /api/files/upload` _（待后端 API 就绪）_
-2. THE Upload_Zone SHALL 支持点击选择文件上传 _（待后端 API 就绪）_
+1. THE Upload_Zone SHALL 支持拖拽上传，调用 `POST /api/files/upload`
+2. THE Upload_Zone SHALL 支持点击选择文件上传
 3. THE Frontend_App SHALL 提供"新建文件夹"按钮，调用 `POST /api/files/folders` _（待后端 API 就绪）_
 4. WHEN 用户单击重命名时，THE Frontend_App SHALL 展示输入框，调用 `PATCH /api/files/{fileId}` _（待后端 API 就绪）_
 5. WHEN 用户单击移动/复制时，THE Frontend_App SHALL 展示目录选择器，调用 `POST /api/files/move` 或 `POST /api/files/copy` _（待后端 API 就绪）_
@@ -204,9 +204,9 @@
 9. IF 后端返回 `status: 'transcoding'`，THEN THE Video_Player SHALL 展示"视频转码中，请稍后刷新"提示和"刷新状态"按钮
 10. IF 后端返回 `vipUpgradeRequired: true`，THEN THE Video_Player SHALL 展示"升级 VIP 以观看此清晰度"引导
 11. WHEN 用户按 Esc 或关闭播放器时，THE Video_Player SHALL 停止播放并关闭
-12. WHEN `GET /api/videos/{pickCode}/history` 返回有效播放进度时，THE Video_Player SHALL 从上次位置继续观看 _（待后端 API 就绪）_
+12. WHEN `GET /api/videos/{pickCode}/history` 返回有效播放进度时，THE Video_Player SHALL 从上次位置继续观看
 13. IF 无播放历史记录或 API 返回 404，THEN THE Video_Player SHALL 从 00:00 开始播放
-14. THE Frontend_App SHALL 每 30 秒调用 `POST /api/videos/{pickCode}/history` 保存播放进度 _（待后端 API 就绪）_
+14. THE Frontend_App SHALL 每 30 秒调用 `POST /api/videos/{pickCode}/history` 保存播放进度
 
 ### 9. 文档预览
 
@@ -357,7 +357,7 @@
 1. THE Frontend_App SHALL 基于 `Vue 3 + TypeScript + Vite` 构建，并使用 `Pinia`、`Vue Router`、`Naive UI`、`Tailwind CSS`、`Axios`、`Video.js` 与 `PDF.js` 作为当前版本基础设施
 2. THE Frontend_App SHALL 仅通过后端 integration 服务提供的 `/api/*` REST 端点消费数据，不直连 115 网页端原生 API
 3. THE Frontend_App SHALL 将 Cookie 注入、签名生成、数据归一化、频控与错误字段适配完全交由后端 integration 服务处理
-4. THE Frontend_App SHALL 使用单账号模型，不提供多账号切换、OAuth、PKCE 或前端代理层
+4. THE Frontend_App SHALL 使用单账号模型，不提供多账号切换、OAuth、PKCE 或前端代理层，也不得向 Cloud Drive API 显式传递 `CloudAccountUid`
 5. THE Frontend_App SHALL 以 `.kiro/specs/115-cloud-drive-integration/requirements.md` 与 `/openapi/v1.json` 作为 API 契约权威来源，并自动生成与之同步的 TypeScript 类型
 6. THE Frontend_App SHALL 仅消费后端归一化后的 camelCase DTO 与 ProblemDetails 错误响应，不解析 115 网页端短字段或错误格式变体
 7. THE Backend_API SHALL 对会话 Cookie 设置 `HttpOnly`、`Secure` 与 `SameSite=Lax` 或 `SameSite=Strict`；IF 后端因明确跨站部署场景使用 `SameSite=None`，THEN THE Backend_API SHALL 同时设置 `Secure` 并在 integration spec 中记录原因
