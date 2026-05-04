@@ -15,6 +15,7 @@ using Infrastructure.Security;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Infrastructure.DependencyInjection;
 
@@ -30,13 +31,14 @@ public static class CloudDriveInfrastructureServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configuration);
 
         services.Configure<CloudDriveAppConfig>(configuration.GetSection(CloudDriveAppConfig.SectionName));
-        services.PostConfigure<CloudDriveAppConfig>(config => config.ApplyStartupValidation());
+        services.AddSingleton<IPostConfigureOptions<CloudDriveAppConfig>, CloudDriveAppConfigPostConfigureOptions>();
 
         services.AddCaching();
         services.AddCloudDriveHttpClients();
         services.AddSqlSugarCodeFirst(typeof(CookieSession), typeof(CloudDriveJob));
 
         services.AddScoped<ICloudDriveOpenApiGateway, CloudDriveApiClient>();
+        services.AddScoped<ICloudDriveAccountContextResolver, CloudDriveAccountContextResolver>();
         services.AddScoped<CookieSessionManager>();
         services.AddScoped<CloudDriveFileManager>();
         services.AddScoped<ICloudDriveJobOrchestrator, CloudDriveJobOrchestrator>();

@@ -157,6 +157,14 @@ internal static class FileMapping
             Callback = response.Callback,
             UploadEndpoint = response.Host,
             FormFields = formFields,
+            File = response.IsInstantUpload
+                ? new CloudDriveUploadedFileDto
+                {
+                    FileId = response.FileId ?? string.Empty,
+                    Name = response.FileName ?? string.Empty,
+                    Path = response.DirectoryId,
+                }
+                : null,
             ExpiresAt = CloudDriveTimeMapping.FromUnixSecondsOrNull(response.Expire),
         };
     }

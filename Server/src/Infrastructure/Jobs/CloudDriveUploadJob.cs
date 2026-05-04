@@ -224,16 +224,10 @@ internal sealed class CloudDriveUploadJob(
         DomainEvent[] events = [.. job.DomainEvents];
         foreach (DomainEvent domainEvent in events)
         {
-            await publisher.Publish((object)CreateNotification(domainEvent), cancellationToken);
+            await publisher.Publish((object)DomainEventNotificationFactory.Create(domainEvent), cancellationToken);
         }
 
         job.ClearDomainEvents();
-    }
-
-    private static INotification CreateNotification(DomainEvent domainEvent)
-    {
-        Type notificationType = typeof(DomainEventNotification<>).MakeGenericType(domainEvent.GetType());
-        return (INotification)Activator.CreateInstance(notificationType, domainEvent)!;
     }
 
     private static string CreateSafeErrorMessage(Exception exception)

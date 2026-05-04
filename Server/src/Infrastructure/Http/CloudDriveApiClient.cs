@@ -4,10 +4,13 @@ using System.Text.Json;
 using Application.Abstractions.CloudDrive;
 using Application.CloudDrive;
 using Application.CloudDrive.Auth;
+using Application.CloudDrive.Dtos;
 
 using Domain.Exceptions;
 
 using Infrastructure.Http.Json;
+using Infrastructure.Http.Mappings;
+using Infrastructure.Http.Responses;
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -707,10 +710,93 @@ internal sealed class CloudDriveApiClient(
             return (T)(object)document.RootElement.Clone();
         }
 
+        if (TryDeserializeKnownCloudDriveDto<T>(responseContent, requestUri, out T? knownDto))
+        {
+            return knownDto!;
+        }
+
         try
         {
             T? result = JsonSerializer.Deserialize<T>(responseContent, JsonSerializerOptions);
             return result ?? throw new CloudDriveApiException(
+                $"115 网页端 API 反序列化结果为空 Endpoint={requestUri.AbsolutePath}",
+                "cloud_drive_api_null_response");
+        }
+        catch (JsonException ex)
+        {
+            throw new CloudDriveApiException(
+                $"115 网页端 API 响应反序列化失败 Endpoint={requestUri.AbsolutePath}",
+                ex,
+                "cloud_drive_api_deserialization_failed");
+        }
+    }
+
+    /// <summary>
+    /// 对 Application 层公开 DTO 执行基础设施响应模型归一化。
+    /// </summary>
+    private bool TryDeserializeKnownCloudDriveDto<T>(string responseContent, Uri requestUri, out T? result)
+    {
+        Type targetType = typeof(T);
+
+        if (targetType == typeof(PagedResultDto<CloudDriveFileDto>))
+        {
+            CloudDriveFileListResponse response = DeserializeInternal<CloudDriveFileListResponse>(responseContent, requestUri);
+            result = (T)(object)response.ToDto();
+            return true;
+        }
+
+        if (targetType == typeof(CloudDriveFileDetailDto))
+        {
+            CloudDriveFileDetailResponse response = DeserializeInternal<CloudDriveFileDetailResponse>(responseContent, requestUri);
+            result = (T?)(object?)response.ToDto();
+            return true;
+        }
+
+        if (targetType == typeof(PagedResultDto<CloudDriveSearchResultDto>))
+        {
+            CloudDriveFileSearchResponse response = DeserializeInternal<CloudDriveFileSearchResponse>(responseContent, requestUri);
+            result = (T)(object)response.ToDto();
+            return true;
+        }
+
+        if (targetType == typeof(CloudDriveDownloadDto))
+        {
+            CloudDriveDownloadUrlResponse response = DeserializeInternal<CloudDriveDownloadUrlResponse>(responseContent, requestUri);
+            result = (T)(object)response.ToDto();
+            return true;
+        }
+
+        if (targetType == typeof(CloudDriveUploadSessionDto))
+        {
+            CloudDriveUploadInitResponse response = DeserializeInternal<CloudDriveUploadInitResponse>(responseContent, requestUri);
+            result = (T)(object)response.ToDto();
+            return true;
+        }
+
+        if (targetType == typeof(CloudDriveUploadedFileDto))
+        {
+            CloudDriveUploadCompleteResponse response = DeserializeInternal<CloudDriveUploadCompleteResponse>(responseContent, requestUri);
+            result = (T)(object)response.ToDto();
+            return true;
+        }
+
+        if (targetType == typeof(PagedResultDto<CloudDriveRecycleBinItemDto>))
+        {
+            CloudDriveRecycleBinResponse response = DeserializeInternal<CloudDriveRecycleBinResponse>(responseContent, requestUri);
+            result = (T)(object)response.ToDto();
+            return true;
+        }
+
+        result = default;
+        return false;
+    }
+
+    private TResponse DeserializeInternal<TResponse>(string responseContent, Uri requestUri)
+    {
+        try
+        {
+            TResponse? response = JsonSerializer.Deserialize<TResponse>(responseContent, JsonSerializerOptions);
+            return response ?? throw new CloudDriveApiException(
                 $"115 网页端 API 反序列化结果为空 Endpoint={requestUri.AbsolutePath}",
                 "cloud_drive_api_null_response");
         }
