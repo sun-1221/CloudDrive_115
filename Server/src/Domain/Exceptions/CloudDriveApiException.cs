@@ -18,6 +18,24 @@ public sealed class CloudDriveApiException : DomainException
     }
 
     /// <summary>
+    /// 创建包含上游错误字段的通用 API 异常。
+    /// </summary>
+    /// <param name="message">错误消息。</param>
+    /// <param name="errorCode">业务错误码。</param>
+    /// <param name="upstreamCode">115 上游错误码。</param>
+    /// <param name="upstreamMessage">115 上游错误消息。</param>
+    public CloudDriveApiException(
+        string message,
+        string? errorCode,
+        string? upstreamCode,
+        string? upstreamMessage)
+        : base(502, message, errorCode)
+    {
+        UpstreamCode = upstreamCode;
+        UpstreamMessage = upstreamMessage;
+    }
+
+    /// <summary>
     /// 创建包含内部异常的通用 API 异常。
     /// </summary>
     /// <param name="message">错误消息。</param>
@@ -30,4 +48,14 @@ public sealed class CloudDriveApiException : DomainException
         : base(502, message, innerException, errorCode)
     {
     }
+
+    /// <summary>
+    /// 获取 115 上游错误码。
+    /// </summary>
+    public string? UpstreamCode { get; }
+
+    /// <summary>
+    /// 获取 115 上游错误消息。
+    /// </summary>
+    public string? UpstreamMessage { get; }
 }

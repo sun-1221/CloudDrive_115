@@ -3,6 +3,7 @@ using Application.CloudDrive.Files;
 
 using MediatR;
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using WebApi.Extensions;
@@ -11,6 +12,7 @@ using WebApi.Models;
 namespace WebApi.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/files")]
 public sealed class FilesController(ISender sender) : ControllerBase
 {
@@ -18,7 +20,7 @@ public sealed class FilesController(ISender sender) : ControllerBase
     public async Task<IResult> GetListAsync(
         [FromQuery(Name = "cid")] string? cid,
         [FromQuery] int offset,
-        [FromQuery] int limit = 20,
+        [FromQuery] int limit = 50,
         [FromQuery] int? type = null,
         [FromQuery] string? suffix = null,
         [FromQuery] int? asc = null,
@@ -68,6 +70,7 @@ public sealed class FilesController(ISender sender) : ControllerBase
         [FromQuery(Name = "date")] string? date = null,
         [FromQuery] int? type = null,
         [FromQuery] string? pickCode = null,
+        [FromQuery] int? countFolders = null,
         [FromQuery] string? source = null,
         CancellationToken cancellationToken = default)
     {
@@ -77,11 +80,11 @@ public sealed class FilesController(ISender sender) : ControllerBase
             Offset = offset,
             Limit = limit,
             DirectoryId = cid,
-            GteDay = date,
-            LteDay = date,
+            Date = date,
             Type = type,
-            FileLabel = source,
-            Suffix = pickCode,
+            PickCode = pickCode,
+            CountFolders = countFolders,
+            Source = source,
         };
 
         var result = await sender.Send(

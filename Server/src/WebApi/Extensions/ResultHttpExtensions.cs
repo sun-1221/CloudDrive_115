@@ -57,6 +57,8 @@ public static class ResultHttpExtensions
         extensions: new Dictionary<string, object?>
         {
             ["errorCode"] = error.Code,
+            ["upstreamCode"] = null,
+            ["upstreamMessage"] = null,
         });
 
     /// <summary>

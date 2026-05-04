@@ -1,11 +1,10 @@
-using Domain.Results;
-
 using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
 using Application.CloudDrive.User;
 
 using MediatR;
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using WebApi.Extensions;
@@ -13,11 +12,19 @@ using WebApi.Extensions;
 namespace WebApi.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/user")]
 public sealed class UserController(ISender sender) : ControllerBase
 {
     [HttpGet("profile")]
-    public Task<IResult> GetProfileAsync(CancellationToken cancellationToken) => GetInfoAsync(cancellationToken);
+    public async Task<IResult> GetProfileAsync(CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(
+            new GetUserProfileQuery(this.GetAuthenticatedUserId(), new CloudDriveAccountScopedInput()),
+            cancellationToken);
+
+        return result.ToHttpResult();
+    }
 
     [HttpGet("info")]
     public async Task<IResult> GetInfoAsync(CancellationToken cancellationToken)
@@ -40,11 +47,13 @@ public sealed class UserController(ISender sender) : ControllerBase
     }
 
     [HttpGet("balance")]
-    public IResult GetBalance()
+    public async Task<IResult> GetBalanceAsync(CancellationToken cancellationToken)
     {
-        return Result.Failure(new Error(
-            "cloud_drive_user_balance_unavailable",
-            "余额暂未作为独立 DTO 暴露，请使用 /api/user/profile 获取聚合信息。")).ToHttpResult();
+        var result = await sender.Send(
+            new GetUserBalanceQuery(this.GetAuthenticatedUserId(), new CloudDriveAccountScopedInput()),
+            cancellationToken);
+
+        return result.ToHttpResult();
     }
 
     [HttpGet("storage")]

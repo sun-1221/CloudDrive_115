@@ -88,9 +88,14 @@ public sealed class CloudDriveAppConfig
     public int ThrottleRetryMaxDelayMilliseconds { get; set; } = 10000;
 
     /// <summary>
+    /// 列表页大小的系统保护上限。
+    /// </summary>
+    public int MaxPageSize { get; set; } = 200;
+
+    /// <summary>
     /// 元数据缓存 TTL（秒）。
     /// </summary>
-    public int CacheTtlSeconds { get; set; } = 300;
+    public int CacheTtlSeconds { get; set; } = 30;
 
     /// <summary>
     /// 超过该阈值的上传默认走后台任务（字节）。

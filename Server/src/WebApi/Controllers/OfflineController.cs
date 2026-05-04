@@ -5,6 +5,7 @@ using Application.CloudDrive.Offline;
 
 using MediatR;
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using WebApi.Extensions;
@@ -13,6 +14,7 @@ using WebApi.Models;
 namespace WebApi.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/offline")]
 public sealed class OfflineController(ISender sender) : ControllerBase
 {
@@ -45,18 +47,10 @@ public sealed class OfflineController(ISender sender) : ControllerBase
     public async Task<IResult> GetStatsAsync(CancellationToken cancellationToken)
     {
         var result = await sender.Send(
-            new GetOfflineQuotaQuery(this.GetAuthenticatedUserId(), new CloudDriveAccountScopedInput()),
+            new GetOfflineStatsQuery(this.GetAuthenticatedUserId(), new CloudDriveAccountScopedInput()),
             cancellationToken);
 
-        return result.IsFailure
-            ? result.ToHttpResult()
-            : Results.Ok(new
-            {
-                total = result.Value.Total,
-                active = result.Value.Active,
-                completed = result.Value.Completed,
-                failed = result.Value.Failed,
-            });
+        return result.ToHttpResult();
     }
 
     [HttpPost("tasks/urls")]
