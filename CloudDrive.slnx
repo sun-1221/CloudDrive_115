@@ -10,5 +10,6 @@
     <Project Path="Server/tests/Domain.Tests/Domain.Tests.csproj" />
     <Project Path="Server/tests/Infrastructure.Tests/Infrastructure.Tests.csproj" />
     <Project Path="Server/tests/WebApi.Tests/WebApi.Tests.csproj" />
+    <Project Path="Server/tests/Architecture.Tests/Architecture.Tests.csproj" />
   </Folder>
 </Solution>
