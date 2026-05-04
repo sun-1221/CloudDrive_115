@@ -51,6 +51,11 @@ public class CloudDriveUploadSessionDto
     public IDictionary<string, string>? FormFields { get; set; }
 
     /// <summary>
+    /// 获取或设置秒传成功时返回的文件信息。
+    /// </summary>
+    public CloudDriveUploadedFileDto? File { get; set; }
+
+    /// <summary>
     /// 获取或设置二次认证 sign_key。
     /// </summary>
     public string? SignKey { get; set; }

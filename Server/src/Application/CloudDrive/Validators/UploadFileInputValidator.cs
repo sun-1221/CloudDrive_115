@@ -18,7 +18,7 @@ public sealed class UploadFileInputValidator : AbstractValidator<UploadFileInput
         RuleFor(input => input.DirectoryId).NotEmptyText("上传目标目录 ID 不能为空。");
         RuleFor(input => input.FileName).NotEmptyText("文件名不能为空。");
         RuleFor(input => input.FileSize).GreaterThanOrEqualTo(0);
-        RuleFor(input => input.FileSha1).NotEmptyText("文件 SHA1 不能为空。").ValidSha1();
+        RuleFor(input => input.FileSha1).ValidOptionalSha1();
         RuleFor(input => input.PreSha1).ValidOptionalSha1();
     }
 }
