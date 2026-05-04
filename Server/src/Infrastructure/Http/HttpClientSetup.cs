@@ -97,13 +97,19 @@ public static class HttpClientSetup
     /// <summary>
     /// 创建读请求重试策略选项。
     /// </summary>
-    private static HttpRetryStrategyOptions CreateRetryOptions() => new()
+    private static HttpRetryStrategyOptions CreateRetryOptions()
     {
-        MaxRetryAttempts = 3,
-        BackoffType = DelayBackoffType.Exponential,
-        UseJitter = true,
-        Delay = DefaultRetryDelay,
-    };
+        var options = new HttpRetryStrategyOptions
+        {
+            MaxRetryAttempts = 3,
+            BackoffType = DelayBackoffType.Exponential,
+            UseJitter = true,
+            Delay = DefaultRetryDelay,
+        };
+
+        options.DisableForUnsafeHttpMethods();
+        return options;
+    }
 
     /// <summary>
     /// 创建 HTTP 熔断策略选项。

@@ -68,6 +68,7 @@ internal sealed class ErrorFieldAdapter : IErrorFieldAdapter
             ["webapi.115.com/share/receive"] = new("/share/receive", "errNo", ErrorCodeType.Number, "error", "errno"),
             ["webapi.115.com/share/slist"] = new("/share/slist", "errno", ErrorCodeType.Number, "error", "errNo"),
             ["115.com/web/lixian/"] = new("/web/lixian/", "errcode", ErrorCodeType.Number, "error_msg", "errno", "error"),
+            ["vip.115.com/"] = new("/", "code", ErrorCodeType.Number, "message", null, "msg"),
             ["webapi.115.com/rb"] = new("/rb", "errNo", ErrorCodeType.Number, "error", "errno"),
             ["webapi.115.com/files"] = new("/files", "errNo", ErrorCodeType.Number, "error", "errno"),
             ["webapi.115.com/files/add"] = new("/files/add", "errNo", ErrorCodeType.Number, "error", "errno"),
@@ -190,6 +191,12 @@ internal sealed class ErrorFieldAdapter : IErrorFieldAdapter
         if (HasProperty(responseJson, descriptor.MessageFieldName))
         {
             return descriptor.MessageFieldName;
+        }
+
+        if (!string.IsNullOrWhiteSpace(descriptor.FallbackMessageFieldName)
+            && HasProperty(responseJson, descriptor.FallbackMessageFieldName))
+        {
+            return descriptor.FallbackMessageFieldName;
         }
 
         // 保留特殊字段名，便于日志和测试追踪是哪类未知结构触发了兜底逻辑。

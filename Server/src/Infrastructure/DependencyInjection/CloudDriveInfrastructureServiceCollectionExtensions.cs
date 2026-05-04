@@ -41,6 +41,7 @@ public static class CloudDriveInfrastructureServiceCollectionExtensions
         services.AddScoped<ICloudDriveAccountContextResolver, CloudDriveAccountContextResolver>();
         services.AddScoped<CookieSessionManager>();
         services.AddScoped<CloudDriveFileManager>();
+        services.AddScoped<UserAggregationService>();
         services.AddScoped<ICloudDriveJobOrchestrator, CloudDriveJobOrchestrator>();
         services.AddScoped<ICloudDriveJobAuditLogger, CloudDriveJobAuditLogger>();
 

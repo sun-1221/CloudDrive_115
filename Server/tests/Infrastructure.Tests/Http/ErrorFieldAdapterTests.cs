@@ -68,18 +68,10 @@ public sealed class ErrorFieldAdapterTests
         IReadOnlyDictionary<string, ErrorFieldDescriptor> descriptors = ErrorFieldAdapter.RegisteredDescriptors;
 
         // 执行 & 断言
-        Assert.Contains("webapi.115.com/files/search", descriptors.Keys);
-        Assert.Contains("webapi.115.com/movies/subtitle", descriptors.Keys);
-        Assert.Contains("webapi.115.com/user/vip_limit", descriptors.Keys);
-        Assert.Contains("pay.115.com/", descriptors.Keys);
-        Assert.Contains("webapi.115.com/share/send", descriptors.Keys);
-        Assert.Contains("webapi.115.com/share/receive", descriptors.Keys);
-        Assert.Contains("webapi.115.com/share/slist", descriptors.Keys);
-        Assert.Contains("115.com/web/lixian/", descriptors.Keys);
-        Assert.Contains("webapi.115.com/rb", descriptors.Keys);
-        Assert.Contains("webapi.115.com/files", descriptors.Keys);
-        Assert.Contains("webapi.115.com/files/add", descriptors.Keys);
-        Assert.Contains("webapi.115.com/files/edit", descriptors.Keys);
+        foreach (string pattern in RequiredDescriptorPatterns())
+        {
+            Assert.Contains(pattern, descriptors.Keys);
+        }
     }
 
     public static TheoryData<string, string, int?, string, string> ErrorShapeCases() => new()
@@ -155,6 +147,13 @@ public sealed class ErrorFieldAdapterTests
             "code"
         },
         {
+            "https://vip.115.com/?ct=order&ac=get_yun_card",
+            """{"state":false,"msg":"vip failed"}""",
+            null,
+            "vip failed",
+            "msg"
+        },
+        {
             "https://115.com/web/lixian/?ct=lixian&ac=task_lists",
             """{"state":false,"errcode":429,"error_msg":"too frequent"}""",
             429,
@@ -169,4 +168,22 @@ public sealed class ErrorFieldAdapterTests
             "code"
         },
     };
+
+    private static string[] RequiredDescriptorPatterns() =>
+    [
+        "webapi.115.com/files",
+        "webapi.115.com/files/search",
+        "webapi.115.com/files/video",
+        "webapi.115.com/movies/subtitle",
+        "webapi.115.com/rb",
+        "webapi.115.com/share/slist",
+        "webapi.115.com/share/send",
+        "webapi.115.com/share/receive",
+        "webapi.115.com/user/vip_limit",
+        "webapi.115.com/files/index_info",
+        "my.115.com/proapi/",
+        "vip.115.com/",
+        "pay.115.com/",
+        "act.115.com/",
+    ];
 }

@@ -6,11 +6,13 @@ using Application.CloudDrive;
 using Domain.Exceptions;
 
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.CloudDrive;
 
 internal sealed class CloudDriveRateLimiter(
-    IOptions<CloudDriveAppConfig> configOptions) : ICloudDriveRateLimiter
+    IOptions<CloudDriveAppConfig> configOptions,
+    ILogger<CloudDriveRateLimiter> logger) : ICloudDriveRateLimiter
 {
     private readonly ConcurrentDictionary<string, TokenBucket> _buckets = new(StringComparer.Ordinal);
 
@@ -30,7 +32,26 @@ internal sealed class CloudDriveRateLimiter(
             key,
             _ => new TokenBucket(GetLimit(config, normalizedCategory), config.RateLimitMaxQueueLength));
 
-        return bucket.AcquireAsync(config, cancellationToken);
+        return bucket.AcquireAsync(
+            config,
+            waitDelay =>
+            {
+                logger.LogInformation(
+                    "115 本地限流排队 UserId={UserId}, CloudAccountUid={CloudAccountUid}, Category={Category}, DelayMs={DelayMs}",
+                    userId,
+                    cloudAccountUid,
+                    normalizedCategory,
+                    waitDelay.TotalMilliseconds);
+            },
+            () =>
+            {
+                logger.LogWarning(
+                    "115 本地限流拒绝请求 UserId={UserId}, CloudAccountUid={CloudAccountUid}, Category={Category}",
+                    userId,
+                    cloudAccountUid,
+                    normalizedCategory);
+            },
+            cancellationToken);
     }
 
     public void RecordThrottleSignal(Guid userId, string cloudAccountUid, string? category = null)
@@ -45,6 +66,11 @@ internal sealed class CloudDriveRateLimiter(
             _ => new TokenBucket(GetLimit(config, normalizedCategory), config.RateLimitMaxQueueLength));
 
         bucket.RecordThrottleSignal(config);
+        logger.LogWarning(
+            "115 上游频控信号已记录 UserId={UserId}, CloudAccountUid={CloudAccountUid}, Category={Category}",
+            userId,
+            cloudAccountUid,
+            normalizedCategory);
     }
 
     public void Reset(Guid userId, string cloudAccountUid, string? category = null)
@@ -108,6 +134,8 @@ internal sealed class CloudDriveRateLimiter(
 
         public async Task<IDisposable> AcquireAsync(
             CloudDriveAppConfig config,
+            Action<TimeSpan> onQueued,
+            Action onRejected,
             CancellationToken cancellationToken)
         {
             while (true)
@@ -133,6 +161,7 @@ internal sealed class CloudDriveRateLimiter(
                         if (config.RateLimitOverflowStrategy == RateLimitOverflowStrategy.Reject
                             || _queuedCount >= MaxQueueLength)
                         {
+                            onRejected();
                             throw new CloudDriveRateLimitException(
                                 "115 网盘本地限流已触发",
                                 "cloud_drive_local_rate_limited");
@@ -146,6 +175,11 @@ internal sealed class CloudDriveRateLimiter(
 
                 try
                 {
+                    if (queued)
+                    {
+                        onQueued(waitDelay);
+                    }
+
                     await Task.Delay(ClampDelay(waitDelay), cancellationToken);
                 }
                 finally

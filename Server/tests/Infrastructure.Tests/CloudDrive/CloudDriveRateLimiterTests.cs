@@ -4,6 +4,7 @@ using Domain.Exceptions;
 
 using Infrastructure.CloudDrive;
 
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.CloudDrive;
@@ -14,11 +15,12 @@ public sealed class CloudDriveRateLimiterTests
     public async Task AcquireAsync_WhenRejectStrategyAndNoToken_ThrowsRateLimitAsync()
     {
         // Arrange
+        var logger = new RecordingRateLimiterLogger();
         CloudDriveRateLimiter limiter = CreateLimiter(new CloudDriveAppConfig
         {
             DefaultRateLimit = 1,
             RateLimitOverflowStrategy = RateLimitOverflowStrategy.Reject,
-        });
+        }, logger);
         Guid userId = Guid.NewGuid();
 
         using IDisposable first = await limiter.AcquireAsync(userId, "115001", "files", CancellationToken.None);
@@ -29,6 +31,9 @@ public sealed class CloudDriveRateLimiterTests
 
         // Assert
         Assert.Equal("cloud_drive_local_rate_limited", exception.ErrorCode);
+        Assert.Contains(logger.Entries, entry =>
+            entry.Level == LogLevel.Warning
+            && entry.Message.Contains("115 本地限流拒绝请求", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -85,6 +90,7 @@ public sealed class CloudDriveRateLimiterTests
     public async Task RecordThrottleSignal_WhenCalled_ForcesBackoffAsync()
     {
         // Arrange
+        var logger = new RecordingRateLimiterLogger();
         CloudDriveRateLimiter limiter = CreateLimiter(new CloudDriveAppConfig
         {
             DefaultRateLimit = 10,
@@ -92,7 +98,7 @@ public sealed class CloudDriveRateLimiterTests
             RateLimitMaxQueueLength = 1,
             ThrottleRetryBaseDelayMilliseconds = 100,
             ThrottleRetryMaxDelayMilliseconds = 100,
-        });
+        }, logger);
         Guid userId = Guid.NewGuid();
 
         limiter.RecordThrottleSignal(userId, "115001", "files");
@@ -104,18 +110,22 @@ public sealed class CloudDriveRateLimiterTests
 
         // Assert
         Assert.True(DateTime.UtcNow - before >= TimeSpan.FromMilliseconds(75));
+        Assert.Contains(logger.Entries, entry =>
+            entry.Level == LogLevel.Warning
+            && entry.Message.Contains("115 上游频控信号已记录", StringComparison.Ordinal));
     }
 
     [Fact]
     public async Task AcquireAsync_WhenQueueIsFull_ThrowsRateLimitAsync()
     {
         // Arrange
+        var logger = new RecordingRateLimiterLogger();
         CloudDriveRateLimiter limiter = CreateLimiter(new CloudDriveAppConfig
         {
             DefaultRateLimit = 1,
             RateLimitOverflowStrategy = RateLimitOverflowStrategy.Queue,
             RateLimitMaxQueueLength = 0,
-        });
+        }, logger);
         Guid userId = Guid.NewGuid();
 
         using IDisposable first = await limiter.AcquireAsync(userId, "115001", "files", CancellationToken.None);
@@ -126,6 +136,9 @@ public sealed class CloudDriveRateLimiterTests
 
         // Assert
         Assert.Equal("cloud_drive_local_rate_limited", exception.ErrorCode);
+        Assert.Contains(logger.Entries, entry =>
+            entry.Level == LogLevel.Warning
+            && entry.Message.Contains("115 本地限流拒绝请求", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -150,6 +163,29 @@ public sealed class CloudDriveRateLimiterTests
         Assert.Equal(1, limiter.BucketCount);
     }
 
-    private static CloudDriveRateLimiter CreateLimiter(CloudDriveAppConfig config) =>
-        new(Options.Create(config));
+    private static CloudDriveRateLimiter CreateLimiter(
+        CloudDriveAppConfig config,
+        ILogger<CloudDriveRateLimiter>? logger = null) =>
+        new(Options.Create(config), logger ?? new RecordingRateLimiterLogger());
+
+    private sealed class RecordingRateLimiterLogger : ILogger<CloudDriveRateLimiter>
+    {
+        public List<LogEntry> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Entries.Add(new LogEntry(logLevel, formatter(state, exception)));
+        }
+    }
+
+    private sealed record LogEntry(LogLevel Level, string Message);
 }

@@ -14,7 +14,7 @@ public sealed class CloudDriveAppConfig
     /// <summary>
     /// Cookie 负载加密的 key ring 名称。
     /// </summary>
-    public string CookieEncryptionKeyName { get; set; } = "CloudDrive:CookiePayload";
+    public string CookieEncryptionKeyName { get; set; } = string.Empty;
 
     /// <summary>
     /// 云下载签名密钥在 <c>ICloudDriveSecretProtector</c> 中的 key ring 名称。
@@ -30,7 +30,7 @@ public sealed class CloudDriveAppConfig
     /// <summary>
     /// 网页端 API 基础域名。
     /// </summary>
-    public string WebApiBaseUrl { get; set; } = "https://webapi.115.com/";
+    public string WebApiBaseUrl { get; set; } = string.Empty;
 
     /// <summary>
     /// 用户中心 API 基础域名。
@@ -115,11 +115,34 @@ public sealed class CloudDriveAppConfig
     /// <summary>
     /// 应用启动期配置完整性校验。核心配置缺失时禁用 115 集成功能，但不阻止应用启动。
     /// </summary>
+    public IReadOnlyList<string> ValidateStartupConfiguration()
+    {
+        List<string> errors = [];
+
+        if (string.IsNullOrWhiteSpace(CookieEncryptionKeyName))
+        {
+            errors.Add(nameof(CookieEncryptionKeyName));
+        }
+
+        if (string.IsNullOrWhiteSpace(WebApiBaseUrl))
+        {
+            errors.Add(nameof(WebApiBaseUrl));
+        }
+
+        if (OfflineSignatureEnabled && string.IsNullOrWhiteSpace(SignatureKeyName))
+        {
+            errors.Add(nameof(SignatureKeyName));
+        }
+
+        return errors;
+    }
+
+    /// <summary>
+    /// 应用启动期配置完整性校验。核心配置缺失时禁用 115 集成功能，但不阻止应用启动。
+    /// </summary>
     public void ApplyStartupValidation()
     {
-        if (string.IsNullOrWhiteSpace(CookieEncryptionKeyName)
-            || string.IsNullOrWhiteSpace(WebApiBaseUrl)
-            || (OfflineSignatureEnabled && string.IsNullOrWhiteSpace(SignatureKeyName)))
+        if (ValidateStartupConfiguration().Count > 0)
         {
             CloudDriveFeatureEnabled = false;
         }
