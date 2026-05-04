@@ -27,7 +27,7 @@ public static class ResultHttpExtensions
 
         return result.IsSuccess
             ? Results.NoContent()
-            : BuildFailureProblem(result.Error, failureStatusCode);
+            : BuildFailureProblem(result.Error, ResolveFailureStatusCode(result.Error, failureStatusCode));
     }
 
     /// <summary>
@@ -45,7 +45,7 @@ public static class ResultHttpExtensions
 
         return result.IsSuccess
             ? Results.Ok(result.Value)
-            : BuildFailureProblem(result.Error, failureStatusCode);
+            : BuildFailureProblem(result.Error, ResolveFailureStatusCode(result.Error, failureStatusCode));
     }
 
     private static IResult BuildFailureProblem(Error error, int statusCode) => Results.Problem(
@@ -58,6 +58,60 @@ public static class ResultHttpExtensions
         {
             ["errorCode"] = error.Code,
         });
+
+    /// <summary>
+    /// 将 <see cref="Result{T}"/> 映射为 201 Created。
+    /// </summary>
+    public static IResult ToCreatedHttpResult<T>(this Result<T> result, string? location = null)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        return result.IsSuccess
+            ? Results.Created(location ?? string.Empty, result.Value)
+            : BuildFailureProblem(result.Error, ResolveFailureStatusCode(result.Error));
+    }
+
+    /// <summary>
+    /// 将可能代表后台受理的 <see cref="Result{T}"/> 映射为 200/202。
+    /// </summary>
+    public static IResult ToOperationHttpResult<T>(this Result<T> result, Func<T, bool> acceptedSelector)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(acceptedSelector);
+
+        return result.IsFailure
+            ? BuildFailureProblem(result.Error, ResolveFailureStatusCode(result.Error))
+            : acceptedSelector(result.Value)
+                ? Results.Accepted(value: result.Value)
+                : Results.Ok(result.Value);
+    }
+
+    private static int ResolveFailureStatusCode(
+        Error error,
+        int fallbackStatusCode = (int)HttpStatusCode.BadRequest)
+    {
+        EnsureNonSuccessStatusCode(fallbackStatusCode);
+
+        return error.Code switch
+        {
+            "cloud_drive_cookie_invalidated" or
+            "cookie_not_active" => (int)HttpStatusCode.Unauthorized,
+            "cloud_drive_account_context_unavailable" or
+            "cloud_drive_account_context_ambiguous" or
+            "cloud_drive_configuration_unavailable" or
+            "offline_signature_not_available" or
+            "share_sample_unavailable" or
+            "cloud_drive_api_not_collected" => (int)HttpStatusCode.ServiceUnavailable,
+            "cloud_drive_file_not_found" or
+            "cloud_drive_job_not_found" => (int)HttpStatusCode.NotFound,
+            "cloud_drive_rate_limited" => 429,
+            "cloud_drive_upload_failed" or
+            "cloud_drive_upload_oss_credentials_missing" => (int)HttpStatusCode.InternalServerError,
+            "cloud_drive_api_error" or
+            "unknown_error_shape" => (int)HttpStatusCode.BadGateway,
+            _ => fallbackStatusCode,
+        };
+    }
 
     private static void EnsureNonSuccessStatusCode(int statusCode)
     {
