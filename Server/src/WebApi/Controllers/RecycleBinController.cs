@@ -3,6 +3,7 @@ using Application.CloudDrive.Files;
 
 using MediatR;
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using WebApi.Extensions;
@@ -11,6 +12,7 @@ using WebApi.Models;
 namespace WebApi.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/recycle")]
 public sealed class RecycleBinController(ISender sender) : ControllerBase
 {

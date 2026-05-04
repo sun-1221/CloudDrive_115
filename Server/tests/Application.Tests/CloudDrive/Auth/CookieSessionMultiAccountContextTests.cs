@@ -144,9 +144,9 @@ public sealed class CookieSessionMultiAccountContextTests
         var metadataCache = new RecordingMetadataCache();
         var rateLimiter = new RecordingRateLimiter();
         var gateway = new RecordingGateway();
-        gateway.RespondWeb("user/info", """{"state":true,"data":{"user_name":"tester"}}""");
         gateway.RespondWeb("files/index_info", """{"state":true,"data":{"all_total":"10 GB"}}""");
         gateway.RespondWeb("user/vip_limit", """{"state":true,"data":{"level_name":"VIP"}}""");
+        gateway.RespondUserCenter("proapi/3.0/index.php", """{"state":true,"data":{"user_name":"tester"}}""");
         gateway.RespondUserCenter(".", """{"state":true,"data":{"vip_count":1}}""");
         UserAggregationService userAggregationService = new(
             gateway,
@@ -180,18 +180,30 @@ public sealed class CookieSessionMultiAccountContextTests
     {
         public List<(Guid UserId, string CloudAccountUid, string DirectoryId)> InvalidatedDirectories { get; } = [];
 
-        public async Task<T?> GetOrSetAsync<T>(string cacheKey, Func<Task<T>> factory, TimeSpan? ttl = null)
+        public async Task<T?> GetOrSetAsync<T>(
+            string cacheKey,
+            Func<CancellationToken, Task<T>> factory,
+            TimeSpan? ttl = null,
+            CancellationToken cancellationToken = default)
         {
-            return await factory();
+            return await factory(cancellationToken);
         }
 
-        public Task InvalidateDirectoryAsync(Guid userId, string cloudAccountUid, string directoryId)
+        public Task InvalidateDirectoryAsync(
+            Guid userId,
+            string cloudAccountUid,
+            string directoryId,
+            CancellationToken cancellationToken = default)
         {
             InvalidatedDirectories.Add((userId, cloudAccountUid, directoryId));
             return Task.CompletedTask;
         }
 
-        public Task InvalidateFileAsync(Guid userId, string cloudAccountUid, string fileId)
+        public Task InvalidateFileAsync(
+            Guid userId,
+            string cloudAccountUid,
+            string fileId,
+            CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
         }

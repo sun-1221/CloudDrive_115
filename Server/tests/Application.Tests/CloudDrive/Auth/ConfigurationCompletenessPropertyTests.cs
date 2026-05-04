@@ -91,9 +91,7 @@ public sealed class ConfigurationCompletenessPropertyTests
 
         await Assert.ThrowsAsync<CloudDriveConfigurationException>(
             () => context.LoginStatusHandler.Handle(
-                new GetLoginStatusQuery(
-                    context.UserId,
-                    new CloudDriveAccountScopedInput { CloudAccountUid = "115001" }),
+                new GetLoginStatusQuery(context.UserId),
                 CancellationToken.None));
 
         await Assert.ThrowsAsync<CloudDriveConfigurationException>(
@@ -152,10 +150,8 @@ public sealed class ConfigurationCompletenessPropertyTests
         Result<List<CloudDriveAccountSummaryDto>> boundAccountsResult = await context.BoundAccountsHandler.Handle(
             new GetBoundAccountsQuery(context.UserId),
             CancellationToken.None);
-        Result<CloudDriveLoginStatusDto> loginStatusResult = await context.LoginStatusHandler.Handle(
-            new GetLoginStatusQuery(
-                context.UserId,
-                new CloudDriveAccountScopedInput { CloudAccountUid = "115001" }),
+        Result<CloudDriveAuthCheckDto> loginStatusResult = await context.LoginStatusHandler.Handle(
+            new GetLoginStatusQuery(context.UserId),
             CancellationToken.None);
         Result<CloudDriveUserInfoDto> userInfoResult = await context.UserInfoHandler.Handle(
             new GetUserInfoQuery(
@@ -247,9 +243,9 @@ public sealed class ConfigurationCompletenessPropertyTests
         var rateLimiter = new RecordingRateLimiter();
         var gateway = new RecordingGateway();
         gateway.RespondWeb("files", """{"state":true}""");
-        gateway.RespondWeb("user/info", """{"state":true,"data":{"user_name":"tester"}}""");
         gateway.RespondWeb("files/index_info", """{"state":true,"data":{"all_total":"10 GB"}}""");
         gateway.RespondWeb("user/vip_limit", """{"state":true,"data":{"level_name":"VIP"}}""");
+        gateway.RespondUserCenter("proapi/3.0/index.php", """{"state":true,"data":{"user_name":"tester"}}""");
         gateway.RespondUserCenter(".", """{"state":true,"data":{"vip_count":1}}""");
         var sender = new RecordingSender();
         UserAggregationService userAggregationService = new(
@@ -274,7 +270,7 @@ public sealed class ConfigurationCompletenessPropertyTests
         RecordingMetadataCache MetadataCache,
         RecordingRateLimiter RateLimiter,
         ICommandHandler<UpsertCookieSessionCommand, CloudDriveCookieSessionDto> UpsertHandler,
-        IQueryHandler<GetLoginStatusQuery, CloudDriveLoginStatusDto> LoginStatusHandler,
+        IQueryHandler<GetLoginStatusQuery, CloudDriveAuthCheckDto> LoginStatusHandler,
         ICommandHandler<EnterCookieCooldownCommand> EnterCooldownHandler,
         IQueryHandler<GetBoundAccountsQuery, List<CloudDriveAccountSummaryDto>> BoundAccountsHandler,
         IQueryHandler<GetUserInfoQuery, CloudDriveUserInfoDto> UserInfoHandler,
@@ -283,7 +279,7 @@ public sealed class ConfigurationCompletenessPropertyTests
     private sealed record EnabledHandlerContext(
         Guid UserId,
         ICommandHandler<UpsertCookieSessionCommand, CloudDriveCookieSessionDto> UpsertHandler,
-        IQueryHandler<GetLoginStatusQuery, CloudDriveLoginStatusDto> LoginStatusHandler,
+        IQueryHandler<GetLoginStatusQuery, CloudDriveAuthCheckDto> LoginStatusHandler,
         IQueryHandler<GetBoundAccountsQuery, List<CloudDriveAccountSummaryDto>> BoundAccountsHandler,
         IQueryHandler<GetUserInfoQuery, CloudDriveUserInfoDto> UserInfoHandler,
         ICommandHandler<RevokeCookieSessionCommand> RevokeHandler);
@@ -292,18 +288,30 @@ public sealed class ConfigurationCompletenessPropertyTests
     {
         public List<(Guid UserId, string CloudAccountUid, string DirectoryId)> InvalidatedDirectories { get; } = [];
 
-        public async Task<T?> GetOrSetAsync<T>(string cacheKey, Func<Task<T>> factory, TimeSpan? ttl = null)
+        public async Task<T?> GetOrSetAsync<T>(
+            string cacheKey,
+            Func<CancellationToken, Task<T>> factory,
+            TimeSpan? ttl = null,
+            CancellationToken cancellationToken = default)
         {
-            return await factory();
+            return await factory(cancellationToken);
         }
 
-        public Task InvalidateDirectoryAsync(Guid userId, string cloudAccountUid, string directoryId)
+        public Task InvalidateDirectoryAsync(
+            Guid userId,
+            string cloudAccountUid,
+            string directoryId,
+            CancellationToken cancellationToken = default)
         {
             InvalidatedDirectories.Add((userId, cloudAccountUid, directoryId));
             return Task.CompletedTask;
         }
 
-        public Task InvalidateFileAsync(Guid userId, string cloudAccountUid, string fileId)
+        public Task InvalidateFileAsync(
+            Guid userId,
+            string cloudAccountUid,
+            string fileId,
+            CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
         }

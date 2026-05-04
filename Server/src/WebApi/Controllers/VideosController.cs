@@ -3,6 +3,7 @@ using Application.CloudDrive.Video;
 
 using MediatR;
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using WebApi.Extensions;
@@ -11,6 +12,7 @@ using WebApi.Models;
 namespace WebApi.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/videos")]
 public sealed class VideosController(ISender sender) : ControllerBase
 {

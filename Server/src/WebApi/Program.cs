@@ -8,11 +8,8 @@ WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 // CloudDrive 模块：Application + Infrastructure + Quartz + Data Protection
 builder.Services.AddCloudDrive(builder.Configuration);
 
-// JWT 认证：仅当配置存在时启用
-if (builder.Configuration.GetSection(JwtAuthenticationExtensions.DefaultConfigSectionName).Exists())
-{
-    builder.Services.AddJwtAuthentication(builder.Configuration);
-}
+// JWT 认证：缺失配置时启动失败，避免受保护 API 退化为匿名访问
+builder.Services.AddJwtAuthentication(builder.Configuration);
 
 // WebApi 层：Controllers + OpenAPI
 builder.Services.AddControllers();
@@ -32,7 +29,7 @@ if (app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapControllers();
+app.MapControllers().RequireAuthorization();
 
 app.Run();
 

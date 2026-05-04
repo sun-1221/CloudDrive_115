@@ -19,33 +19,30 @@ public class UserAggregationService(
     ILogger<UserAggregationService> logger)
 {
     /// <summary>
-    /// 并行聚合用户主资料、VIP、空间等信息；单个子接口失败时对应字段保持空值。
+    /// 并行聚合用户主资料、VIP、空间和余额信息；单个子接口失败时对应字段保持空值。
     /// </summary>
-    public async Task<CloudDriveUserInfoDto> AggregateUserInfoAsync(
+    public async Task<CloudDriveUserProfileDto> AggregateUserProfileAsync(
         Guid userId,
         string cloudAccountUid,
         CancellationToken cancellationToken = default)
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        Task<JsonElement?> profileTask = FetchProfileAsync(userId, cloudAccountUid, cancellationToken);
         Task<JsonElement?> myProfileTask = FetchMyProfileAsync(userId, cloudAccountUid, cancellationToken);
         Task<JsonElement?> spaceTask = FetchSpaceAsync(userId, cloudAccountUid, cancellationToken);
         Task<JsonElement?> vipLimitTask = FetchVipLimitAsync(userId, cloudAccountUid, cancellationToken);
         Task<JsonElement?> vipCardTask = FetchVipCardAsync(userId, cloudAccountUid, cancellationToken);
         Task<JsonElement?> balanceTask = FetchBalanceAsync(userId, cloudAccountUid, cancellationToken);
 
-        await Task.WhenAll(profileTask, myProfileTask, spaceTask, vipLimitTask, vipCardTask, balanceTask);
+        await Task.WhenAll(myProfileTask, spaceTask, vipLimitTask, vipCardTask, balanceTask);
 
-        JsonElement? profile = await profileTask;
         JsonElement? myProfile = await myProfileTask;
         JsonElement? space = await spaceTask;
         JsonElement? vipLimit = await vipLimitTask;
         JsonElement? vipCard = await vipCardTask;
         JsonElement? balance = await balanceTask;
 
-        if (profile is null
-            && myProfile is null
+        if (myProfile is null
             && space is null
             && vipLimit is null
             && vipCard is null
@@ -56,33 +53,31 @@ public class UserAggregationService(
                 "user_aggregation_all_sources_failed");
         }
 
-        CloudDriveUserInfoDto result = profile.HasValue || myProfile.HasValue
-            ? MapProfile(profile, myProfile, cloudAccountUid)
-            : new CloudDriveUserInfoDto { CloudAccountUid = cloudAccountUid };
-
-        result.SpaceInfo = space.HasValue ? MapSpace(space.Value) : null;
-        result.VipInfo = MapVip(vipLimit, vipCard, balance);
-
-        return result;
+        return new CloudDriveUserProfileDto
+        {
+            Info = myProfile.HasValue
+                ? MapProfile(myProfile, cloudAccountUid)
+                : null,
+            Storage = space.HasValue ? MapSpace() : null,
+            Vip = MapVip(vipLimit, vipCard),
+            Balance = MapBalance(vipCard, balance),
+        };
     }
 
-    private Task<JsonElement?> FetchProfileAsync(Guid userId, string cloudAccountUid, CancellationToken cancellationToken)
+    /// <summary>
+    /// 聚合用户基础信息。
+    /// </summary>
+    public async Task<CloudDriveUserInfoDto> AggregateUserInfoAsync(
+        Guid userId,
+        string cloudAccountUid,
+        CancellationToken cancellationToken = default)
     {
-        var context = new CloudDriveApiContext
-        {
-            Category = "user",
-        };
+        CloudDriveUserProfileDto profile = await AggregateUserProfileAsync(
+            userId,
+            cloudAccountUid,
+            cancellationToken);
 
-        return FetchAsync(
-            () => openApiGateway.SendWebApiRequestAsync<JsonElement>(
-                userId,
-                cloudAccountUid,
-                HttpMethod.Get,
-                "user/info",
-                context,
-                cancellationToken),
-            "user/info",
-            cloudAccountUid);
+        return profile.Info ?? new CloudDriveUserInfoDto { Uid = cloudAccountUid };
     }
 
     private Task<JsonElement?> FetchMyProfileAsync(Guid userId, string cloudAccountUid, CancellationToken cancellationToken)
@@ -230,14 +225,8 @@ public class UserAggregationService(
         }
     }
 
-    private static CloudDriveUserInfoDto MapProfile(JsonElement? webProfile, JsonElement? myProfile, string cloudAccountUid)
+    private static CloudDriveUserInfoDto MapProfile(JsonElement? myProfile, string cloudAccountUid)
     {
-        JsonElement? webSource = null;
-        if (webProfile.HasValue)
-        {
-            webSource = TryGetObject(webProfile.Value, "data", out JsonElement data) ? data : webProfile.Value;
-        }
-
         JsonElement? mySource = null;
         if (myProfile.HasValue)
         {
@@ -246,58 +235,27 @@ public class UserAggregationService(
 
         return new CloudDriveUserInfoDto
         {
-            CloudAccountUid = cloudAccountUid,
-            UserName = ReadString(webSource, "user_name")
-                ?? ReadString(mySource, "user_name")
-                ?? ReadString(webSource, "nickname")
+            Uid = ReadString(mySource, "user_id")
+                ?? cloudAccountUid,
+            Nickname = ReadString(mySource, "user_name")
                 ?? ReadString(mySource, "nickname")
                 ?? string.Empty,
-            AvatarSmallUrl = ReadString(webSource, "user_face_s")
+            AvatarUrl = ReadString(mySource, "user_face")
                 ?? ReadString(mySource, "user_face_s")
-                ?? ReadString(webSource, "user_face")
-                ?? ReadString(mySource, "user_face"),
-            AvatarMediumUrl = ReadString(webSource, "user_face_m") ?? ReadString(mySource, "user_face_m"),
-            AvatarLargeUrl = ReadString(webSource, "user_face_l") ?? ReadString(mySource, "user_face_l"),
+                ?? ReadString(mySource, "user_face_m")
+                ?? ReadString(mySource, "user_face_l"),
+            IsVip = ReadBoolean(mySource, "is_vip") ?? false,
+            MaskedPhone = ReadString(mySource, "pub_mobile_mask"),
+            MaskedEmail = ReadString(mySource, "pub_email_mask"),
         };
     }
 
-    private static CloudDriveSpaceInfoDto? MapSpace(JsonElement response)
+    private static CloudDriveSpaceInfoDto MapSpace()
     {
-        JsonElement source = TryGetObject(response, "data", out JsonElement data) ? data : response;
-
-        string? total = ReadString(source, "all_total") ?? ReadString(source, "total");
-        string? used = ReadString(source, "all_use") ?? ReadString(source, "used");
-        string? remain = ReadString(source, "all_remain") ?? ReadString(source, "remain");
-        long totalBytes = ReadInt64(source, "all_total_size")
-            ?? ReadInt64(source, "all_total_bytes")
-            ?? ReadInt64(source, "total_size")
-            ?? 0;
-        long usedBytes = ReadInt64(source, "all_use_size")
-            ?? ReadInt64(source, "all_use_bytes")
-            ?? ReadInt64(source, "use_size")
-            ?? 0;
-        long remainBytes = ReadInt64(source, "all_remain_size")
-            ?? ReadInt64(source, "all_remain_bytes")
-            ?? ReadInt64(source, "remain_size")
-            ?? 0;
-
-        if (total is null && used is null && remain is null && totalBytes == 0 && usedBytes == 0 && remainBytes == 0)
-        {
-            return null;
-        }
-
-        return new CloudDriveSpaceInfoDto
-        {
-            AllTotal = total ?? string.Empty,
-            AllUse = used ?? string.Empty,
-            AllRemain = remain ?? string.Empty,
-            AllTotalBytes = totalBytes,
-            AllUseBytes = usedBytes,
-            AllRemainBytes = remainBytes,
-        };
+        return new CloudDriveSpaceInfoDto { SchemaStatus = "not_collected" };
     }
 
-    private static CloudDriveVipInfoDto? MapVip(JsonElement? vipLimit, JsonElement? vipCard, JsonElement? balance)
+    private static CloudDriveVipInfoDto? MapVip(JsonElement? vipLimit, JsonElement? vipCard)
     {
         JsonElement? limitSource = null;
         if (vipLimit.HasValue)
@@ -330,21 +288,6 @@ public class UserAggregationService(
             levelName = $"VIP x{vipCount}";
         }
 
-        if (levelName is null
-            && cardSource.HasValue
-            && ReadInt64(cardSource.Value, "00_balance") is long cardBalance)
-        {
-            levelName = $"Balance {cardBalance}";
-        }
-
-        if (levelName is null
-            && balance.HasValue
-            && ReadInt64(TryGetObject(balance.Value, "data", out JsonElement balanceData) ? balanceData : balance.Value, "00_balance")
-                is long payBalance)
-        {
-            levelName = $"Balance {payBalance}";
-        }
-
         if (levelName is null && expire is null)
         {
             return null;
@@ -355,6 +298,45 @@ public class UserAggregationService(
             LevelName = levelName,
             Expire = expire,
         };
+    }
+
+    private static CloudDriveBalanceDto? MapBalance(JsonElement? vipCard, JsonElement? balance)
+    {
+        JsonElement? cardSource = null;
+        if (vipCard.HasValue)
+        {
+            cardSource = TryGetObject(vipCard.Value, "data", out JsonElement data) ? data : vipCard.Value;
+        }
+
+        JsonElement? balanceSource = null;
+        if (balance.HasValue)
+        {
+            balanceSource = TryGetObject(balance.Value, "data", out JsonElement data) ? data : balance.Value;
+        }
+
+        decimal? amount = cardSource.HasValue
+            ? ReadDecimal(cardSource.Value, "00_balance") ?? ReadDecimal(cardSource.Value, "balance")
+            : null;
+
+        amount ??= balanceSource.HasValue
+            ? ReadDecimal(balanceSource.Value, "00_balance") ?? ReadDecimal(balanceSource.Value, "balance")
+            : null;
+
+        string? displayText = cardSource.HasValue
+            ? ReadString(cardSource.Value, "00_balance") ?? ReadString(cardSource.Value, "balance")
+            : null;
+
+        displayText ??= balanceSource.HasValue
+            ? ReadString(balanceSource.Value, "00_balance") ?? ReadString(balanceSource.Value, "balance")
+            : null;
+
+        return amount.HasValue || !string.IsNullOrWhiteSpace(displayText)
+            ? new CloudDriveBalanceDto
+            {
+                Balance = amount,
+                DisplayText = displayText,
+            }
+            : null;
     }
 
     private static bool TryGetObject(JsonElement source, string propertyName, out JsonElement value)
@@ -409,6 +391,53 @@ public class UserAggregationService(
         }
 
         return null;
+    }
+
+    private static decimal? ReadDecimal(JsonElement source, string propertyName)
+    {
+        if (source.ValueKind != JsonValueKind.Object
+            || !source.TryGetProperty(propertyName, out JsonElement value))
+        {
+            return null;
+        }
+
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out decimal number))
+        {
+            return number;
+        }
+
+        return value.ValueKind == JsonValueKind.String
+            && decimal.TryParse(
+                value.GetString(),
+                System.Globalization.NumberStyles.Number,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out decimal stringNumber)
+                ? stringNumber
+                : null;
+    }
+
+    private static bool? ReadBoolean(JsonElement? source, string propertyName)
+    {
+        if (!source.HasValue
+            || source.Value.ValueKind != JsonValueKind.Object
+            || !source.Value.TryGetProperty(propertyName, out JsonElement value))
+        {
+            return null;
+        }
+
+        if (value.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            return value.GetBoolean();
+        }
+
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int number))
+        {
+            return number != 0;
+        }
+
+        return value.ValueKind == JsonValueKind.String && bool.TryParse(value.GetString(), out bool parsed)
+            ? parsed
+            : null;
     }
 
     private static DateTime? ReadDateTime(JsonElement source, string propertyName)

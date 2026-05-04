@@ -119,9 +119,9 @@ public sealed class CookieSessionQueryHandlerTests
         await manager.UpsertSessionAsync(userId, "115001", new CookieTriplet("uid-1", "cid-1", "ussid-1"));
 
         var gateway = new RecordingUserGateway();
-        gateway.RespondWeb("user/info", """{"state":true,"data":{"user_name":"tester","user_face_s":"small.png","user_face_m":"medium.png","user_face_l":"large.png"}}""");
         gateway.RespondWeb("files/index_info", """{"state":true,"data":{"all_total":"10 GB","all_use":"2 GB","all_remain":"8 GB","all_total_size":10,"all_use_size":2,"all_remain_size":8}}""");
         gateway.RespondWeb("user/vip_limit", """{"state":true,"data":{"level_name":"VIP","expire":"1893456000"}}""");
+        gateway.RespondUserCenter("proapi/3.0/index.php", """{"state":true,"data":{"user_name":"tester","user_face_s":"small.png","user_face_m":"medium.png","user_face_l":"large.png"}}""");
         gateway.RespondUserCenter(".", """{"state":true,"data":{"vip_count":2,"00_balance":88}}""");
 
         UserAggregationService service = CreateUserAggregationService(gateway);
@@ -139,12 +139,10 @@ public sealed class CookieSessionQueryHandlerTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal("115001", result.Value.CloudAccountUid);
-        Assert.Equal("tester", result.Value.UserName);
-        Assert.Equal("small.png", result.Value.AvatarSmallUrl);
-        Assert.Equal(10, result.Value.SpaceInfo?.AllTotalBytes);
-        Assert.Equal("VIP", result.Value.VipInfo?.LevelName);
-        Assert.Equal(["files/index_info", "user/info", "user/vip_limit"], gateway.WebEndpoints.Order());
+        Assert.Equal("115001", result.Value.Uid);
+        Assert.Equal("tester", result.Value.Nickname);
+        Assert.Equal("small.png", result.Value.AvatarUrl);
+        Assert.Equal(["files/index_info", "user/vip_limit"], gateway.WebEndpoints.Order());
         Assert.Contains("proapi/3.0/index.php", gateway.UserCenterEndpoints);
         Assert.Equal(2, gateway.UserCenterEndpoints.Count(endpoint => endpoint == "."));
     }
@@ -236,18 +234,30 @@ public sealed class CookieSessionQueryHandlerTests
     {
         public List<(Guid UserId, string CloudAccountUid, string DirectoryId)> InvalidatedDirectories { get; } = [];
 
-        public async Task<T?> GetOrSetAsync<T>(string cacheKey, Func<Task<T>> factory, TimeSpan? ttl = null)
+        public async Task<T?> GetOrSetAsync<T>(
+            string cacheKey,
+            Func<CancellationToken, Task<T>> factory,
+            TimeSpan? ttl = null,
+            CancellationToken cancellationToken = default)
         {
-            return await factory();
+            return await factory(cancellationToken);
         }
 
-        public Task InvalidateDirectoryAsync(Guid userId, string cloudAccountUid, string directoryId)
+        public Task InvalidateDirectoryAsync(
+            Guid userId,
+            string cloudAccountUid,
+            string directoryId,
+            CancellationToken cancellationToken = default)
         {
             InvalidatedDirectories.Add((userId, cloudAccountUid, directoryId));
             return Task.CompletedTask;
         }
 
-        public Task InvalidateFileAsync(Guid userId, string cloudAccountUid, string fileId)
+        public Task InvalidateFileAsync(
+            Guid userId,
+            string cloudAccountUid,
+            string fileId,
+            CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
         }

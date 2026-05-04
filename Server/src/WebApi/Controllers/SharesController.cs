@@ -5,6 +5,7 @@ using Application.CloudDrive.Share;
 
 using MediatR;
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using WebApi.Extensions;
@@ -12,6 +13,7 @@ using WebApi.Extensions;
 namespace WebApi.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/shares")]
 public sealed class SharesController(ISender sender) : ControllerBase
 {

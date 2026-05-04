@@ -29,6 +29,12 @@ public static class UserContextExtensions
             ?? principal.FindFirstValue("sub")
             ?? principal.FindFirstValue("user_id");
 
-        return Guid.TryParse(value, out Guid userId) ? userId : Guid.Empty;
+        if (principal.Identity?.IsAuthenticated != true
+            || !Guid.TryParse(value, out Guid userId))
+        {
+            throw new UnauthorizedAccessException("当前请求缺少有效的认证用户 ID。");
+        }
+
+        return userId;
     }
 }

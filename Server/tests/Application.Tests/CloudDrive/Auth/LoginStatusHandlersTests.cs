@@ -55,13 +55,16 @@ public sealed class LoginStatusHandlersTests
         var repository = new FakeCookieSessionRepository();
         var gateway = new StubGateway(JsonDocument.Parse("""{"state":true}""").RootElement.Clone());
         var handler = CreateLoginHandler(repository, gateway, featureEnabled: true);
+        Guid userId = Guid.NewGuid();
+        await CreateManager(repository, featureEnabled: true)
+            .UpsertSessionAsync(userId, "115001", new CookieTriplet("uid", "cid", "ussid"));
 
-        Result<CloudDriveLoginStatusDto> result = await handler.Handle(
-            new GetLoginStatusQuery(Guid.NewGuid(), new CloudDriveAccountScopedInput { CloudAccountUid = "115001" }),
+        Result<CloudDriveAuthCheckDto> result = await handler.Handle(
+            new GetLoginStatusQuery(userId),
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.True(result.Value.IsLoggedIn);
+        Assert.True(result.Value.IsAuthenticated);
         Assert.Equal("files", gateway.LastEndpoint);
         Assert.Equal("auth", gateway.LastContext?.Category);
     }
@@ -74,14 +77,16 @@ public sealed class LoginStatusHandlersTests
         var handler = CreateLoginHandler(repository, gateway, featureEnabled: true);
 
         Guid userId = Guid.NewGuid();
-        Result<CloudDriveLoginStatusDto> result = await handler.Handle(
-            new GetLoginStatusQuery(userId, new CloudDriveAccountScopedInput { CloudAccountUid = "115001" }),
+        await CreateManager(repository, featureEnabled: true)
+            .UpsertSessionAsync(userId, "115001", new CookieTriplet("uid", "cid", "ussid"));
+
+        Result<CloudDriveAuthCheckDto> result = await handler.Handle(
+            new GetLoginStatusQuery(userId),
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.False(result.Value.IsLoggedIn);
-        Assert.Equal("login_required", result.Value.FailureReason);
-        Assert.Equal("115001", result.Value.CloudAccountUid);
+        Assert.False(result.Value.IsAuthenticated);
+        Assert.Equal("cookie_invalid", result.Value.FailureReason);
     }
 
     [Fact]
@@ -96,13 +101,13 @@ public sealed class LoginStatusHandlersTests
         var gateway = new StubGateway(JsonDocument.Parse("""{"state":true}""").RootElement.Clone());
         var handler = CreateLoginHandler(repository, gateway, featureEnabled: true);
 
-        Result<CloudDriveLoginStatusDto> result = await handler.Handle(
-            new GetLoginStatusQuery(userId, new CloudDriveAccountScopedInput { CloudAccountUid = "115001" }),
+        Result<CloudDriveAuthCheckDto> result = await handler.Handle(
+            new GetLoginStatusQuery(userId),
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.False(result.Value.IsLoggedIn);
-        Assert.Equal("login_required", result.Value.FailureReason);
+        Assert.False(result.Value.IsAuthenticated);
+        Assert.Equal("cookie_invalid", result.Value.FailureReason);
         Assert.Null(gateway.LastEndpoint);
     }
 

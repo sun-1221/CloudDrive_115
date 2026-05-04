@@ -95,18 +95,30 @@ public sealed class UpsertCookieSessionCommandHandlerTests
     {
         public List<(Guid UserId, string CloudAccountUid, string DirectoryId)> InvalidatedDirectories { get; } = [];
 
-        public async Task<T?> GetOrSetAsync<T>(string cacheKey, Func<Task<T>> factory, TimeSpan? ttl = null)
+        public async Task<T?> GetOrSetAsync<T>(
+            string cacheKey,
+            Func<CancellationToken, Task<T>> factory,
+            TimeSpan? ttl = null,
+            CancellationToken cancellationToken = default)
         {
-            return await factory();
+            return await factory(cancellationToken);
         }
 
-        public Task InvalidateDirectoryAsync(Guid userId, string cloudAccountUid, string directoryId)
+        public Task InvalidateDirectoryAsync(
+            Guid userId,
+            string cloudAccountUid,
+            string directoryId,
+            CancellationToken cancellationToken = default)
         {
             InvalidatedDirectories.Add((userId, cloudAccountUid, directoryId));
             return Task.CompletedTask;
         }
 
-        public Task InvalidateFileAsync(Guid userId, string cloudAccountUid, string fileId)
+        public Task InvalidateFileAsync(
+            Guid userId,
+            string cloudAccountUid,
+            string fileId,
+            CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
         }

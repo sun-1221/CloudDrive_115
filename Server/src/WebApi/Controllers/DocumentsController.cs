@@ -3,6 +3,7 @@ using Application.CloudDrive.Preview;
 
 using MediatR;
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using WebApi.Extensions;
@@ -10,6 +11,7 @@ using WebApi.Extensions;
 namespace WebApi.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/documents")]
 public sealed class DocumentsController(ISender sender) : ControllerBase
 {

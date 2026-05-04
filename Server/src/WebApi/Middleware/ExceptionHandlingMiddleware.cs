@@ -93,6 +93,15 @@ public sealed class ExceptionHandlingMiddleware(
             case ValidationException validation:
                 return BuildValidationProblem(validation, instance);
 
+            case UnauthorizedAccessException unauthorized:
+                return new ProblemDetails
+                {
+                    Status = (int)HttpStatusCode.Unauthorized,
+                    Title = ResolveTitle((int)HttpStatusCode.Unauthorized),
+                    Detail = Redact(unauthorized.Message),
+                    Instance = instance,
+                };
+
             case CloudDriveCookieInvalidatedException cloudDriveCookieInvalidated:
                 return BuildDomainProblem(cloudDriveCookieInvalidated, instance, (int)HttpStatusCode.Unauthorized);
 
@@ -133,6 +142,8 @@ public sealed class ExceptionHandlingMiddleware(
 
     private ProblemDetails BuildDomainProblem(DomainException exception, string instance, int statusCode)
     {
+        CloudDriveApiException? cloudDriveApi = exception as CloudDriveApiException;
+
         return new ProblemDetails
         {
             Status = statusCode,
@@ -142,6 +153,8 @@ public sealed class ExceptionHandlingMiddleware(
             Extensions =
             {
                 ["errorCode"] = Redact(exception.ErrorCode),
+                ["upstreamCode"] = Redact(cloudDriveApi?.UpstreamCode),
+                ["upstreamMessage"] = Redact(cloudDriveApi?.UpstreamMessage),
             },
         };
     }
