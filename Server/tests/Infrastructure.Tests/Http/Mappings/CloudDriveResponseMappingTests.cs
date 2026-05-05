@@ -121,6 +121,77 @@ public sealed class CloudDriveResponseMappingTests
     }
 
     [Fact]
+    public void FileSearch_ToDto_WhenSchemaCollected_MapsItemsWithAvailableStatus()
+    {
+        const string json = """
+            {
+              "count": "1",
+              "offset": 0,
+              "page_size": 20,
+              "page_count": 1,
+              "is_asc": 0,
+              "order": "user_ptime",
+              "suffix": "",
+              "fc_mix": 0,
+              "type": 0,
+              "state": true,
+              "data": [
+                {"fid":"file-1","n":"<em>result</em>.txt","s":42,"fc":1,"pc":"pick-1","sha":"abc","ns":"<em>result</em>.txt","dp":"My Files","iv":0}
+              ],
+              "folder": []
+            }
+            """;
+
+        CloudDriveFileSearchResponse response = JsonSerializer.Deserialize<CloudDriveFileSearchResponse>(
+            json,
+            CloudDrive115JsonSerializerOptions.Defaults)!;
+
+        var dto = response.ToDto();
+
+        Assert.Equal("available", dto.ItemSchemaStatus);
+        Assert.Single(dto.Items);
+        Assert.Equal("file-1", dto.Items[0].FileId);
+        Assert.Equal("<em>result</em>.txt", dto.Items[0].HighlightNameRaw);
+        Assert.Equal("My Files", dto.Items[0].DirectoryName);
+        Assert.Equal("available", dto.Items[0].SchemaStatus);
+        Assert.Equal(1, dto.Count);
+        Assert.Equal(20, dto.PageSize);
+        Assert.True(dto.State);
+    }
+
+    [Fact]
+    public void FileSearch_ToNotCollectedDto_WhenSchemaUncollected_ReturnsEmptyItemsWithNotCollectedStatus()
+    {
+        const string json = """
+            {
+              "count": "5",
+              "offset": 0,
+              "page_size": 20,
+              "page_count": 1,
+              "is_asc": 1,
+              "order": "file_name",
+              "state": true,
+              "data": [
+                {"fid":"file-1","n":"demo.mp4","s":100}
+              ]
+            }
+            """;
+
+        CloudDriveFileSearchResponse response = JsonSerializer.Deserialize<CloudDriveFileSearchResponse>(
+            json,
+            CloudDrive115JsonSerializerOptions.Defaults)!;
+
+        var dto = response.ToNotCollectedDto();
+
+        Assert.Equal("not_collected", dto.ItemSchemaStatus);
+        Assert.Empty(dto.Items);
+        Assert.Equal(5, dto.Count);
+        Assert.Equal(20, dto.PageSize);
+        Assert.Equal(1, dto.IsAsc);
+        Assert.Equal("file_name", dto.Order);
+    }
+
+    [Fact]
     public void VideoPlay_ToDto_WhenSchemaUncollected_DoesNotExposePlaybackFields()
     {
         const string json = """

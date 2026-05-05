@@ -1,4 +1,6 @@
+using Application.Abstractions.CloudDrive;
 using Application.CloudDrive;
+using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
 using Application.CloudDrive.Share;
 using Application.Tests.Support;
@@ -22,7 +24,8 @@ public sealed class ShareHandlerTests
         gateway.RespondWeb("share/slist", """
             {"state":true,"count":1,"list":[{"share_code":"s1","share_title":"Demo","file_id":"file-1","file_name":"demo.txt","pick_code":"pick-1","file_size":"42","create_time":1,"expire_time":2,"url":"https://share.test/s1"}]}
             """);
-        var handler = new GetMySharesQueryHandler(gateway, CreateEnabledConfig());
+        var accessor = CreateAccessor();
+        var handler = new GetMySharesQueryHandler(gateway, accessor, CreateEnabledConfig());
 
         // Act
         Result<CloudDriveShareListDto> result = await handler.Handle(
@@ -30,7 +33,6 @@ public sealed class ShareHandlerTests
                 TestUserId,
                 new GetShareListInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     Offset = 0,
                     Limit = 30,
                 }),
@@ -52,7 +54,8 @@ public sealed class ShareHandlerTests
         // Arrange
         var gateway = new RecordingCloudDriveOpenApiGateway();
         gateway.RespondWeb("share/send", """{"state":true,"data":{}}""");
-        var handler = new GetShareSendsQueryHandler(gateway, CreateEnabledConfig());
+        var accessor = CreateAccessor();
+        var handler = new GetShareSendsQueryHandler(gateway, accessor, CreateEnabledConfig());
 
         // Act
         Result<CloudDriveShareListDto> result = await handler.Handle(
@@ -60,7 +63,6 @@ public sealed class ShareHandlerTests
                 TestUserId,
                 new GetShareListInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     Offset = 0,
                     Limit = 30,
                 }),
@@ -70,6 +72,13 @@ public sealed class ShareHandlerTests
         Assert.True(result.IsSuccess);
         Assert.Empty(result.Value.Items);
         Assert.Equal("not_collected", result.Value.ItemSchemaStatus);
+    }
+
+    private static CloudDriveAccountContextAccessor CreateAccessor()
+    {
+        var accessor = new CloudDriveAccountContextAccessor();
+        accessor.SetContext(new CloudDriveAccountContext(TestUserId, TestCloudAccountUid, TestCloudAccountUid));
+        return accessor;
     }
 
     private static IOptions<CloudDriveAppConfig> CreateEnabledConfig()

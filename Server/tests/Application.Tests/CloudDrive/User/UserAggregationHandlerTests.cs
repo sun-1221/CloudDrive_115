@@ -1,3 +1,4 @@
+using Application.Abstractions.CloudDrive;
 using Application.CloudDrive;
 using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
@@ -22,14 +23,13 @@ public sealed class UserAggregationHandlerTests
         // Arrange
         RecordingCloudDriveOpenApiGateway gateway = CreateUserGateway();
         UserAggregationService service = CreateService(gateway);
+        var accessor = CreateAccessor();
         IQueryHandler<GetUserSpaceQuery, CloudDriveSpaceInfoDto> handler =
-            new GetUserSpaceQueryHandler(service, CreateEnabledConfig());
+            new GetUserSpaceQueryHandler(service, accessor, CreateEnabledConfig());
 
         // Act
         Result<CloudDriveSpaceInfoDto> result = await handler.Handle(
-            new GetUserSpaceQuery(
-                TestUserId,
-                new CloudDriveAccountScopedInput { CloudAccountUid = TestCloudAccountUid }),
+            new GetUserSpaceQuery(TestUserId),
             CancellationToken.None);
 
         // Assert
@@ -44,14 +44,13 @@ public sealed class UserAggregationHandlerTests
         // Arrange
         RecordingCloudDriveOpenApiGateway gateway = CreateUserGateway();
         UserAggregationService service = CreateService(gateway);
+        var accessor = CreateAccessor();
         IQueryHandler<GetUserVipQuery, CloudDriveVipInfoDto> handler =
-            new GetUserVipQueryHandler(service, CreateEnabledConfig());
+            new GetUserVipQueryHandler(service, accessor, CreateEnabledConfig());
 
         // Act
         Result<CloudDriveVipInfoDto> result = await handler.Handle(
-            new GetUserVipQuery(
-                TestUserId,
-                new CloudDriveAccountScopedInput { CloudAccountUid = TestCloudAccountUid }),
+            new GetUserVipQuery(TestUserId),
             CancellationToken.None);
 
         // Assert
@@ -77,6 +76,13 @@ public sealed class UserAggregationHandlerTests
             gateway,
             CreateEnabledConfig(),
             new FakeLogger<UserAggregationService>());
+    }
+
+    private static CloudDriveAccountContextAccessor CreateAccessor()
+    {
+        var accessor = new CloudDriveAccountContextAccessor();
+        accessor.SetContext(new CloudDriveAccountContext(TestUserId, TestCloudAccountUid, TestCloudAccountUid));
+        return accessor;
     }
 
     private static IOptions<CloudDriveAppConfig> CreateEnabledConfig()

@@ -24,7 +24,6 @@ public sealed class CloudDriveJobOrchestratorTests
         CloudDriveJobOrchestrator orchestrator = CreateOrchestrator(repository, scheduler);
         var input = new UploadFileInput
         {
-            CloudAccountUid = TestCloudAccountUid,
             DirectoryId = "dir-001",
             FileName = "video.mp4",
             FileSize = 1024,
@@ -35,7 +34,7 @@ public sealed class CloudDriveJobOrchestratorTests
         };
 
         // Act
-        Guid jobId = await orchestrator.EnqueueLargeUploadAsync(TestUserId, input, CancellationToken.None);
+        Guid jobId = await orchestrator.EnqueueLargeUploadAsync(TestUserId, TestCloudAccountUid, input, CancellationToken.None);
 
         // Assert
         CloudDriveJob job = Assert.Single(repository.Inserted);
@@ -137,7 +136,7 @@ public sealed class CloudDriveJobOrchestratorTests
         Assert.Equal([(job.Id, CloudDriveJobType.ClearRecycleBin)], scheduler.Scheduled);
 
         using JsonDocument payload = JsonDocument.Parse(job.PayloadJson!);
-        Assert.Equal(TestCloudAccountUid, payload.RootElement.GetProperty("cloudAccountUid").GetString());
+        Assert.False(payload.RootElement.TryGetProperty("cloudAccountUid", out _));
     }
 
     [Fact]
@@ -149,14 +148,13 @@ public sealed class CloudDriveJobOrchestratorTests
         CloudDriveJobOrchestrator orchestrator = CreateOrchestrator(repository, scheduler);
         var input = new SubmitTranscodeInput
         {
-            CloudAccountUid = TestCloudAccountUid,
             FileId = "file-001",
             PickCode = "pick-001",
             Op = "vip_push"
         };
 
         // Act
-        Guid jobId = await orchestrator.EnqueueVideoTranscodeAsync(TestUserId, input, CancellationToken.None);
+        Guid jobId = await orchestrator.EnqueueVideoTranscodeAsync(TestUserId, TestCloudAccountUid, input, CancellationToken.None);
 
         // Assert
         CloudDriveJob job = Assert.Single(repository.Inserted);
@@ -178,6 +176,7 @@ public sealed class CloudDriveJobOrchestratorTests
             repository,
             scheduler,
             new RecordingJobAuditLogger(),
+            new PassThroughSensitiveFieldsFilter(),
             new FakeLogger<CloudDriveJobOrchestrator>());
     }
 
@@ -202,5 +201,12 @@ public sealed class CloudDriveJobOrchestratorTests
         public void LogState(Domain.Entities.CloudDriveJob job, string action) { }
 
         public void LogError(Domain.Entities.CloudDriveJob job, Exception exception) { }
+    }
+
+    private sealed class PassThroughSensitiveFieldsFilter : ICloudDriveSensitiveFieldsFilter
+    {
+        public string Redact(string? value) => value ?? string.Empty;
+
+        public IReadOnlyDictionary<string, string?> RedactFields(IReadOnlyDictionary<string, string?> fields) => fields;
     }
 }

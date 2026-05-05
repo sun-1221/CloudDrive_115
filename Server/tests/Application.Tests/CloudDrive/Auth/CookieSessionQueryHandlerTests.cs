@@ -125,16 +125,17 @@ public sealed class CookieSessionQueryHandlerTests
         gateway.RespondUserCenter(".", """{"state":true,"data":{"vip_count":2,"00_balance":88}}""");
 
         UserAggregationService service = CreateUserAggregationService(gateway);
+        var accessor = new CloudDriveAccountContextAccessor();
+        accessor.SetContext(new CloudDriveAccountContext(userId, "115001", "115001"));
         IQueryHandler<GetUserInfoQuery, CloudDriveUserInfoDto> handler = new GetUserInfoQueryHandler(
             repository,
             service,
+            accessor,
             CreateEnabledConfig());
 
         // Act
         Result<CloudDriveUserInfoDto> result = await handler.Handle(
-            new GetUserInfoQuery(
-                userId,
-                new CloudDriveAccountScopedInput { CloudAccountUid = "115001" }),
+            new GetUserInfoQuery(userId),
             CancellationToken.None);
 
         // Assert
@@ -159,16 +160,17 @@ public sealed class CookieSessionQueryHandlerTests
 
         var gateway = new RecordingUserGateway();
         UserAggregationService service = CreateUserAggregationService(gateway);
+        var accessor = new CloudDriveAccountContextAccessor();
+        accessor.SetContext(new CloudDriveAccountContext(userId, "115001", "115001"));
         IQueryHandler<GetUserInfoQuery, CloudDriveUserInfoDto> handler = new GetUserInfoQueryHandler(
             repository,
             service,
+            accessor,
             CreateEnabledConfig());
 
         // Act
         Result<CloudDriveUserInfoDto> result = await handler.Handle(
-            new GetUserInfoQuery(
-                userId,
-                new CloudDriveAccountScopedInput { CloudAccountUid = "115001" }),
+            new GetUserInfoQuery(userId),
             CancellationToken.None);
 
         // Assert
@@ -179,7 +181,7 @@ public sealed class CookieSessionQueryHandlerTests
     }
 
     [Fact]
-    public async Task GetUserInfoQueryHandler_WhenCloudAccountMissing_ReturnsFailure()
+    public async Task GetUserInfoQueryHandler_WhenAccessorNotSet_ThrowsInvalidOperation()
     {
         // Arrange
         var repository = new FakeCookieSessionRepository();
@@ -188,18 +190,14 @@ public sealed class CookieSessionQueryHandlerTests
         IQueryHandler<GetUserInfoQuery, CloudDriveUserInfoDto> handler = new GetUserInfoQueryHandler(
             repository,
             service,
+            new CloudDriveAccountContextAccessor(),
             CreateEnabledConfig());
 
-        // Act
-        Result<CloudDriveUserInfoDto> result = await handler.Handle(
-            new GetUserInfoQuery(
-                Guid.NewGuid(),
-                new CloudDriveAccountScopedInput { CloudAccountUid = string.Empty }),
-            CancellationToken.None);
-
-        // Assert
-        Assert.True(result.IsFailure);
-        Assert.Equal("cloud_drive_cloud_account_uid_required", result.Error.Code);
+        // Act & Assert — accessor 未设置上下文时直接抛异常
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => handler.Handle(
+                new GetUserInfoQuery(Guid.NewGuid()),
+                CancellationToken.None));
         Assert.Empty(gateway.WebEndpoints);
         Assert.Empty(gateway.UserCenterEndpoints);
     }

@@ -63,7 +63,7 @@ public sealed class CloudDriveApiClientRequestTests
         Assert.Equal(HttpMethod.Get, request.Method);
         Assert.Equal("https://webapi.115.com/files?cid=0&limit=1", request.RequestUri!.ToString());
         Assert.True(request.Headers.TryGetValues("Cookie", out IEnumerable<string>? cookieValues));
-        Assert.Equal("UID=uid; CID=cid; SEID=ussid", cookieValues.Single());
+        Assert.Equal("UID=uid; CID=cid; USSID=ussid", cookieValues.Single());
     }
 
     [Fact]
@@ -187,7 +187,7 @@ public sealed class CloudDriveApiClientRequestTests
         HttpRequestMessage request = handler.Requests.Single();
         Assert.Equal("https://115.com/web/lixian/?ct=lixian&ac=task_lists", request.RequestUri!.ToString());
         Assert.True(request.Headers.TryGetValues("Cookie", out IEnumerable<string>? cookieValues));
-        Assert.Equal("UID=uid; CID=cid; SEID=ussid", cookieValues.Single());
+        Assert.Equal("UID=uid; CID=cid; USSID=ussid", cookieValues.Single());
 
         string body = await request.Content!.ReadAsStringAsync();
         Assert.Contains("page=1", body);
@@ -265,7 +265,7 @@ public sealed class CloudDriveApiClientRequestTests
         HttpRequestMessage request = handler.Requests.Single();
         Assert.Equal("https://uplb.115.com/3.0/sampleinitupload.php", request.RequestUri!.ToString());
         Assert.True(request.Headers.TryGetValues("Cookie", out IEnumerable<string>? cookieValues));
-        Assert.Equal("UID=uid; CID=cid; SEID=ussid", cookieValues.Single());
+        Assert.Equal("UID=uid; CID=cid; USSID=ussid", cookieValues.Single());
 
         string body = await request.Content!.ReadAsStringAsync();
         Assert.Contains("userid=115-uid", body);

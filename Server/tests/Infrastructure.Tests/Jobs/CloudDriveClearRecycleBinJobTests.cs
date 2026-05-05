@@ -23,7 +23,7 @@ public sealed class CloudDriveClearRecycleBinJobTests
     public async Task Execute_WhenValidPayload_FailsAsApiNotCollectedWithoutGatewayRequestAsync()
     {
         // Arrange
-        CloudDriveJob job = CreateJob(new ClearRecycleBinInput { CloudAccountUid = TestCloudAccountUid });
+        CloudDriveJob job = CreateJob(new ClearRecycleBinInput());
         var repository = new CloudDriveJobTestDoubles.FakeCloudDriveJobRepository(job);
         var transactionManager = new CloudDriveJobTestDoubles.RecordingTransactionManager();
         CloudDriveClearRecycleBinJob clearJob = CreateClearJob(
@@ -47,7 +47,7 @@ public sealed class CloudDriveClearRecycleBinJobTests
     public async Task Execute_WhenApiNotCollected_FailsJobAndDoesNotInvalidateCacheAsync()
     {
         // Arrange
-        CloudDriveJob job = CreateJob(new ClearRecycleBinInput { CloudAccountUid = TestCloudAccountUid });
+        CloudDriveJob job = CreateJob(new ClearRecycleBinInput());
         var repository = new CloudDriveJobTestDoubles.FakeCloudDriveJobRepository(job);
         var transactionManager = new CloudDriveJobTestDoubles.RecordingTransactionManager();
         CloudDriveClearRecycleBinJob clearJob = CreateClearJob(
@@ -71,7 +71,7 @@ public sealed class CloudDriveClearRecycleBinJobTests
         string payloadJson = JsonSerializer.Serialize(input, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         return CloudDriveJob.Create(
             TestUserId,
-            input.CloudAccountUid,
+            TestCloudAccountUid,
             CloudDriveJobType.ClearRecycleBin,
             resourceId: "recycle-bin",
             payloadJson: payloadJson);
@@ -87,6 +87,7 @@ public sealed class CloudDriveClearRecycleBinJobTests
             transactionManager,
             publisher,
             new CloudDriveJobTestDoubles.RecordingJobAuditLogger(),
+            new CloudDriveJobTestDoubles.PassThroughSensitiveFieldsFilter(),
             NullLogger<CloudDriveClearRecycleBinJob>.Instance);
     }
 }

@@ -169,7 +169,6 @@ public sealed class CloudDriveUploadJobTests : IDisposable
     {
         return new UploadFileInput
         {
-            CloudAccountUid = TestCloudAccountUid,
             DirectoryId = "dir-001",
             FileName = "demo.txt",
             FileSize = 4,
@@ -183,7 +182,7 @@ public sealed class CloudDriveUploadJobTests : IDisposable
         string payloadJson = JsonSerializer.Serialize(input, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         return CloudDriveJob.Create(
             TestUserId,
-            input.CloudAccountUid,
+            TestCloudAccountUid,
             CloudDriveJobType.Upload,
             input.DirectoryId,
             payloadJson);
@@ -203,6 +202,7 @@ public sealed class CloudDriveUploadJobTests : IDisposable
             transactionManager,
             publisher,
             new CloudDriveJobTestDoubles.RecordingJobAuditLogger(),
+            new CloudDriveJobTestDoubles.PassThroughSensitiveFieldsFilter(),
             NullLogger<CloudDriveUploadJob>.Instance);
     }
 

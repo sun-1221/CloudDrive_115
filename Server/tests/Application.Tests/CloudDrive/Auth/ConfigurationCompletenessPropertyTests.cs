@@ -112,9 +112,7 @@ public sealed class ConfigurationCompletenessPropertyTests
 
         await Assert.ThrowsAsync<CloudDriveConfigurationException>(
             () => context.UserInfoHandler.Handle(
-                new GetUserInfoQuery(
-                    context.UserId,
-                    new CloudDriveAccountScopedInput { CloudAccountUid = "115001" }),
+                new GetUserInfoQuery(context.UserId),
                 CancellationToken.None));
 
         await Assert.ThrowsAsync<CloudDriveConfigurationException>(
@@ -154,9 +152,7 @@ public sealed class ConfigurationCompletenessPropertyTests
             new GetLoginStatusQuery(context.UserId),
             CancellationToken.None);
         Result<CloudDriveUserInfoDto> userInfoResult = await context.UserInfoHandler.Handle(
-            new GetUserInfoQuery(
-                context.UserId,
-                new CloudDriveAccountScopedInput { CloudAccountUid = "115001" }),
+            new GetUserInfoQuery(context.UserId),
             CancellationToken.None);
         Result revokeResult = await context.RevokeHandler.Handle(
             new RevokeCookieSessionCommand(
@@ -221,7 +217,7 @@ public sealed class ConfigurationCompletenessPropertyTests
             new GetLoginStatusQueryHandler(repository, gateway, disabledHandlerConfig),
             new EnterCookieCooldownCommandHandler(manager, disabledHandlerConfig),
             new GetBoundAccountsQueryHandler(manager, disabledHandlerConfig),
-            new GetUserInfoQueryHandler(repository, userAggregationService, disabledHandlerConfig),
+            new GetUserInfoQueryHandler(repository, userAggregationService, new CloudDriveAccountContextAccessor(), disabledHandlerConfig),
             new RevokeCookieSessionCommandHandler(manager, metadataCache, rateLimiter, disabledHandlerConfig));
     }
 
@@ -260,7 +256,7 @@ public sealed class ConfigurationCompletenessPropertyTests
             new UpsertCookieSessionCommandHandler(manager, repository, metadataCache, rateLimiter, config),
             new GetLoginStatusQueryHandler(repository, gateway, config),
             new GetBoundAccountsQueryHandler(manager, config),
-            new GetUserInfoQueryHandler(repository, userAggregationService, config),
+            new GetUserInfoQueryHandler(repository, userAggregationService, CreateAccessor(userId), config),
             new RevokeCookieSessionCommandHandler(manager, metadataCache, rateLimiter, config));
     }
 
@@ -275,6 +271,13 @@ public sealed class ConfigurationCompletenessPropertyTests
         IQueryHandler<GetBoundAccountsQuery, List<CloudDriveAccountSummaryDto>> BoundAccountsHandler,
         IQueryHandler<GetUserInfoQuery, CloudDriveUserInfoDto> UserInfoHandler,
         ICommandHandler<RevokeCookieSessionCommand> RevokeHandler);
+
+    private static CloudDriveAccountContextAccessor CreateAccessor(Guid userId)
+    {
+        var accessor = new CloudDriveAccountContextAccessor();
+        accessor.SetContext(new CloudDriveAccountContext(userId, "115001", "115001"));
+        return accessor;
+    }
 
     private sealed record EnabledHandlerContext(
         Guid UserId,

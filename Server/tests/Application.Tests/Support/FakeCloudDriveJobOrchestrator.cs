@@ -9,20 +9,21 @@ internal sealed class FakeCloudDriveJobOrchestrator : ICloudDriveJobOrchestrator
 {
     public Guid NextJobId { get; set; } = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
 
-    public List<(Guid UserId, UploadFileInput Input)> Uploads { get; } = [];
+    public List<(Guid UserId, string CloudAccountUid, UploadFileInput Input)> Uploads { get; } = [];
 
     public List<(Guid UserId, string CloudAccountUid, CloudDriveJobType JobType, object Payload)> BatchOperations { get; } = [];
 
     public List<(Guid UserId, string CloudAccountUid)> ClearRecycleBins { get; } = [];
 
-    public List<(Guid UserId, SubmitTranscodeInput Input)> Transcodes { get; } = [];
+    public List<(Guid UserId, string CloudAccountUid, SubmitTranscodeInput Input)> Transcodes { get; } = [];
 
     public Task<Guid> EnqueueLargeUploadAsync(
         Guid userId,
+        string cloudAccountUid,
         UploadFileInput input,
         CancellationToken cancellationToken = default)
     {
-        Uploads.Add((userId, input));
+        Uploads.Add((userId, cloudAccountUid, input));
         return Task.FromResult(NextJobId);
     }
 
@@ -48,10 +49,11 @@ internal sealed class FakeCloudDriveJobOrchestrator : ICloudDriveJobOrchestrator
 
     public Task<Guid> EnqueueVideoTranscodeAsync(
         Guid userId,
+        string cloudAccountUid,
         SubmitTranscodeInput input,
         CancellationToken cancellationToken = default)
     {
-        Transcodes.Add((userId, input));
+        Transcodes.Add((userId, cloudAccountUid, input));
         return Task.FromResult(NextJobId);
     }
 }

@@ -1,4 +1,6 @@
+using Application.Abstractions.CloudDrive;
 using Application.CloudDrive;
+using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
 using Application.CloudDrive.Files;
 using Application.CloudDrive.Video;
@@ -26,6 +28,7 @@ public sealed class VideoHandlerTests
         var handler = new GetVideoPlayUrlCommandHandler(
             context.FileManager,
             context.Gateway,
+            context.Accessor,
             CreateEnabledConfig());
 
         // Act
@@ -34,7 +37,6 @@ public sealed class VideoHandlerTests
                 TestUserId,
                 new GetVideoPlayInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     PickCode = "pick-1",
                     Definition = 4,
                 }),
@@ -55,20 +57,13 @@ public sealed class VideoHandlerTests
     [Fact]
     public async Task GetVideoPlayUrlCommandHandler_WhenTranscoding_EnqueuesTranscodeJob()
     {
-        // Arrange
+        // Arrange — files/file 接口未采集，直接传 PickCode 绕过文件详情查找
         TestContext context = CreateContext();
-        context.Gateway.WebApiResponse = new CloudDriveFileDetailDto
-        {
-            FileId = "file-1",
-            Name = "demo.mp4",
-            FileType = "mp4",
-            PickCode = "pick-1",
-            IsVideo = true,
-        };
         context.Gateway.RespondWeb("files/video", """{"state":true,"data":{"status":"transcoding","video_url":[]}}""");
         var handler = new GetVideoPlayUrlCommandHandler(
             context.FileManager,
             context.Gateway,
+            context.Accessor,
             CreateEnabledConfig());
 
         // Act
@@ -77,8 +72,7 @@ public sealed class VideoHandlerTests
                 TestUserId,
                 new GetVideoPlayInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
-                    FileId = "file-1",
+                    PickCode = "pick-1",
                 }),
             CancellationToken.None);
 
@@ -92,19 +86,12 @@ public sealed class VideoHandlerTests
     [Fact]
     public async Task SubmitTranscodeCommandHandler_WhenVideoFile_EnqueuesTranscode()
     {
-        // Arrange
+        // Arrange — files/file 接口未采集，直接传 PickCode 绕过文件详情查找
         TestContext context = CreateContext();
-        context.Gateway.WebApiResponse = new CloudDriveFileDetailDto
-        {
-            FileId = "file-1",
-            Name = "demo.mp4",
-            FileType = "mp4",
-            PickCode = "pick-1",
-            IsVideo = true,
-        };
         var handler = new SubmitTranscodeCommandHandler(
             context.FileManager,
             context.JobOrchestrator,
+            context.Accessor,
             CreateEnabledConfig());
 
         // Act
@@ -113,8 +100,7 @@ public sealed class VideoHandlerTests
                 TestUserId,
                 new SubmitTranscodeInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
-                    FileId = "file-1",
+                    PickCode = "pick-1",
                 }),
             CancellationToken.None);
 
@@ -135,6 +121,7 @@ public sealed class VideoHandlerTests
         var handler = new GetSubtitlesQueryHandler(
             context.FileManager,
             context.Gateway,
+            context.Accessor,
             CreateEnabledConfig());
 
         // Act
@@ -143,7 +130,6 @@ public sealed class VideoHandlerTests
                 TestUserId,
                 new GetSubtitlesInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     PickCode = "pick-1",
                 }),
             CancellationToken.None);
@@ -164,6 +150,7 @@ public sealed class VideoHandlerTests
         var handler = new GetVideoPlayProgressQueryHandler(
             context.FileManager,
             context.Gateway,
+            context.Accessor,
             CreateEnabledConfig());
 
         // Act
@@ -172,7 +159,6 @@ public sealed class VideoHandlerTests
                 TestUserId,
                 new GetVideoPlayProgressInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     PickCode = "pick-1",
                 }),
             CancellationToken.None);
@@ -189,6 +175,39 @@ public sealed class VideoHandlerTests
     }
 
     [Fact]
+    public async Task GetVideoPlayProgressQueryHandler_WhenHistoryIsObject_MapsProgressFields()
+    {
+        // Arrange
+        TestContext context = CreateContext();
+        context.Gateway.RespondWeb("files/history", """{"state":true,"data":{"file_id":"fid-1","file_name":"clip.mp4","hash":"sha1hash","pick_code":"pick-1","time":120,"add_time":1776518000}}""");
+        var handler = new GetVideoPlayProgressQueryHandler(
+            context.FileManager,
+            context.Gateway,
+            context.Accessor,
+            CreateEnabledConfig());
+
+        // Act
+        Result<CloudDriveVideoPlayProgressDto> result = await handler.Handle(
+            new GetVideoPlayProgressQuery(
+                TestUserId,
+                new GetVideoPlayProgressInput
+                {
+                    PickCode = "pick-1",
+                }),
+            CancellationToken.None);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal("fid-1", result.Value.FileId);
+        Assert.Equal("clip.mp4", result.Value.FileName);
+        Assert.Equal("sha1hash", result.Value.Hash);
+        Assert.Equal("pick-1", result.Value.PickCode);
+        Assert.Equal(120L, result.Value.PlayedSeconds);
+        Assert.Equal(1776518000L, result.Value.AddTime);
+        Assert.Equal("available", result.Value.SchemaStatus);
+    }
+
+    [Fact]
     public async Task RememberVideoPlayProgressCommandHandler_WhenValidInput_PostsHistory()
     {
         // Arrange
@@ -196,6 +215,7 @@ public sealed class VideoHandlerTests
         var handler = new RememberVideoPlayProgressCommandHandler(
             context.FileManager,
             context.Gateway,
+            context.Accessor,
             CreateEnabledConfig());
 
         // Act
@@ -204,7 +224,6 @@ public sealed class VideoHandlerTests
                 TestUserId,
                 new RememberVideoPlayProgressInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     PickCode = "pick-1",
                     Time = 30,
                     WatchEnd = true,
@@ -231,8 +250,10 @@ public sealed class VideoHandlerTests
             rateLimiter,
             CreateEnabledConfig(),
             new FakeLogger<CloudDriveFileManager>());
+        var accessor = new CloudDriveAccountContextAccessor();
+        accessor.SetContext(new CloudDriveAccountContext(TestUserId, TestCloudAccountUid, TestCloudAccountUid));
 
-        return new TestContext(gateway, fileManager, new FakeCloudDriveJobOrchestrator());
+        return new TestContext(gateway, fileManager, new FakeCloudDriveJobOrchestrator(), accessor);
     }
 
     private static IOptions<CloudDriveAppConfig> CreateEnabledConfig()
@@ -247,5 +268,6 @@ public sealed class VideoHandlerTests
     private sealed record TestContext(
         RecordingCloudDriveOpenApiGateway Gateway,
         CloudDriveFileManager FileManager,
-        FakeCloudDriveJobOrchestrator JobOrchestrator);
+        FakeCloudDriveJobOrchestrator JobOrchestrator,
+        CloudDriveAccountContextAccessor Accessor);
 }

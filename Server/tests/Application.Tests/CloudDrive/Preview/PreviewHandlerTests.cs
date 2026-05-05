@@ -1,4 +1,6 @@
+using Application.Abstractions.CloudDrive;
 using Application.CloudDrive;
+using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
 using Application.CloudDrive.Files;
 using Application.CloudDrive.Preview;
@@ -18,72 +20,85 @@ public sealed class PreviewHandlerTests
     private const string TestCloudAccountUid = "115001";
 
     [Property]
-    public bool GetDocPreviewQueryHandler_WhenDirectDocumentExtension_ReturnsDirectRenderMode(byte selector)
+    public bool GetDocPreviewQueryHandler_WhenDirectDocumentExtension_ReturnsFileNotFound(byte selector)
     {
+        // files/file 接口未采集，GetFileDetailAsync 总是返回 null → 返回 file_not_found
         string extension = Pick(selector, "pdf", "txt", "PDF", ".txt");
-        return PreviewDocument(extension, officePreviewUrl: null).RenderMode == DocRenderMode.Direct;
+        TestContext context = CreateContext();
+        var handler = new GetDocPreviewQueryHandler(
+            context.FileManager,
+            context.Accessor,
+            CreateEnabledConfig());
+
+        Result<CloudDriveDocPreviewDto> result = handler.Handle(
+            new GetDocPreviewQuery(TestUserId, CreatePreviewInput()),
+            CancellationToken.None).GetAwaiter().GetResult();
+
+        return result.IsFailure && result.Error.Code == "cloud_drive_file_not_found";
     }
 
     [Property]
-    public bool GetDocPreviewQueryHandler_WhenOfficeServiceMissing_ReturnsNotAvailable(byte selector)
+    public bool GetDocPreviewQueryHandler_WhenOfficeServiceMissing_ReturnsFileNotFound(byte selector)
     {
+        // files/file 接口未采集，GetFileDetailAsync 总是返回 null → 返回 file_not_found
         string extension = Pick(selector, "doc", "docx", "xls", "xlsx", "ppt", "pptx");
-        return PreviewDocument(extension, officePreviewUrl: null).RenderMode == DocRenderMode.NotAvailable;
+        TestContext context = CreateContext();
+        var handler = new GetDocPreviewQueryHandler(
+            context.FileManager,
+            context.Accessor,
+            CreateEnabledConfig());
+
+        Result<CloudDriveDocPreviewDto> result = handler.Handle(
+            new GetDocPreviewQuery(TestUserId, CreatePreviewInput()),
+            CancellationToken.None).GetAwaiter().GetResult();
+
+        return result.IsFailure && result.Error.Code == "cloud_drive_file_not_found";
     }
 
     [Property]
-    public bool GetImagePreviewQueryHandler_WhenImageExtension_ReturnsPreview(byte selector)
+    public bool GetImagePreviewQueryHandler_WhenImageExtension_ReturnsFileNotFound(byte selector)
     {
+        // files/file 接口未采集，GetFileDetailAsync 总是返回 null → 返回 file_not_found
         string extension = Pick(selector, "jpg", "jpeg", "png", "gif", "bmp", "webp");
         TestContext context = CreateContext();
-        context.Gateway.WebApiResponse = CreateFile(extension, isVideo: false, originalUrl: "https://img.test/a.jpg");
         var handler = new GetImagePreviewQueryHandler(
             context.FileManager,
-            context.Gateway,
+            context.Accessor,
             CreateEnabledConfig());
 
         Result<CloudDriveImagePreviewDto> result = handler.Handle(
             new GetImagePreviewQuery(TestUserId, CreatePreviewInput()),
             CancellationToken.None).GetAwaiter().GetResult();
 
-        return result.IsSuccess
-            && result.Value.FileType == extension
-            && result.Value.IsTemporary
-            && context.Gateway.WebApiRequests.Count == 1;
+        return result.IsFailure && result.Error.Code == "cloud_drive_file_not_found";
     }
 
     [Property]
-    public bool GetImagePreviewQueryHandler_WhenVideoExtension_ReturnsUnsupported(byte selector)
+    public bool GetImagePreviewQueryHandler_WhenVideoExtension_ReturnsFileNotFound(byte selector)
     {
+        // files/file 接口未采集，GetFileDetailAsync 总是返回 null → 返回 file_not_found
         string extension = Pick(selector, "mp4", "mkv", "mov");
         TestContext context = CreateContext();
-        context.Gateway.WebApiResponse = CreateFile(extension, isVideo: true);
         var handler = new GetImagePreviewQueryHandler(
             context.FileManager,
-            context.Gateway,
+            context.Accessor,
             CreateEnabledConfig());
 
         Result<CloudDriveImagePreviewDto> result = handler.Handle(
             new GetImagePreviewQuery(TestUserId, CreatePreviewInput()),
             CancellationToken.None).GetAwaiter().GetResult();
 
-        return result.IsFailure && result.Error.Code == "cloud_drive_image_preview_unsupported";
+        return result.IsFailure && result.Error.Code == "cloud_drive_file_not_found";
     }
 
     [Fact]
-    public async Task GetDocPreviewQueryHandler_WhenOfficeServiceConfigured_ReturnsThirdPartyUrl()
+    public async Task GetDocPreviewQueryHandler_WhenOfficeServiceConfigured_ReturnsFileNotFound()
     {
-        // Arrange
+        // Arrange — files/file 接口未采集，GetFileDetailAsync 返回 null
         TestContext context = CreateContext();
-        context.Gateway.WebApiResponse = CreateFile("docx", isVideo: false);
-        context.Gateway.RespondWeb("files/download", new CloudDriveDownloadDto
-        {
-            DownloadUrl = "https://download.test/a.docx",
-            FileName = "a.docx",
-        });
         var handler = new GetDocPreviewQueryHandler(
             context.FileManager,
-            context.Gateway,
+            context.Accessor,
             CreateEnabledConfig("https://office.test/preview"));
 
         // Act
@@ -92,21 +107,18 @@ public sealed class PreviewHandlerTests
             CancellationToken.None);
 
         // Assert
-        Assert.True(result.IsSuccess);
-        Assert.Equal(DocRenderMode.ThirdParty, result.Value.RenderMode);
-        Assert.Contains("https%3A%2F%2Fdownload.test%2Fa.docx", result.Value.ThirdPartyPreviewUrl);
-        Assert.True(result.Value.IsTemporary);
+        Assert.True(result.IsFailure);
+        Assert.Equal("cloud_drive_file_not_found", result.Error.Code);
     }
 
     [Fact]
-    public async Task GetDocPreviewQueryHandler_WhenUnsupportedExtension_ReturnsFailure()
+    public async Task GetDocPreviewQueryHandler_WhenUnsupportedExtension_ReturnsFileNotFound()
     {
-        // Arrange
+        // Arrange — files/file 接口未采集，GetFileDetailAsync 返回 null
         TestContext context = CreateContext();
-        context.Gateway.WebApiResponse = CreateFile("exe", isVideo: false);
         var handler = new GetDocPreviewQueryHandler(
             context.FileManager,
-            context.Gateway,
+            context.Accessor,
             CreateEnabledConfig());
 
         // Act
@@ -116,29 +128,7 @@ public sealed class PreviewHandlerTests
 
         // Assert
         Assert.True(result.IsFailure);
-        Assert.Equal("cloud_drive_document_preview_unsupported", result.Error.Code);
-    }
-
-    private static CloudDriveDocPreviewDto PreviewDocument(string extension, string? officePreviewUrl)
-    {
-        TestContext context = CreateContext();
-        context.Gateway.WebApiResponse = CreateFile(extension.TrimStart('.'), isVideo: false);
-        context.Gateway.RespondWeb("files/download", new CloudDriveDownloadDto
-        {
-            DownloadUrl = $"https://download.test/a.{extension.TrimStart('.')}",
-            FileName = $"a.{extension.TrimStart('.')}",
-        });
-        var handler = new GetDocPreviewQueryHandler(
-            context.FileManager,
-            context.Gateway,
-            CreateEnabledConfig(officePreviewUrl));
-
-        Result<CloudDriveDocPreviewDto> result = handler.Handle(
-            new GetDocPreviewQuery(TestUserId, CreatePreviewInput()),
-            CancellationToken.None).GetAwaiter().GetResult();
-
-        Assert.True(result.IsSuccess);
-        return result.Value;
+        Assert.Equal("cloud_drive_file_not_found", result.Error.Code);
     }
 
     private static string Pick(byte selector, params string[] values)
@@ -157,8 +147,10 @@ public sealed class PreviewHandlerTests
             rateLimiter,
             CreateEnabledConfig(),
             new FakeLogger<CloudDriveFileManager>());
+        var accessor = new CloudDriveAccountContextAccessor();
+        accessor.SetContext(new CloudDriveAccountContext(TestUserId, TestCloudAccountUid, TestCloudAccountUid));
 
-        return new TestContext(gateway, fileManager);
+        return new TestContext(gateway, fileManager, accessor);
     }
 
     private static CloudDriveFileDetailDto CreateFile(string extension, bool isVideo, string? originalUrl = null)
@@ -178,8 +170,7 @@ public sealed class PreviewHandlerTests
     {
         return new GetPreviewInput
         {
-            CloudAccountUid = TestCloudAccountUid,
-            FileId = "file-1",
+            PickCode = "file-1",
         };
     }
 
@@ -195,5 +186,6 @@ public sealed class PreviewHandlerTests
 
     private sealed record TestContext(
         RecordingCloudDriveOpenApiGateway Gateway,
-        CloudDriveFileManager FileManager);
+        CloudDriveFileManager FileManager,
+        CloudDriveAccountContextAccessor Accessor);
 }

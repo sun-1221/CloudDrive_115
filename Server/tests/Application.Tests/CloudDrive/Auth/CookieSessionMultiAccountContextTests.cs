@@ -95,23 +95,18 @@ public sealed class CookieSessionMultiAccountContextTests
     }
 
     [Fact]
-    public async Task GetUserInfoQueryHandler_WhenCloudAccountUidMissing_ReturnsExplicitFailure()
+    public async Task GetUserInfoQueryHandler_WhenAccessorNotSet_ThrowsInvalidOperation()
     {
         // Arrange
         TestContext context = CreateContext();
         Guid userId = Guid.NewGuid();
         await context.UpsertHandler.Handle(CreateUpsertCommand(userId, "115001", "uid-1"), CancellationToken.None);
 
-        // Act
-        Result<CloudDriveUserInfoDto> result = await context.UserInfoHandler.Handle(
-            new GetUserInfoQuery(
-                userId,
-                new CloudDriveAccountScopedInput { CloudAccountUid = string.Empty }),
-            CancellationToken.None);
-
-        // Assert
-        Assert.True(result.IsFailure);
-        Assert.Equal("cloud_drive_cloud_account_uid_required", result.Error.Code);
+        // Act & Assert — accessor 未设置上下文时直接抛异常
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => context.UserInfoHandler.Handle(
+                new GetUserInfoQuery(userId),
+                CancellationToken.None));
         Assert.Empty(context.Gateway.WebEndpoints);
     }
 
@@ -162,7 +157,7 @@ public sealed class CookieSessionMultiAccountContextTests
             new UpsertCookieSessionCommandHandler(manager, repository, metadataCache, rateLimiter, config),
             new RevokeCookieSessionCommandHandler(manager, metadataCache, rateLimiter, config),
             new GetBoundAccountsQueryHandler(manager, config),
-            new GetUserInfoQueryHandler(repository, userAggregationService, config));
+            new GetUserInfoQueryHandler(repository, userAggregationService, new CloudDriveAccountContextAccessor(), config));
     }
 
     private sealed record TestContext(

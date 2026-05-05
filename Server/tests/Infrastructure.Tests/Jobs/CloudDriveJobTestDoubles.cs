@@ -187,6 +187,13 @@ internal static class CloudDriveJobTestDoubles
         }
     }
 
+    internal sealed class PassThroughSensitiveFieldsFilter : ICloudDriveSensitiveFieldsFilter
+    {
+        public string Redact(string? value) => value ?? string.Empty;
+
+        public IReadOnlyDictionary<string, string?> RedactFields(IReadOnlyDictionary<string, string?> fields) => fields;
+    }
+
     internal sealed class RecordingJobAuditLogger : ICloudDriveJobAuditLogger
     {
         public List<(Guid JobId, string Action)> States { get; } = [];

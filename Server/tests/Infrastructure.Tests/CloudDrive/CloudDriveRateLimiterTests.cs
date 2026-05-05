@@ -1,3 +1,4 @@
+using Application.Abstractions.CloudDrive;
 using Application.CloudDrive;
 
 using Domain.Exceptions;
@@ -166,7 +167,7 @@ public sealed class CloudDriveRateLimiterTests
     private static CloudDriveRateLimiter CreateLimiter(
         CloudDriveAppConfig config,
         ILogger<CloudDriveRateLimiter>? logger = null) =>
-        new(Options.Create(config), logger ?? new RecordingRateLimiterLogger());
+        new(Options.Create(config), new PassThroughSensitiveFieldsFilter(), logger ?? new RecordingRateLimiterLogger());
 
     private sealed class RecordingRateLimiterLogger : ILogger<CloudDriveRateLimiter>
     {
@@ -188,4 +189,11 @@ public sealed class CloudDriveRateLimiterTests
     }
 
     private sealed record LogEntry(LogLevel Level, string Message);
+
+    private sealed class PassThroughSensitiveFieldsFilter : ICloudDriveSensitiveFieldsFilter
+    {
+        public string Redact(string? value) => value ?? string.Empty;
+
+        public IReadOnlyDictionary<string, string?> RedactFields(IReadOnlyDictionary<string, string?> fields) => fields;
+    }
 }

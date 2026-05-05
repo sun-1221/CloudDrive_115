@@ -86,7 +86,6 @@ public sealed class CloudDriveJobRecoveryHostedServiceTests : IDisposable
         string payloadJson = JsonSerializer.Serialize(
             new UploadFileInput
             {
-                CloudAccountUid = "115001",
                 DirectoryId = "0",
                 FileName = "demo.txt",
                 FileSize = 4,

@@ -56,7 +56,6 @@ public sealed class CloudDriveBatchOperationJobTests
             CloudDriveJobType.BatchDelete,
             new DeleteFilesInput
             {
-                CloudAccountUid = TestCloudAccountUid,
                 FileIds = ["file-1", "file-2"]
             });
         var repository = new CloudDriveJobTestDoubles.FakeCloudDriveJobRepository(job);
@@ -87,7 +86,6 @@ public sealed class CloudDriveBatchOperationJobTests
                 CloudDriveJobType.BatchCopy,
                 new CopyFilesInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     FileIds = ["file-1", "file-2"],
                     TargetDirectoryId = "target-1"
                 },
@@ -100,7 +98,6 @@ public sealed class CloudDriveBatchOperationJobTests
                 CloudDriveJobType.BatchMove,
                 new MoveFilesInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     FileIds = ["file-1", "file-2"],
                     TargetDirectoryId = "target-1"
                 },
@@ -113,7 +110,6 @@ public sealed class CloudDriveBatchOperationJobTests
                 CloudDriveJobType.BatchDelete,
                 new DeleteFilesInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     FileIds = ["file-1", "file-2"]
                 },
                 "BatchDelete")
@@ -125,7 +121,6 @@ public sealed class CloudDriveBatchOperationJobTests
                 CloudDriveJobType.BatchRecycleBinRestore,
                 new RecycleBinOperationInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     RecycleBinItemIds = ["recycle-1", "recycle-2"]
                 },
                 "BatchRecycleBinRestore")
@@ -137,7 +132,6 @@ public sealed class CloudDriveBatchOperationJobTests
                 CloudDriveJobType.BatchRecycleBinDelete,
                 new RecycleBinOperationInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     RecycleBinItemIds = ["recycle-1", "recycle-2"]
                 },
                 "BatchRecycleBinDelete")
@@ -164,6 +158,7 @@ public sealed class CloudDriveBatchOperationJobTests
             transactionManager,
             publisher,
             new CloudDriveJobTestDoubles.RecordingJobAuditLogger(),
+            new CloudDriveJobTestDoubles.PassThroughSensitiveFieldsFilter(),
             NullLogger<CloudDriveBatchOperationJob>.Instance);
     }
 

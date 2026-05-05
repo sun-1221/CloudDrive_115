@@ -1,4 +1,6 @@
+using Application.Abstractions.CloudDrive;
 using Application.CloudDrive;
+using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
 using Application.CloudDrive.Jobs;
 using Application.Queries;
@@ -16,6 +18,7 @@ public sealed class JobQueryHandlerTests
 {
     private static readonly Guid TestUserId = Guid.Parse("88888888-8888-8888-8888-888888888888");
     private static readonly Guid OtherUserId = Guid.Parse("99999999-9999-9999-9999-999999999999");
+    private const string TestCloudAccountUid = "115001";
 
     [Fact]
     public async Task GetJobStatusQueryHandler_WhenJobBelongsToUserAndAccount_ReturnsJobDto()
@@ -28,8 +31,9 @@ public sealed class JobQueryHandlerTests
             resourceId: "dir-001",
             payloadJson: "{}");
         var repository = new FakeCloudDriveJobRepository([job]);
+        var accessor = CreateAccessor("115001");
         IQueryHandler<GetJobStatusQuery, CloudDriveJobDto> handler =
-            new GetJobStatusQueryHandler(repository, CreateEnabledConfig());
+            new GetJobStatusQueryHandler(repository, accessor, CreateEnabledConfig());
 
         // Act
         Result<CloudDriveJobDto> result = await handler.Handle(
@@ -37,7 +41,6 @@ public sealed class JobQueryHandlerTests
                 TestUserId,
                 new GetJobStatusInput
                 {
-                    CloudAccountUid = "115001",
                     JobId = job.Id
                 }),
             CancellationToken.None);
@@ -56,8 +59,9 @@ public sealed class JobQueryHandlerTests
         // Arrange
         CloudDriveJob job = CloudDriveJob.Create(TestUserId, "115001", CloudDriveJobType.Upload, payloadJson: "{}");
         var repository = new FakeCloudDriveJobRepository([job]);
+        var accessor = CreateAccessor("115002");
         IQueryHandler<GetJobStatusQuery, CloudDriveJobDto> handler =
-            new GetJobStatusQueryHandler(repository, CreateEnabledConfig());
+            new GetJobStatusQueryHandler(repository, accessor, CreateEnabledConfig());
 
         // Act
         Result<CloudDriveJobDto> result = await handler.Handle(
@@ -65,7 +69,6 @@ public sealed class JobQueryHandlerTests
                 TestUserId,
                 new GetJobStatusInput
                 {
-                    CloudAccountUid = "115002",
                     JobId = job.Id
                 }),
             CancellationToken.None);
@@ -83,8 +86,9 @@ public sealed class JobQueryHandlerTests
         CloudDriveJob second = CloudDriveJob.Create(TestUserId, "115002", CloudDriveJobType.Transcode, payloadJson: "{}");
         CloudDriveJob otherUser = CloudDriveJob.Create(OtherUserId, "115001", CloudDriveJobType.Upload, payloadJson: "{}");
         var repository = new FakeCloudDriveJobRepository([first, second, otherUser]);
+        var accessor = CreateAccessor("115001");
         IQueryHandler<GetJobListQuery, PagedResultDto<CloudDriveJobDto>> handler =
-            new GetJobListQueryHandler(repository, CreateEnabledConfig());
+            new GetJobListQueryHandler(repository, accessor, CreateEnabledConfig());
 
         // Act
         Result<PagedResultDto<CloudDriveJobDto>> result = await handler.Handle(
@@ -93,11 +97,12 @@ public sealed class JobQueryHandlerTests
                 new GetJobListInput { MaxResultCount = 20 }),
             CancellationToken.None);
 
-        // Assert
+        // Assert — accessor 固定为 115001，仅返回该账号的任务
         Assert.True(result.IsSuccess);
-        Assert.Equal(2, result.Value.TotalCount);
-        Assert.Equal(2, result.Value.Items.Count);
+        Assert.Equal(1, result.Value.TotalCount);
+        Assert.Single(result.Value.Items);
         Assert.DoesNotContain(result.Value.Items, item => item.Id == otherUser.Id);
+        Assert.DoesNotContain(result.Value.Items, item => item.Id == second.Id);
     }
 
     [Fact]
@@ -109,8 +114,9 @@ public sealed class JobQueryHandlerTests
         CloudDriveJob pending = CloudDriveJob.Create(TestUserId, "115001", CloudDriveJobType.BatchCopy, payloadJson: "{}");
         CloudDriveJob otherAccount = CloudDriveJob.Create(TestUserId, "115002", CloudDriveJobType.Upload, payloadJson: "{}");
         var repository = new FakeCloudDriveJobRepository([running, pending, otherAccount]);
+        var accessor = CreateAccessor("115001");
         IQueryHandler<GetJobListQuery, PagedResultDto<CloudDriveJobDto>> handler =
-            new GetJobListQueryHandler(repository, CreateEnabledConfig());
+            new GetJobListQueryHandler(repository, accessor, CreateEnabledConfig());
 
         // Act
         Result<PagedResultDto<CloudDriveJobDto>> result = await handler.Handle(
@@ -118,7 +124,6 @@ public sealed class JobQueryHandlerTests
                 TestUserId,
                 new GetJobListInput
                 {
-                    CloudAccountUid = "115001",
                     Status = CloudDriveJobStatus.Pending,
                     SkipCount = 0,
                     MaxResultCount = 1
@@ -131,6 +136,13 @@ public sealed class JobQueryHandlerTests
         CloudDriveJobDto item = Assert.Single(result.Value.Items);
         Assert.Equal(pending.Id, item.Id);
         Assert.Equal(CloudDriveJobStatus.Pending, item.Status);
+    }
+
+    private static CloudDriveAccountContextAccessor CreateAccessor(string cloudAccountUid)
+    {
+        var accessor = new CloudDriveAccountContextAccessor();
+        accessor.SetContext(new CloudDriveAccountContext(TestUserId, cloudAccountUid, cloudAccountUid));
+        return accessor;
     }
 
     private static IOptions<CloudDriveAppConfig> CreateEnabledConfig()

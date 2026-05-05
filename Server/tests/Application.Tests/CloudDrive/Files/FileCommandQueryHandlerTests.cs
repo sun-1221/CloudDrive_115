@@ -1,6 +1,8 @@
 using System.Text;
 
+using Application.Abstractions.CloudDrive;
 using Application.CloudDrive;
+using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
 using Application.CloudDrive.Files;
 using Application.Queries;
@@ -40,7 +42,7 @@ public sealed class FileCommandQueryHandlerTests
             SkipCount = 0,
             MaxResultCount = 50,
         };
-        var handler = new GetFileListQueryHandler(context.FileManager, CreateEnabledConfig());
+        var handler = new GetFileListQueryHandler(context.FileManager, context.Accessor, CreateEnabledConfig());
 
         // Act
         Result<PagedResultDto<CloudDriveFileDto>> result = await handler.Handle(
@@ -48,7 +50,6 @@ public sealed class FileCommandQueryHandlerTests
                 TestUserId,
                 new GetFileListInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     Offset = 0,
                     Limit = 50,
                 }),
@@ -66,17 +67,10 @@ public sealed class FileCommandQueryHandlerTests
     }
 
     [Fact]
-    public async Task GetFileDetailQueryHandler_WhenGatewayReturnsFile_ReturnsDetail()
+    public async Task GetFileDetailQueryHandler_ReturnsApiNotCollected()
     {
         // Arrange
-        TestContext context = CreateContext();
-        context.Gateway.WebApiResponse = new CloudDriveFileDetailDto
-        {
-            FileId = "file-1",
-            Name = "clip.mp4",
-            PickCode = "pick-1",
-        };
-        var handler = new GetFileDetailQueryHandler(context.FileManager, CreateEnabledConfig());
+        var handler = new GetFileDetailQueryHandler(CreateEnabledConfig());
 
         // Act
         Result<CloudDriveFileDetailDto> result = await handler.Handle(
@@ -84,17 +78,13 @@ public sealed class FileCommandQueryHandlerTests
                 TestUserId,
                 new GetFileInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     FileId = "file-1",
                 }),
             CancellationToken.None);
 
         // Assert
-        Assert.True(result.IsSuccess);
-        Assert.Equal("file-1", result.Value.FileId);
-        CloudDriveGatewayRequest request = Assert.Single(context.Gateway.WebApiRequests);
-        Assert.Equal("files/file", request.Endpoint);
-        Assert.Equal("file-1", request.Context.QueryParameters!["file_id"]);
+        Assert.True(result.IsFailure);
+        Assert.Equal("cloud_drive_api_not_collected", result.Error.Code);
     }
 
     [Fact]
@@ -114,7 +104,7 @@ public sealed class FileCommandQueryHandlerTests
                 }
             ],
         };
-        var handler = new SearchFilesQueryHandler(context.Gateway, context.RateLimiter, CreateEnabledConfig());
+        var handler = new SearchFilesQueryHandler(context.Gateway, context.RateLimiter, context.Accessor, CreateEnabledConfig());
 
         // Act
         Result<CloudDriveSearchListDto> result = await handler.Handle(
@@ -122,7 +112,6 @@ public sealed class FileCommandQueryHandlerTests
                 TestUserId,
                 new SearchFileInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     Keyword = "demo",
                     DirectoryId = "dir-1",
                     Date = "2026-01-01",
@@ -160,7 +149,6 @@ public sealed class FileCommandQueryHandlerTests
                 TestUserId,
                 new CreateFolderInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     ParentId = "0",
                     FolderName = "bad/name",
                 }),
@@ -180,7 +168,6 @@ public sealed class FileCommandQueryHandlerTests
                 TestUserId,
                 new CreateFolderInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     ParentId = "parent-1",
                     FolderName = "Photos",
                 }),
@@ -208,7 +195,6 @@ public sealed class FileCommandQueryHandlerTests
                 TestUserId,
                 new RenameFileInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     FileId = "file-1",
                     NewFileName = tooLong,
                 }),
@@ -235,6 +221,7 @@ public sealed class FileCommandQueryHandlerTests
             context.Gateway,
             context.JobOrchestrator,
             context.Cache,
+            context.Accessor,
             CreateEnabledConfig());
 
         // Act
@@ -279,6 +266,7 @@ public sealed class FileCommandQueryHandlerTests
             context.Gateway,
             context.JobOrchestrator,
             context.Cache,
+            context.Accessor,
             CreateEnabledConfig());
 
         // Act
@@ -305,6 +293,7 @@ public sealed class FileCommandQueryHandlerTests
             context.Gateway,
             context.JobOrchestrator,
             context.Cache,
+            context.Accessor,
             CreateEnabledConfig());
         UploadFileInput input = CreateUploadInput();
         input.ForceAsync = true;
@@ -330,10 +319,10 @@ public sealed class FileCommandQueryHandlerTests
         TestContext context = CreateContext();
         var handler = new MoveFilesCommandHandler(
             context.JobOrchestrator,
+            context.Accessor,
             CreateEnabledConfig());
         var input = new MoveFilesInput
         {
-            CloudAccountUid = TestCloudAccountUid,
             FileIds = ["file-1", "file-2"],
             TargetDirectoryId = "target-1",
         };
@@ -357,10 +346,10 @@ public sealed class FileCommandQueryHandlerTests
         TestContext context = CreateContext();
         var handler = new CopyFilesCommandHandler(
             context.JobOrchestrator,
+            context.Accessor,
             CreateEnabledConfig());
         var input = new CopyFilesInput
         {
-            CloudAccountUid = TestCloudAccountUid,
             FileIds = Enumerable.Range(0, CloudDriveFileHandlerSupport.DefaultAsyncBatchThreshold + 1)
                 .Select(index => $"file-{index}")
                 .ToList(),
@@ -392,7 +381,7 @@ public sealed class FileCommandQueryHandlerTests
             PageSize = 30,
             ItemSchemaStatus = "not_collected",
         };
-        var handler = new GetRecycleBinListQueryHandler(context.Gateway, CreateEnabledConfig());
+        var handler = new GetRecycleBinListQueryHandler(context.Gateway, context.Accessor, CreateEnabledConfig());
 
         // Act
         Result<CloudDriveRecycleListDto> result = await handler.Handle(
@@ -400,7 +389,6 @@ public sealed class FileCommandQueryHandlerTests
                 TestUserId,
                 new GetRecycleBinListInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     Offset = 0,
                     Limit = 30,
                 }),
@@ -420,16 +408,13 @@ public sealed class FileCommandQueryHandlerTests
     {
         // Arrange
         TestContext context = CreateContext();
-        var handler = new ClearRecycleBinCommandHandler(context.JobOrchestrator, CreateEnabledConfig());
+        var handler = new ClearRecycleBinCommandHandler(context.JobOrchestrator, context.Accessor, CreateEnabledConfig());
 
         // Act
         Result<CloudDriveOperationResultDto> result = await handler.Handle(
             new ClearRecycleBinCommand(
                 TestUserId,
-                new ClearRecycleBinInput
-                {
-                    CloudAccountUid = TestCloudAccountUid,
-                }),
+                new ClearRecycleBinInput()),
             CancellationToken.None);
 
         // Assert
@@ -449,6 +434,7 @@ public sealed class FileCommandQueryHandlerTests
             context.Gateway,
             context.Cache,
             context.RateLimiter,
+            context.Accessor,
             CreateEnabledConfig());
 
         // Act
@@ -457,7 +443,6 @@ public sealed class FileCommandQueryHandlerTests
                 TestUserId,
                 new RefreshDirectoryInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     DirectoryId = "dir-1",
                 }),
             CancellationToken.None);
@@ -481,20 +466,22 @@ public sealed class FileCommandQueryHandlerTests
             rateLimiter,
             CreateEnabledConfig(),
             logger);
+        var accessor = new CloudDriveAccountContextAccessor();
+        accessor.SetContext(new CloudDriveAccountContext(TestUserId, TestCloudAccountUid, TestCloudAccountUid));
 
         return new TestContext(
             cache,
             gateway,
             rateLimiter,
             new FakeCloudDriveJobOrchestrator(),
-            fileManager);
+            fileManager,
+            accessor);
     }
 
     private static UploadFileInput CreateUploadInput()
     {
         return new UploadFileInput
         {
-            CloudAccountUid = TestCloudAccountUid,
             DirectoryId = "dir-1",
             FileName = "demo.txt",
             FileSize = 4,
@@ -522,5 +509,6 @@ public sealed class FileCommandQueryHandlerTests
         RecordingCloudDriveOpenApiGateway Gateway,
         FakeCloudDriveRateLimiter RateLimiter,
         FakeCloudDriveJobOrchestrator JobOrchestrator,
-        CloudDriveFileManager FileManager);
+        CloudDriveFileManager FileManager,
+        CloudDriveAccountContextAccessor Accessor);
 }

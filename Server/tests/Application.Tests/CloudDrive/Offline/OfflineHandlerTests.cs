@@ -1,4 +1,6 @@
+using Application.Abstractions.CloudDrive;
 using Application.CloudDrive;
+using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
 using Application.CloudDrive.Offline;
 using Application.Tests.Support;
@@ -23,7 +25,8 @@ public sealed class OfflineHandlerTests
         gateway.RespondOffline("task_lists", """
             {"state":true,"tasks":[{"info_hash":"hash-1","name":"demo","size":"100","status":2,"percentDone":"100","file_id":"file-1","wp_path_id":"0","def2":"HD","play_long":60}],"count":"1","page_size":"10"}
             """);
-        var handler = new GetOfflineTaskListQueryHandler(gateway, CreateEnabledConfig());
+        var accessor = CreateAccessor();
+        var handler = new GetOfflineTaskListQueryHandler(gateway, accessor, CreateEnabledConfig());
 
         // Act
         Result<CloudDriveOfflineTaskListDto> result = await handler.Handle(
@@ -31,7 +34,6 @@ public sealed class OfflineHandlerTests
                 TestUserId,
                 new GetOfflineTaskListInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     Page = 1,
                 }),
             CancellationToken.None);
@@ -53,13 +55,12 @@ public sealed class OfflineHandlerTests
         var gateway = new RecordingCloudDriveOpenApiGateway();
         gateway.RespondOffline("get_quota_package_info", """{"state":true,"package":{"name":"basic"},"count":10,"surplus":8,"max_size":1024,"used":2}""");
         gateway.RespondOffline("task_count", """{"state":true,"total_count":5,"failed_count":1,"finished_count":3,"downloading_count":1}""");
-        var handler = new GetOfflineQuotaQueryHandler(gateway, CreateEnabledConfig());
+        var accessor = CreateAccessor();
+        var handler = new GetOfflineQuotaQueryHandler(gateway, accessor, CreateEnabledConfig());
 
         // Act
         Result<CloudDriveOfflineQuotaDto> result = await handler.Handle(
-            new GetOfflineQuotaQuery(
-                TestUserId,
-                new CloudDriveAccountScopedInput { CloudAccountUid = TestCloudAccountUid }),
+            new GetOfflineQuotaQuery(TestUserId),
             CancellationToken.None);
 
         // Assert
@@ -74,13 +75,12 @@ public sealed class OfflineHandlerTests
         // Arrange
         var gateway = new RecordingCloudDriveOpenApiGateway();
         gateway.RespondOffline("task_count", """{"state":true,"total_count":5,"failed_count":1,"finished_count":3,"downloading_count":1}""");
-        var handler = new GetOfflineStatsQueryHandler(gateway, CreateEnabledConfig());
+        var accessor = CreateAccessor();
+        var handler = new GetOfflineStatsQueryHandler(gateway, accessor, CreateEnabledConfig());
 
         // Act
         Result<CloudDriveOfflineStatsDto> result = await handler.Handle(
-            new GetOfflineStatsQuery(
-                TestUserId,
-                new CloudDriveAccountScopedInput { CloudAccountUid = TestCloudAccountUid }),
+            new GetOfflineStatsQuery(TestUserId),
             CancellationToken.None);
 
         // Assert
@@ -103,7 +103,6 @@ public sealed class OfflineHandlerTests
                 TestUserId,
                 new AddOfflineTaskInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     Urls = ["https://example.test/file.iso"],
                 }),
             CancellationToken.None);
@@ -127,7 +126,6 @@ public sealed class OfflineHandlerTests
                 TestUserId,
                 new CancelOfflineTaskInput
                 {
-                    CloudAccountUid = TestCloudAccountUid,
                     InfoHash = "hash-1",
                 }),
             CancellationToken.None);
@@ -136,6 +134,13 @@ public sealed class OfflineHandlerTests
         Assert.True(result.IsFailure);
         Assert.Equal("cloud_drive_api_not_collected", result.Error.Code);
         Assert.Empty(gateway.OfflineRequests);
+    }
+
+    private static CloudDriveAccountContextAccessor CreateAccessor()
+    {
+        var accessor = new CloudDriveAccountContextAccessor();
+        accessor.SetContext(new CloudDriveAccountContext(TestUserId, TestCloudAccountUid, TestCloudAccountUid));
+        return accessor;
     }
 
     private static IOptions<CloudDriveAppConfig> CreateEnabledConfig()

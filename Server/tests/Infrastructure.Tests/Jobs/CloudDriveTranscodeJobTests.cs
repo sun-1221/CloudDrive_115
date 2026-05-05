@@ -137,7 +137,6 @@ public sealed class CloudDriveTranscodeJobTests
     {
         return new SubmitTranscodeInput
         {
-            CloudAccountUid = TestCloudAccountUid,
             FileId = "file-001",
             PickCode = "pick-001",
             Op = "vip_push"
@@ -149,7 +148,7 @@ public sealed class CloudDriveTranscodeJobTests
         string payloadJson = JsonSerializer.Serialize(input, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         return CloudDriveJob.Create(
             TestUserId,
-            input.CloudAccountUid,
+            TestCloudAccountUid,
             CloudDriveJobType.Transcode,
             input.FileId ?? input.PickCode,
             payloadJson);
@@ -167,6 +166,7 @@ public sealed class CloudDriveTranscodeJobTests
             transactionManager,
             publisher,
             new CloudDriveJobTestDoubles.RecordingJobAuditLogger(),
+            new CloudDriveJobTestDoubles.PassThroughSensitiveFieldsFilter(),
             NullLogger<CloudDriveTranscodeJob>.Instance);
     }
 

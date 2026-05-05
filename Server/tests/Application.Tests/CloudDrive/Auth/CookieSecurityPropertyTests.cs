@@ -71,6 +71,6 @@ public sealed class CookieSecurityPropertyTests
         // Assert
         Assert.Contains("UID=myuid", header);
         Assert.Contains("CID=mycid", header);
-        Assert.Contains("SEID=myussid", header);
+        Assert.Contains("USSID=myussid", header);
     }
 }

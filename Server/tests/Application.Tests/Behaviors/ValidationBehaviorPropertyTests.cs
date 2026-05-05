@@ -1,3 +1,5 @@
+using System;
+
 using Application.Behaviors;
 
 using FluentValidation;
@@ -33,7 +35,7 @@ public sealed class ValidationBehaviorPropertyTests
             new AlwaysFailValidator(errorMessage1),
             new AlwaysFailValidator(errorMessage2),
         ];
-        var behavior = new ValidationBehavior<TestRequest, TestResponse>(validators);
+        var behavior = new ValidationBehavior<TestRequest, TestResponse>(validators, new NullServiceProvider());
         var request = new TestRequest("x");
 
         // Act
@@ -63,7 +65,7 @@ public sealed class ValidationBehaviorPropertyTests
     {
         // Arrange
         bool handlerWasCalled = false;
-        var behavior = new ValidationBehavior<TestRequest, TestResponse>([]);
+        var behavior = new ValidationBehavior<TestRequest, TestResponse>([], new NullServiceProvider());
         var request = new TestRequest($"req-{payload}");
         var expected = new TestResponse();
 
@@ -86,7 +88,7 @@ public sealed class ValidationBehaviorPropertyTests
         // Arrange
         bool handlerWasCalled = false;
         var behavior = new ValidationBehavior<TestRequest, TestResponse>(
-            [new AlwaysPassValidator()]);
+            [new AlwaysPassValidator()], new NullServiceProvider());
         var request = new TestRequest("ok");
         var expected = new TestResponse();
 
@@ -123,5 +125,10 @@ public sealed class ValidationBehaviorPropertyTests
         {
             RuleFor(r => r.Value).Must(_ => true);
         }
+    }
+
+    private sealed class NullServiceProvider : IServiceProvider
+    {
+        public object? GetService(Type serviceType) => null;
     }
 }
