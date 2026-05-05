@@ -3,7 +3,7 @@ namespace Application.CloudDrive.Dtos;
 /// <summary>
 /// 获取回收站列表输入。
 /// </summary>
-public class GetRecycleBinListInput : CloudDriveAccountScopedInput
+public class GetRecycleBinListInput
 {
     /// <summary>
     /// 获取或设置跳过数量。

@@ -14,7 +14,6 @@ public sealed class GetOfflineTaskListInputValidator : AbstractValidator<GetOffl
     /// </summary>
     public GetOfflineTaskListInputValidator()
     {
-        this.RequireCloudAccount();
         RuleFor(input => input.Page).GreaterThanOrEqualTo(1);
         RuleFor(input => input.Stat).GreaterThanOrEqualTo(0);
     }

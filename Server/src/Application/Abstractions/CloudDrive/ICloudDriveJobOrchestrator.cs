@@ -14,6 +14,7 @@ public interface ICloudDriveJobOrchestrator
     /// </summary>
     Task<Guid> EnqueueLargeUploadAsync(
         Guid userId,
+        string cloudAccountUid,
         UploadFileInput input,
         CancellationToken cancellationToken = default);
 
@@ -40,6 +41,7 @@ public interface ICloudDriveJobOrchestrator
     /// </summary>
     Task<Guid> EnqueueVideoTranscodeAsync(
         Guid userId,
+        string cloudAccountUid,
         SubmitTranscodeInput input,
         CancellationToken cancellationToken = default);
 }

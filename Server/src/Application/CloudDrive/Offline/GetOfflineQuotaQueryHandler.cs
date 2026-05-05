@@ -14,6 +14,7 @@ namespace Application.CloudDrive.Offline;
 
 internal sealed class GetOfflineQuotaQueryHandler(
     ICloudDriveOpenApiGateway openApiGateway,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : IQueryHandler<GetOfflineQuotaQuery, CloudDriveOfflineQuotaDto>
 {
@@ -23,15 +24,11 @@ internal sealed class GetOfflineQuotaQueryHandler(
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Result.Failure<CloudDriveOfflineQuotaDto>(
-                CloudDriveFileHandlerSupport.CloudAccountUidRequired);
-        }
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
 
         JsonElement quota = await openApiGateway.SendOfflineApiRequestAsync<JsonElement>(
             request.UserId,
-            request.Input.CloudAccountUid,
+            cloudAccountUid,
             HttpMethod.Get,
             "get_quota_package_info",
             CloudDriveOfflineSupport.CreateQuotaContext(),

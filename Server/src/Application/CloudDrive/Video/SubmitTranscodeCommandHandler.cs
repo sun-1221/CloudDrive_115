@@ -13,6 +13,7 @@ namespace Application.CloudDrive.Video;
 internal sealed class SubmitTranscodeCommandHandler(
     CloudDriveFileManager fileManager,
     ICloudDriveJobOrchestrator jobOrchestrator,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : ICommandHandler<SubmitTranscodeCommand, CloudDriveVideoTranscodeDto>
 {
@@ -21,12 +22,6 @@ internal sealed class SubmitTranscodeCommandHandler(
         CancellationToken cancellationToken)
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
-
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Result.Failure<CloudDriveVideoTranscodeDto>(
-                CloudDriveFileHandlerSupport.CloudAccountUidRequired);
-        }
 
         Result<SubmitTranscodeInput> inputResult = await NormalizeInputAsync(
             request.UserId,
@@ -40,6 +35,7 @@ internal sealed class SubmitTranscodeCommandHandler(
 
         Guid jobId = await jobOrchestrator.EnqueueVideoTranscodeAsync(
             request.UserId,
+            accountContextAccessor.CloudAccountUid,
             inputResult.Value,
             cancellationToken);
 
@@ -58,13 +54,13 @@ internal sealed class SubmitTranscodeCommandHandler(
     {
         if (!string.IsNullOrWhiteSpace(input.FileId))
         {
+            string cloudAccountUid = accountContextAccessor.CloudAccountUid;
             CloudDriveFileDetailDto? file = await fileManager.GetFileDetailAsync<CloudDriveFileDetailDto?>(
                 userId,
-                input.CloudAccountUid,
+                cloudAccountUid,
                 input.FileId,
                 CloudDriveFileHandlerSupport.CreateFileDetailContext(new GetFileInput
                 {
-                    CloudAccountUid = input.CloudAccountUid,
                     FileId = input.FileId,
                 }),
                 cancellationToken);

@@ -1,7 +1,6 @@
 using System.Reflection;
 
 using Application.Abstractions.CloudDrive;
-using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
 
 using Domain.Results;
@@ -11,17 +10,22 @@ using MediatR;
 namespace Application.Behaviors;
 
 /// <summary>
-/// 在 FluentValidation 前为公开 115 请求补全当前唯一账号上下文。
+/// 在 FluentValidation 前为公开 115 请求解析唯一账号上下文并写入
+/// <see cref="ICloudDriveAccountContextAccessor"/>，Handler 通过 Accessor 获取账号 UID。
 /// </summary>
 public sealed class CloudDriveAccountContextBehavior<TRequest, TResponse>
     : IPipelineBehavior<TRequest, TResponse>
     where TRequest : notnull
 {
     private readonly ICloudDriveAccountContextResolver _resolver;
+    private readonly ICloudDriveAccountContextAccessor _accessor;
 
-    public CloudDriveAccountContextBehavior(ICloudDriveAccountContextResolver resolver)
+    public CloudDriveAccountContextBehavior(
+        ICloudDriveAccountContextResolver resolver,
+        ICloudDriveAccountContextAccessor accessor)
     {
         _resolver = resolver;
+        _accessor = accessor;
     }
 
     /// <inheritdoc />
@@ -32,54 +36,21 @@ public sealed class CloudDriveAccountContextBehavior<TRequest, TResponse>
     {
         ArgumentNullException.ThrowIfNull(next);
 
-        CloudDriveAccountScopedInput? accountScopedInput = GetAccountScopedInput(request);
-        if (accountScopedInput is null
-            || !string.IsNullOrWhiteSpace(accountScopedInput.CloudAccountUid)
-            || IsExplicitAccountOperation(request))
+        if (request is not ICloudDriveAccountScopedRequest scopedRequest)
         {
             return await next(cancellationToken);
         }
 
-        Guid userId = GetUserId(request);
-        Result<CloudDriveAccountContext> contextResult = await _resolver.ResolveAsync(userId, cancellationToken);
+        Result<CloudDriveAccountContext> contextResult =
+            await _resolver.ResolveAsync(scopedRequest.UserId, cancellationToken);
+
         if (contextResult.IsFailure)
         {
             return CreateFailureResponse(contextResult.Error);
         }
 
-        accountScopedInput.CloudAccountUid = contextResult.Value.CloudAccountUid;
+        _accessor.SetContext(contextResult.Value);
         return await next(cancellationToken);
-    }
-
-    private static CloudDriveAccountScopedInput? GetAccountScopedInput(TRequest request)
-    {
-        PropertyInfo? inputProperty = typeof(TRequest).GetProperty("Input");
-        object? input = inputProperty?.GetValue(request);
-
-        if (input is CloudDriveAccountScopedInput accountScopedInput)
-        {
-            return accountScopedInput;
-        }
-
-        if (input is GetJobListInput jobListInput)
-        {
-            return new JobListAccountScopedInput(jobListInput);
-        }
-
-        return null;
-    }
-
-    private static bool IsExplicitAccountOperation(TRequest request)
-    {
-        return request is UpsertCookieSessionCommand
-            or EnterCookieCooldownCommand
-            or RevokeCookieSessionCommand;
-    }
-
-    private static Guid GetUserId(TRequest request)
-    {
-        PropertyInfo? userIdProperty = typeof(TRequest).GetProperty("UserId");
-        return userIdProperty?.GetValue(request) is Guid userId ? userId : Guid.Empty;
     }
 
     private static TResponse CreateFailureResponse(Error error)
@@ -105,14 +76,5 @@ public sealed class CloudDriveAccountContextBehavior<TRequest, TResponse>
 
         throw new InvalidOperationException(
             $"CloudDrive account context failure cannot be converted to response type {typeof(TResponse).FullName}.");
-    }
-
-    private sealed class JobListAccountScopedInput(GetJobListInput input) : CloudDriveAccountScopedInput
-    {
-        public override string CloudAccountUid
-        {
-            get => input.CloudAccountUid ?? string.Empty;
-            set => input.CloudAccountUid = value;
-        }
     }
 }

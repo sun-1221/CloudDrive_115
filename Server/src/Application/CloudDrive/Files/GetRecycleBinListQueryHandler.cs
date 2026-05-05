@@ -11,6 +11,7 @@ namespace Application.CloudDrive.Files;
 
 internal sealed class GetRecycleBinListQueryHandler(
     ICloudDriveOpenApiGateway openApiGateway,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : IQueryHandler<GetRecycleBinListQuery, CloudDriveRecycleListDto>
 {
@@ -20,16 +21,12 @@ internal sealed class GetRecycleBinListQueryHandler(
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Result.Failure<CloudDriveRecycleListDto>(
-                CloudDriveFileHandlerSupport.CloudAccountUidRequired);
-        }
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
 
         CloudDriveRecycleListDto result =
             await openApiGateway.SendWebApiRequestAsync<CloudDriveRecycleListDto>(
                 request.UserId,
-                request.Input.CloudAccountUid,
+                cloudAccountUid,
                 HttpMethod.Get,
                 "rb",
                 CloudDriveFileHandlerSupport.CreateRecycleBinListContext(request.Input),

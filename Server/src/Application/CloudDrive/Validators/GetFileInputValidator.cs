@@ -14,7 +14,6 @@ public sealed class GetFileInputValidator : AbstractValidator<GetFileInput>
     /// </summary>
     public GetFileInputValidator()
     {
-        this.RequireCloudAccount();
         RuleFor(input => input)
             .Must(input => !string.IsNullOrWhiteSpace(input.FileId) || !string.IsNullOrWhiteSpace(input.Path))
             .WithMessage("FileId 与 Path 必须至少提供一项。");

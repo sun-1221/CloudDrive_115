@@ -11,6 +11,7 @@ namespace Application.CloudDrive.Files;
 
 internal sealed class ClearRecycleBinCommandHandler(
     ICloudDriveJobOrchestrator jobOrchestrator,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : ICommandHandler<ClearRecycleBinCommand, CloudDriveOperationResultDto>
 {
@@ -20,15 +21,11 @@ internal sealed class ClearRecycleBinCommandHandler(
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Result.Failure<CloudDriveOperationResultDto>(
-                CloudDriveFileHandlerSupport.CloudAccountUidRequired);
-        }
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
 
         Guid jobId = await jobOrchestrator.EnqueueClearRecycleBinAsync(
             request.UserId,
-            request.Input.CloudAccountUid,
+            cloudAccountUid,
             cancellationToken);
 
         return Result.Success(CloudDriveFileHandlerSupport.CreateAcceptedResult(jobId, "清空回收站任务已受理。"));

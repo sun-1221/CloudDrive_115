@@ -14,7 +14,6 @@ public sealed class RenameFileInputValidator : AbstractValidator<RenameFileInput
     /// </summary>
     public RenameFileInputValidator()
     {
-        this.RequireCloudAccount();
         RuleFor(input => input.FileId).NotEmptyText("FileId 不能为空。");
         RuleFor(input => input.NewFileName)
             .Must(CloudDriveValidationRules.IsValidRenameName)

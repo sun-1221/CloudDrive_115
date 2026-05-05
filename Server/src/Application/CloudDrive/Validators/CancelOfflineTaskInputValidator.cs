@@ -14,7 +14,6 @@ public sealed class CancelOfflineTaskInputValidator : AbstractValidator<CancelOf
     /// </summary>
     public CancelOfflineTaskInputValidator()
     {
-        this.RequireCloudAccount();
         RuleFor(input => input.InfoHash).NotEmptyText("InfoHash 不能为空。");
     }
 }

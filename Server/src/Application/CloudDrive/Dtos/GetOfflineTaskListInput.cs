@@ -3,7 +3,7 @@ namespace Application.CloudDrive.Dtos;
 /// <summary>
 /// 获取云下载任务列表输入。
 /// </summary>
-public class GetOfflineTaskListInput : CloudDriveAccountScopedInput
+public class GetOfflineTaskListInput
 {
     /// <summary>
     /// 获取或设置页码。

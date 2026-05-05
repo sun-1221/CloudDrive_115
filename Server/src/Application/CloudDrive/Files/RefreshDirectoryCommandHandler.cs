@@ -13,6 +13,7 @@ internal sealed class RefreshDirectoryCommandHandler(
     ICloudDriveOpenApiGateway openApiGateway,
     ICloudDriveMetadataCache metadataCache,
     ICloudDriveRateLimiter rateLimiter,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : ICommandHandler<RefreshDirectoryCommand>
 {
@@ -22,21 +23,16 @@ internal sealed class RefreshDirectoryCommandHandler(
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Result.Failure(CloudDriveFileHandlerSupport.CloudAccountUidRequired);
-        }
-
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
         string directoryId = CloudDriveFileHandlerSupport.NormalizeDirectoryId(request.Input.DirectoryId);
         await metadataCache.InvalidateDirectoryAsync(
             request.UserId,
-            request.Input.CloudAccountUid,
+            cloudAccountUid,
             directoryId,
             cancellationToken);
 
         var listInput = new GetFileListInput
         {
-            CloudAccountUid = request.Input.CloudAccountUid,
             DirectoryId = directoryId,
             Offset = 0,
             Limit = 1,
@@ -45,13 +41,13 @@ internal sealed class RefreshDirectoryCommandHandler(
 
         using IDisposable permit = await rateLimiter.AcquireAsync(
             request.UserId,
-            request.Input.CloudAccountUid,
+            cloudAccountUid,
             context.Category,
             cancellationToken);
 
         await openApiGateway.SendWebApiRequestAsync<PagedResultDto<CloudDriveFileDto>>(
             request.UserId,
-            request.Input.CloudAccountUid,
+            cloudAccountUid,
             HttpMethod.Get,
             "files",
             context,

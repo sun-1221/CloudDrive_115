@@ -14,6 +14,5 @@ public sealed class RefreshDirectoryInputValidator : AbstractValidator<RefreshDi
     /// </summary>
     public RefreshDirectoryInputValidator()
     {
-        this.RequireCloudAccount();
     }
 }

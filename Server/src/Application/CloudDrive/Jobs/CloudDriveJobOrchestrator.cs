@@ -18,6 +18,7 @@ public sealed class CloudDriveJobOrchestrator(
     ICloudDriveJobRepository jobRepository,
     ICloudDriveJobScheduler jobScheduler,
     ICloudDriveJobAuditLogger auditLogger,
+    ICloudDriveSensitiveFieldsFilter sensitiveFieldsFilter,
     ILogger<CloudDriveJobOrchestrator> logger) : ICloudDriveJobOrchestrator
 {
     private static readonly JsonSerializerOptions PayloadJsonOptions = new(JsonSerializerDefaults.Web);
@@ -25,16 +26,17 @@ public sealed class CloudDriveJobOrchestrator(
     /// <inheritdoc />
     public async Task<Guid> EnqueueLargeUploadAsync(
         Guid userId,
+        string cloudAccountUid,
         UploadFileInput input,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(input);
         EnsureValidUserId(userId);
-        EnsureValidCloudAccountUid(input.CloudAccountUid);
+        EnsureValidCloudAccountUid(cloudAccountUid);
 
         return await EnqueueAsync(
             userId,
-            input.CloudAccountUid,
+            cloudAccountUid,
             CloudDriveJobType.Upload,
             input,
             input.DirectoryId,
@@ -72,7 +74,7 @@ public sealed class CloudDriveJobOrchestrator(
         EnsureValidUserId(userId);
         EnsureValidCloudAccountUid(cloudAccountUid);
 
-        var payload = new ClearRecycleBinInput { CloudAccountUid = cloudAccountUid };
+        var payload = new ClearRecycleBinInput();
 
         return await EnqueueAsync(
             userId,
@@ -86,12 +88,13 @@ public sealed class CloudDriveJobOrchestrator(
     /// <inheritdoc />
     public async Task<Guid> EnqueueVideoTranscodeAsync(
         Guid userId,
+        string cloudAccountUid,
         SubmitTranscodeInput input,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(input);
         EnsureValidUserId(userId);
-        EnsureValidCloudAccountUid(input.CloudAccountUid);
+        EnsureValidCloudAccountUid(cloudAccountUid);
 
         string? resourceId = string.IsNullOrWhiteSpace(input.FileId)
             ? input.PickCode
@@ -99,7 +102,7 @@ public sealed class CloudDriveJobOrchestrator(
 
         return await EnqueueAsync(
             userId,
-            input.CloudAccountUid,
+            cloudAccountUid,
             CloudDriveJobType.Transcode,
             input,
             resourceId,
@@ -129,7 +132,7 @@ public sealed class CloudDriveJobOrchestrator(
         logger.LogInformation(
             "已创建 115 网盘后台任务 UserId={UserId}, CloudAccountUid={CloudAccountUid}, JobId={JobId}, JobType={JobType}",
             userId,
-            cloudAccountUid,
+            sensitiveFieldsFilter.Redact(cloudAccountUid),
             job.Id,
             job.JobType);
 

@@ -25,4 +25,9 @@ public class PagedResultDto<T>
     /// 获取或设置最大返回数量。
     /// </summary>
     public int MaxResultCount { get; set; }
+
+    /// <summary>
+    /// 获取或设置面包屑路径（仅文件列表响应提供）。
+    /// </summary>
+    public IReadOnlyList<CloudDrivePathNodeDto>? Paths { get; set; }
 }

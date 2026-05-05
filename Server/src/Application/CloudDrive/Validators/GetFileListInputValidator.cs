@@ -18,7 +18,6 @@ public sealed class GetFileListInputValidator : AbstractValidator<GetFileListInp
     {
         _config = configOptions.Value;
 
-        this.RequireCloudAccount();
         RuleFor(input => input.Offset).GreaterThanOrEqualTo(0);
         RuleFor(input => input.Limit)
             .InclusiveBetween(1, _config.MaxPageSize)

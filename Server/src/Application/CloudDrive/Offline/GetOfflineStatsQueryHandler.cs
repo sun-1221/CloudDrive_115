@@ -14,6 +14,7 @@ namespace Application.CloudDrive.Offline;
 
 internal sealed class GetOfflineStatsQueryHandler(
     ICloudDriveOpenApiGateway openApiGateway,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : IQueryHandler<GetOfflineStatsQuery, CloudDriveOfflineStatsDto>
 {
@@ -23,15 +24,11 @@ internal sealed class GetOfflineStatsQueryHandler(
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Result.Failure<CloudDriveOfflineStatsDto>(
-                CloudDriveFileHandlerSupport.CloudAccountUidRequired);
-        }
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
 
         JsonElement stats = await openApiGateway.SendOfflineApiRequestAsync<JsonElement>(
             request.UserId,
-            request.Input.CloudAccountUid,
+            cloudAccountUid,
             HttpMethod.Post,
             "task_count",
             CloudDriveOfflineSupport.CreateStatsContext(),

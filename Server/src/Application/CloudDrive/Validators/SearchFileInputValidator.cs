@@ -18,7 +18,6 @@ public sealed class SearchFileInputValidator : AbstractValidator<SearchFileInput
     {
         _config = configOptions.Value;
 
-        this.RequireCloudAccount();
         RuleFor(input => input.Keyword).NotEmptyText("搜索关键字不能为空。");
         RuleFor(input => input.Offset).GreaterThanOrEqualTo(0);
         RuleFor(input => input.Limit)

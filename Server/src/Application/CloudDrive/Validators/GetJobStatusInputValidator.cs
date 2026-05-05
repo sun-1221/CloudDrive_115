@@ -14,7 +14,6 @@ public sealed class GetJobStatusInputValidator : AbstractValidator<GetJobStatusI
     /// </summary>
     public GetJobStatusInputValidator()
     {
-        this.RequireCloudAccount();
         RuleFor(input => input.JobId).NotEmpty();
     }
 }

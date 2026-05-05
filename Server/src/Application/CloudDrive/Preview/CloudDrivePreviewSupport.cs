@@ -42,14 +42,13 @@ internal static class CloudDrivePreviewSupport
         "cloud_drive_document_preview_unsupported",
         "当前文件类型不支持文档预览。");
 
-    public static Error FileNotFound(string fileId) => CloudDriveFileHandlerSupport.FileNotFound(fileId);
+    public static Error FileNotFound(string pickCode) => CloudDriveFileHandlerSupport.FileNotFound(pickCode);
 
     public static CloudDriveApiContext CreateFileDetailContext(GetPreviewInput input)
     {
         return CloudDriveFileHandlerSupport.CreateFileDetailContext(new GetFileInput
         {
-            CloudAccountUid = input.CloudAccountUid,
-            FileId = input.FileId,
+            FileId = input.PickCode,
         });
     }
 
@@ -59,7 +58,6 @@ internal static class CloudDrivePreviewSupport
 
         return CloudDriveFileHandlerSupport.CreateDownloadContext(new GetDownloadUrlInput
         {
-            CloudAccountUid = string.Empty,
             PickCode = pickCode,
         });
     }

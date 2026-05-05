@@ -19,12 +19,6 @@ internal sealed class CreateFolderCommandHandler(
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Task.FromResult(Result.Failure<CloudDriveFolderDto>(
-                CloudDriveFileHandlerSupport.CloudAccountUidRequired));
-        }
-
         CloudDriveFileNameValidator.ValidateNewFolderName(request.Input.FolderName);
 
         return Task.FromResult(Result.Failure<CloudDriveFolderDto>(

@@ -19,12 +19,6 @@ internal sealed class CancelOfflineTaskCommandHandler(
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Task.FromResult(Result.Failure<CloudDriveOperationResultDto>(
-                CloudDriveFileHandlerSupport.CloudAccountUidRequired));
-        }
-
         return Task.FromResult(Result.Failure<CloudDriveOperationResultDto>(
             CloudDriveFileHandlerSupport.ApiNotCollected("云下载取消任务")));
     }

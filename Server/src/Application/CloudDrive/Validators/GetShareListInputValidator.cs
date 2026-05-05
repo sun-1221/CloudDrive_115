@@ -14,7 +14,6 @@ public sealed class GetShareListInputValidator : AbstractValidator<GetShareListI
     /// </summary>
     public GetShareListInputValidator()
     {
-        this.RequireCloudAccount();
         RuleFor(input => input.Offset).GreaterThanOrEqualTo(0);
         RuleFor(input => input.Limit).InclusiveBetween(1, CloudDriveValidationRules.MaxDefaultListLimit);
     }

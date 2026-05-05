@@ -15,6 +15,7 @@ namespace Application.CloudDrive.Video;
 internal sealed class GetVideoPlayUrlCommandHandler(
     CloudDriveFileManager fileManager,
     ICloudDriveOpenApiGateway openApiGateway,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : ICommandHandler<GetVideoPlayUrlCommand, CloudDriveVideoPlayDto>
 {
@@ -24,11 +25,7 @@ internal sealed class GetVideoPlayUrlCommandHandler(
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Result.Failure<CloudDriveVideoPlayDto>(
-                CloudDriveFileHandlerSupport.CloudAccountUidRequired);
-        }
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
 
         Result<string> pickCodeResult = await ResolvePickCodeAsync(
             request.UserId,
@@ -42,7 +39,7 @@ internal sealed class GetVideoPlayUrlCommandHandler(
 
         JsonElement response = await openApiGateway.SendWebApiRequestAsync<JsonElement>(
             request.UserId,
-            request.Input.CloudAccountUid,
+            cloudAccountUid,
             HttpMethod.Get,
             "files/video",
             CloudDriveVideoSupport.CreateVideoPlayContext(pickCodeResult.Value, request.Input.Definition),
@@ -57,15 +54,15 @@ internal sealed class GetVideoPlayUrlCommandHandler(
         GetVideoPlayInput input,
         CancellationToken cancellationToken)
     {
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
         if (!string.IsNullOrWhiteSpace(input.FileId))
         {
             CloudDriveFileDetailDto? file = await fileManager.GetFileDetailAsync<CloudDriveFileDetailDto?>(
                 userId,
-                input.CloudAccountUid,
+                cloudAccountUid,
                 input.FileId,
                 CloudDriveFileHandlerSupport.CreateFileDetailContext(new GetFileInput
                 {
-                    CloudAccountUid = input.CloudAccountUid,
                     FileId = input.FileId,
                 }),
                 cancellationToken);

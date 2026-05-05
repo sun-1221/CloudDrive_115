@@ -3,7 +3,7 @@ namespace Application.CloudDrive.Dtos;
 /// <summary>
 /// 提交视频转码输入。
 /// </summary>
-public class SubmitTranscodeInput : CloudDriveAccountScopedInput
+public class SubmitTranscodeInput
 {
     /// <summary>
     /// 获取或设置文件 ID。

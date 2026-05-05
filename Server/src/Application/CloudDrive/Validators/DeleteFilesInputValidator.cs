@@ -14,7 +14,6 @@ public sealed class DeleteFilesInputValidator : AbstractValidator<DeleteFilesInp
     /// </summary>
     public DeleteFilesInputValidator()
     {
-        this.RequireCloudAccount();
         this.RequireNonEmptyItems(input => input.FileIds, "FileIds");
     }
 }

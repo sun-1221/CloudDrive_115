@@ -14,7 +14,6 @@ public sealed class MoveFilesInputValidator : AbstractValidator<MoveFilesInput>
     /// </summary>
     public MoveFilesInputValidator()
     {
-        this.RequireCloudAccount();
         this.RequireNonEmptyItems(input => input.FileIds, "FileIds");
         RuleFor(input => input.TargetDirectoryId).NotEmptyText("目标目录 ID 不能为空。");
     }

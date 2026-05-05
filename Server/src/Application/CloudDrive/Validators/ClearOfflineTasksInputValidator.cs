@@ -14,7 +14,6 @@ public sealed class ClearOfflineTasksInputValidator : AbstractValidator<ClearOff
     /// </summary>
     public ClearOfflineTasksInputValidator()
     {
-        this.RequireCloudAccount();
         RuleFor(input => input.Stat).GreaterThanOrEqualTo(0).When(input => input.Stat.HasValue);
     }
 }

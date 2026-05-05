@@ -14,7 +14,6 @@ public sealed class GetPreviewInputValidator : AbstractValidator<GetPreviewInput
     /// </summary>
     public GetPreviewInputValidator()
     {
-        this.RequireCloudAccount();
-        RuleFor(input => input.FileId).NotEmptyText("FileId 不能为空。");
+        RuleFor(input => input.PickCode).NotEmptyText("PickCode 不能为空。");
     }
 }

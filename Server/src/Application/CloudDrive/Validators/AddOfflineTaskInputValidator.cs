@@ -14,7 +14,6 @@ public sealed class AddOfflineTaskInputValidator : AbstractValidator<AddOfflineT
     /// </summary>
     public AddOfflineTaskInputValidator()
     {
-        this.RequireCloudAccount();
         RuleFor(input => input.Urls)
             .NotNull()
             .Must(urls => urls.Count > 0)

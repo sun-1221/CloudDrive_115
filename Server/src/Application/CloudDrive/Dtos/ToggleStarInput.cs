@@ -3,7 +3,7 @@ namespace Application.CloudDrive.Dtos;
 /// <summary>
 /// 切换文件星标输入。
 /// </summary>
-public class ToggleStarInput : CloudDriveAccountScopedInput
+public class ToggleStarInput
 {
     /// <summary>
     /// 获取或设置文件或目录 ID。

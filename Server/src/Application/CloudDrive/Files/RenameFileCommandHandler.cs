@@ -19,12 +19,6 @@ internal sealed class RenameFileCommandHandler(
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Task.FromResult(Result.Failure<CloudDriveFileDetailDto>(
-                CloudDriveFileHandlerSupport.CloudAccountUidRequired));
-        }
-
         CloudDriveFileNameValidator.ValidateRenameFileName(request.Input.NewFileName);
 
         return Task.FromResult(Result.Failure<CloudDriveFileDetailDto>(

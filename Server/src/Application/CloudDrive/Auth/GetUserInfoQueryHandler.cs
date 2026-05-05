@@ -1,3 +1,4 @@
+using Application.Abstractions.CloudDrive;
 using Application.CloudDrive.Dtos;
 using Application.Queries;
 
@@ -12,6 +13,7 @@ namespace Application.CloudDrive.Auth;
 internal sealed class GetUserInfoQueryHandler(
     ICookieSessionRepository cookieSessionRepository,
     UserAggregationService userAggregationService,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : IQueryHandler<GetUserInfoQuery, CloudDriveUserInfoDto>
 {
@@ -21,16 +23,11 @@ internal sealed class GetUserInfoQueryHandler(
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Result.Failure<CloudDriveUserInfoDto>(new Error(
-                "cloud_drive_cloud_account_uid_required",
-                "CloudAccountUid 不能为空，请指定要查询的 115 账号。"));
-        }
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
 
         Domain.Entities.CookieSession? session = await cookieSessionRepository.GetByAccountAsync(
             request.UserId,
-            request.Input.CloudAccountUid,
+            cloudAccountUid,
             cancellationToken);
 
         if (session is null || session.Status != CookieSessionStatus.Active)
@@ -42,7 +39,7 @@ internal sealed class GetUserInfoQueryHandler(
 
         CloudDriveUserInfoDto dto = await userAggregationService.AggregateUserInfoAsync(
             request.UserId,
-            request.Input.CloudAccountUid,
+            cloudAccountUid,
             cancellationToken);
 
         return Result.Success(dto);

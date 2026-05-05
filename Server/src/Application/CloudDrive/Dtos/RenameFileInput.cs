@@ -3,7 +3,7 @@ namespace Application.CloudDrive.Dtos;
 /// <summary>
 /// 重命名文件输入。
 /// </summary>
-public class RenameFileInput : CloudDriveAccountScopedInput
+public class RenameFileInput
 {
     /// <summary>
     /// 获取或设置文件或目录 ID。

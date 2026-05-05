@@ -14,7 +14,6 @@ public sealed class CopyFilesInputValidator : AbstractValidator<CopyFilesInput>
     /// </summary>
     public CopyFilesInputValidator()
     {
-        this.RequireCloudAccount();
         this.RequireNonEmptyItems(input => input.FileIds, "FileIds");
         RuleFor(input => input.TargetDirectoryId).NotEmptyText("目标目录 ID 不能为空。");
     }

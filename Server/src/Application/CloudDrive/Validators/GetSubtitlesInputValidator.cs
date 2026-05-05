@@ -14,7 +14,6 @@ public sealed class GetSubtitlesInputValidator : AbstractValidator<GetSubtitlesI
     /// </summary>
     public GetSubtitlesInputValidator()
     {
-        this.RequireCloudAccount();
         RuleFor(input => input)
             .Must(input => !string.IsNullOrWhiteSpace(input.FileId) || !string.IsNullOrWhiteSpace(input.PickCode))
             .WithMessage("FileId 与 PickCode 必须至少提供一项。");

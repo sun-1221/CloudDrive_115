@@ -11,6 +11,7 @@ namespace Application.CloudDrive.Files;
 
 internal sealed class GetFileListQueryHandler(
     CloudDriveFileManager fileManager,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : IQueryHandler<GetFileListQuery, PagedResultDto<CloudDriveFileDto>>
 {
@@ -20,18 +21,13 @@ internal sealed class GetFileListQueryHandler(
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Result.Failure<PagedResultDto<CloudDriveFileDto>>(
-                CloudDriveFileHandlerSupport.CloudAccountUidRequired);
-        }
-
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
         string directoryId = CloudDriveFileHandlerSupport.NormalizeDirectoryId(request.Input.DirectoryId);
         CloudDriveApiContext context = CloudDriveFileHandlerSupport.CreateFileListContext(request.Input);
 
         PagedResultDto<CloudDriveFileDto> result = await fileManager.GetFileListAsync<PagedResultDto<CloudDriveFileDto>>(
             request.UserId,
-            request.Input.CloudAccountUid,
+            cloudAccountUid,
             directoryId,
             context,
             cancellationToken);

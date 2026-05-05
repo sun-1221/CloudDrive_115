@@ -8,11 +8,6 @@ namespace Application.CloudDrive.Dtos;
 public class GetJobListInput
 {
     /// <summary>
-    /// 获取或设置可选 115 账号 UID。
-    /// </summary>
-    public string? CloudAccountUid { get; set; }
-
-    /// <summary>
     /// 获取或设置任务状态筛选。
     /// </summary>
     public CloudDriveJobStatus? Status { get; set; }

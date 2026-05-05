@@ -14,6 +14,7 @@ namespace Application.CloudDrive.Offline;
 
 internal sealed class GetOfflineTaskListQueryHandler(
     ICloudDriveOpenApiGateway openApiGateway,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : IQueryHandler<GetOfflineTaskListQuery, CloudDriveOfflineTaskListDto>
 {
@@ -23,15 +24,11 @@ internal sealed class GetOfflineTaskListQueryHandler(
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Result.Failure<CloudDriveOfflineTaskListDto>(
-                CloudDriveFileHandlerSupport.CloudAccountUidRequired);
-        }
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
 
         JsonElement response = await openApiGateway.SendOfflineApiRequestAsync<JsonElement>(
             request.UserId,
-            request.Input.CloudAccountUid,
+            cloudAccountUid,
             HttpMethod.Post,
             "task_lists",
             CloudDriveOfflineSupport.CreateTaskListContext(request.Input),

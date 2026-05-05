@@ -3,7 +3,7 @@ namespace Application.CloudDrive.Dtos;
 /// <summary>
 /// 移动文件输入。
 /// </summary>
-public class MoveFilesInput : CloudDriveAccountScopedInput
+public class MoveFilesInput
 {
     /// <summary>
     /// 获取或设置文件或目录 ID 列表。

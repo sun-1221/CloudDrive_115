@@ -14,6 +14,7 @@ internal sealed class UploadFileCommandHandler(
     ICloudDriveOpenApiGateway openApiGateway,
     ICloudDriveJobOrchestrator jobOrchestrator,
     ICloudDriveMetadataCache metadataCache,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : ICommandHandler<UploadFileCommand, CloudDriveUploadExecutionDto>
 {
@@ -23,22 +24,31 @@ internal sealed class UploadFileCommandHandler(
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Result.Failure<CloudDriveUploadExecutionDto>(
-                CloudDriveFileHandlerSupport.CloudAccountUidRequired);
-        }
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
 
         if (ShouldRunAsync(request.Input, configOptions.Value))
         {
             if (string.IsNullOrWhiteSpace(request.Input.TempFilePath))
             {
-                return Result.Failure<CloudDriveUploadExecutionDto>(
-                    CloudDriveFileHandlerSupport.UploadStreamRequired);
+                if (request.FileStream is null)
+                {
+                    return Result.Failure<CloudDriveUploadExecutionDto>(
+                        CloudDriveFileHandlerSupport.UploadStreamRequired);
+                }
+
+                // 将文件流暂存到临时文件，供后台任务恢复使用
+                string tempFilePath = Path.Combine(Path.GetTempPath(), $"115upload_{Guid.NewGuid():N}");
+                await using (var fs = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write))
+                {
+                    await request.FileStream.CopyToAsync(fs, cancellationToken);
+                }
+
+                request.Input.TempFilePath = tempFilePath;
             }
 
             Guid jobId = await jobOrchestrator.EnqueueLargeUploadAsync(
                 request.UserId,
+                cloudAccountUid,
                 request.Input,
                 cancellationToken);
 
@@ -54,8 +64,8 @@ internal sealed class UploadFileCommandHandler(
         CloudDriveUploadSessionDto session =
             await openApiGateway.SendUploadInitRequestAsync<CloudDriveUploadSessionDto>(
                 request.UserId,
-                request.Input.CloudAccountUid,
-                CloudDriveFileHandlerSupport.CreateUploadInitContext(request.Input),
+                cloudAccountUid,
+                CloudDriveFileHandlerSupport.CreateUploadInitContext(cloudAccountUid, request.Input),
                 cancellationToken);
 
         CloudDriveUploadedFileDto uploadedFile;
@@ -74,7 +84,7 @@ internal sealed class UploadFileCommandHandler(
 
             uploadedFile = await openApiGateway.UploadFileAsync<CloudDriveUploadedFileDto>(
                 request.UserId,
-                request.Input.CloudAccountUid,
+                cloudAccountUid,
                 session.UploadEndpoint,
                 request.FileStream,
                 request.Input.FileName,
@@ -84,7 +94,7 @@ internal sealed class UploadFileCommandHandler(
 
         await metadataCache.InvalidateDirectoryAsync(
             request.UserId,
-            request.Input.CloudAccountUid,
+            cloudAccountUid,
             request.Input.DirectoryId);
 
         return Result.Success(new CloudDriveUploadExecutionDto

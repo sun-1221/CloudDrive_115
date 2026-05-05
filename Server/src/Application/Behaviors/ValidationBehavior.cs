@@ -1,3 +1,5 @@
+using System.Reflection;
+
 using FluentValidation;
 using FluentValidation.Results;
 
@@ -7,25 +9,16 @@ namespace Application.Behaviors;
 
 /// <summary>
 /// 验证管道行为。自动执行已注册的 FluentValidation 验证器，校验失败时抛出
-/// <see cref="ValidationException"/>，阻止 Handler 继续执行。
 /// </summary>
 /// <typeparam name="TRequest">请求类型。</typeparam>
 /// <typeparam name="TResponse">响应类型。</typeparam>
-/// <remarks>
-/// <para>
-/// 作用于所有 Command 与 Query。Pipeline 顺序：LoggingBehavior → <b>ValidationBehavior</b> →
-/// TransactionBehavior → DomainEventDispatchBehavior。
-/// </para>
-/// <para>
-/// 当请求没有对应的验证器时直接放行，符合需求 R8.4。
-/// </para>
-/// </remarks>
 public sealed class ValidationBehavior<TRequest, TResponse>(
-    IEnumerable<IValidator<TRequest>> validators) : IPipelineBehavior<TRequest, TResponse>
+    IEnumerable<IValidator<TRequest>> validators,
+    IServiceProvider serviceProvider) : IPipelineBehavior<TRequest, TResponse>
     where TRequest : notnull
 {
-    /// <inheritdoc />
-    /// <exception cref="ValidationException">当任一验证器校验失败时，携带所有字段级错误抛出。</exception>
+    private static readonly PropertyInfo? InputProperty = typeof(TRequest).GetProperty("Input");
+
     public async Task<TResponse> Handle(
         TRequest request,
         RequestHandlerDelegate<TResponse> next,
@@ -33,26 +26,75 @@ public sealed class ValidationBehavior<TRequest, TResponse>(
     {
         ArgumentNullException.ThrowIfNull(next);
 
-        // 无验证器 → 直接放行（R8.4）
+        List<ValidationFailure> allFailures = [];
+
+        // 运行直接针对 TRequest 的验证器
+        await RunDirectValidatorsAsync(request, allFailures, cancellationToken);
+
+        // 运行 Input 属性对应类型的验证器（自动桥接）
+        await RunInputPropertyValidatorsAsync(request, allFailures, cancellationToken);
+
+        if (allFailures.Count > 0)
+        {
+            throw new ValidationException(allFailures);
+        }
+
+        return await next(cancellationToken);
+    }
+
+    private async Task RunDirectValidatorsAsync(
+        TRequest request,
+        List<ValidationFailure> failures,
+        CancellationToken cancellationToken)
+    {
         IValidator<TRequest>[] validatorArray = [.. validators];
         if (validatorArray.Length == 0)
         {
-            return await next(cancellationToken);
+            return;
         }
 
         var context = new ValidationContext<TRequest>(request);
         ValidationResult[] results = await Task.WhenAll(
             validatorArray.Select(v => v.ValidateAsync(context, cancellationToken)));
 
-        ValidationFailure[] failures = [.. results
-            .SelectMany(r => r.Errors)
-            .Where(f => f is not null)];
+        failures.AddRange(results.SelectMany(r => r.Errors).Where(f => f is not null));
+    }
 
-        if (failures.Length > 0)
+    private async Task RunInputPropertyValidatorsAsync(
+        TRequest request,
+        List<ValidationFailure> failures,
+        CancellationToken cancellationToken)
+    {
+        if (InputProperty is null)
         {
-            throw new ValidationException(failures);
+            return;
         }
 
-        return await next(cancellationToken);
+        object? inputValue = InputProperty.GetValue(request);
+        if (inputValue is null)
+        {
+            return;
+        }
+
+        Type inputType = InputProperty.PropertyType;
+        Type enumerableType = typeof(IEnumerable<>).MakeGenericType(
+            typeof(IValidator<>).MakeGenericType(inputType));
+
+        if (serviceProvider.GetService(enumerableType) is not System.Collections.IEnumerable resolvedValidators)
+        {
+            return;
+        }
+
+        Type contextType = typeof(ValidationContext<>).MakeGenericType(inputType);
+        IValidationContext validationContext = (IValidationContext)Activator.CreateInstance(contextType, inputValue)!;
+
+        foreach (object? validator in resolvedValidators)
+        {
+            if (validator is IValidator typedValidator)
+            {
+                ValidationResult result = await typedValidator.ValidateAsync(validationContext, cancellationToken);
+                failures.AddRange(result.Errors.Where(f => f is not null));
+            }
+        }
     }
 }

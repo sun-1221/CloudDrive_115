@@ -14,7 +14,6 @@ public sealed class GetDownloadUrlInputValidator : AbstractValidator<GetDownload
     /// </summary>
     public GetDownloadUrlInputValidator()
     {
-        this.RequireCloudAccount();
         RuleFor(input => input.PickCode).NotEmptyText("PickCode 不能为空。");
     }
 }

@@ -273,7 +273,7 @@ public sealed class CookieSessionManager(
         {
             $"UID={uid}",
             $"CID={cid}",
-            $"SEID={ussid}"
+            $"USSID={ussid}"
         };
 
         if (root.TryGetProperty("extraFields", out JsonElement extras) &&

@@ -3,7 +3,7 @@ namespace Application.CloudDrive.Dtos;
 /// <summary>
 /// 获取视频字幕输入。
 /// </summary>
-public class GetSubtitlesInput : CloudDriveAccountScopedInput
+public class GetSubtitlesInput
 {
     /// <summary>
     /// 获取或设置文件 ID。

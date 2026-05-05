@@ -3,7 +3,7 @@ namespace Application.CloudDrive.Dtos;
 /// <summary>
 /// 删除文件输入。
 /// </summary>
-public class DeleteFilesInput : CloudDriveAccountScopedInput
+public class DeleteFilesInput
 {
     /// <summary>
     /// 获取或设置文件或目录 ID 列表。

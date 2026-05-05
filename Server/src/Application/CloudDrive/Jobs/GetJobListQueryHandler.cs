@@ -1,3 +1,4 @@
+using Application.Abstractions.CloudDrive;
 using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
 using Application.CloudDrive.Mappings;
@@ -13,6 +14,7 @@ namespace Application.CloudDrive.Jobs;
 
 internal sealed class GetJobListQueryHandler(
     ICloudDriveJobRepository jobRepository,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : IQueryHandler<GetJobListQuery, PagedResultDto<CloudDriveJobDto>>
 {
@@ -38,15 +40,12 @@ internal sealed class GetJobListQueryHandler(
             request.UserId,
             cancellationToken);
 
-        IEnumerable<CloudDriveJob> query = userJobs;
-
-        if (!string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            query = query.Where(job => string.Equals(
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
+        IEnumerable<CloudDriveJob> query = userJobs
+            .Where(job => string.Equals(
                 job.CloudAccountUid,
-                request.Input.CloudAccountUid,
+                cloudAccountUid,
                 StringComparison.Ordinal));
-        }
 
         if (request.Input.Status.HasValue)
         {

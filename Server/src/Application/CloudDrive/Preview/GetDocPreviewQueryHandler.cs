@@ -12,7 +12,7 @@ namespace Application.CloudDrive.Preview;
 
 internal sealed class GetDocPreviewQueryHandler(
     CloudDriveFileManager fileManager,
-    ICloudDriveOpenApiGateway openApiGateway,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : IQueryHandler<GetDocPreviewQuery, CloudDriveDocPreviewDto>
 {
@@ -23,23 +23,19 @@ internal sealed class GetDocPreviewQueryHandler(
         CloudDriveAppConfig config = configOptions.Value;
         CloudDriveHandlerGuard.EnsureEnabled(config);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Result.Failure<CloudDriveDocPreviewDto>(
-                CloudDriveFileHandlerSupport.CloudAccountUidRequired);
-        }
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
 
         CloudDriveFileDetailDto? file = await fileManager.GetFileDetailAsync<CloudDriveFileDetailDto?>(
             request.UserId,
-            request.Input.CloudAccountUid,
-            request.Input.FileId,
+            cloudAccountUid,
+            request.Input.PickCode,
             CloudDrivePreviewSupport.CreateFileDetailContext(request.Input),
             cancellationToken);
 
         if (file is null)
         {
             return Result.Failure<CloudDriveDocPreviewDto>(
-                CloudDrivePreviewSupport.FileNotFound(request.Input.FileId));
+                CloudDrivePreviewSupport.FileNotFound(request.Input.PickCode));
         }
 
         string extension = CloudDrivePreviewSupport.ResolveExtension(file);
@@ -61,32 +57,8 @@ internal sealed class GetDocPreviewQueryHandler(
             });
         }
 
-        CloudDriveDownloadDto download = await openApiGateway.SendWebApiRequestAsync<CloudDriveDownloadDto>(
-            request.UserId,
-            request.Input.CloudAccountUid,
-            HttpMethod.Get,
-            "files/download",
-            CloudDrivePreviewSupport.CreateDownloadContext(file),
-            cancellationToken);
-
-        if (string.IsNullOrWhiteSpace(download.DownloadUrl))
-        {
-            return Result.Failure<CloudDriveDocPreviewDto>(
-                CloudDriveFileHandlerSupport.InvalidInput(
-                    "cloud_drive_document_preview_url_unavailable",
-                    "文档预览地址不可用，请稍后重试。"));
-        }
-
-        return Result.Success(new CloudDriveDocPreviewDto
-        {
-            PreviewUrl = download.DownloadUrl,
-            FileName = file.Name,
-            FileType = extension,
-            RenderMode = renderMode,
-            ThirdPartyPreviewUrl = renderMode == DocRenderMode.ThirdParty
-                ? CloudDrivePreviewSupport.BuildThirdPartyPreviewUrl(config.OfficePreviewServiceUrl, download.DownloadUrl)
-                : null,
-            IsTemporary = true,
-        });
+        // 下载地址 API 待补采集，不得使用猜测路径 files/download 调用 115 API
+        return Result.Failure<CloudDriveDocPreviewDto>(
+            CloudDriveFileHandlerSupport.ApiNotCollected("文档下载地址"));
     }
 }

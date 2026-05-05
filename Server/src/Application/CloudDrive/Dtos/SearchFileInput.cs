@@ -3,7 +3,7 @@ namespace Application.CloudDrive.Dtos;
 /// <summary>
 /// 搜索文件输入。
 /// </summary>
-public class SearchFileInput : CloudDriveAccountScopedInput
+public class SearchFileInput
 {
     /// <summary>
     /// 获取或设置搜索关键字。

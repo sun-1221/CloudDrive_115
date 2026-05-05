@@ -1,3 +1,4 @@
+using Application.Abstractions.CloudDrive;
 using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
 using Application.CloudDrive.Files;
@@ -11,6 +12,7 @@ namespace Application.CloudDrive.User;
 
 internal sealed class GetUserVipQueryHandler(
     UserAggregationService userAggregationService,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : IQueryHandler<GetUserVipQuery, CloudDriveVipInfoDto>
 {
@@ -20,15 +22,11 @@ internal sealed class GetUserVipQueryHandler(
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Result.Failure<CloudDriveVipInfoDto>(
-                CloudDriveFileHandlerSupport.CloudAccountUidRequired);
-        }
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
 
         CloudDriveUserProfileDto profile = await userAggregationService.AggregateUserProfileAsync(
             request.UserId,
-            request.Input.CloudAccountUid,
+            cloudAccountUid,
             cancellationToken);
 
         return profile.Vip is null

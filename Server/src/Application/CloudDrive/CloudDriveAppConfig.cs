@@ -108,6 +108,11 @@ public sealed class CloudDriveAppConfig
     public string? OfficePreviewServiceUrl { get; set; }
 
     /// <summary>
+    /// CORS 允许的前端域名列表。
+    /// </summary>
+    public string[] CorsAllowedOrigins { get; set; } = [];
+
+    /// <summary>
     /// 115 集成功能是否启用。启动期校验通过后设为 true，配置缺失时为 false。
     /// </summary>
     public bool CloudDriveFeatureEnabled { get; set; }

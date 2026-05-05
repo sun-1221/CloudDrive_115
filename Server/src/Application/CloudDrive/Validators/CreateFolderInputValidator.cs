@@ -14,7 +14,6 @@ public sealed class CreateFolderInputValidator : AbstractValidator<CreateFolderI
     /// </summary>
     public CreateFolderInputValidator()
     {
-        this.RequireCloudAccount();
         RuleFor(input => input.ParentId).NotEmptyText("父目录 ID 不能为空。");
         RuleFor(input => input.FolderName)
             .Must(CloudDriveValidationRules.IsValidFolderName)

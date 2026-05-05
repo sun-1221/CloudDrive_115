@@ -14,7 +14,6 @@ public sealed class ToggleStarInputValidator : AbstractValidator<ToggleStarInput
     /// </summary>
     public ToggleStarInputValidator()
     {
-        this.RequireCloudAccount();
         RuleFor(input => input.FileId).NotEmptyText("FileId 不能为空。");
     }
 }

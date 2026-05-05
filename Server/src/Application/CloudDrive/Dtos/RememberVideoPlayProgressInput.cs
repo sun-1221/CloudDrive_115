@@ -3,7 +3,7 @@ namespace Application.CloudDrive.Dtos;
 /// <summary>
 /// 记忆视频播放进度输入。
 /// </summary>
-public class RememberVideoPlayProgressInput : CloudDriveAccountScopedInput
+public class RememberVideoPlayProgressInput
 {
     /// <summary>
     /// 获取或设置文件 ID。

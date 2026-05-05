@@ -14,6 +14,7 @@ namespace Application.CloudDrive.Share;
 
 internal sealed class GetShareSendsQueryHandler(
     ICloudDriveOpenApiGateway openApiGateway,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : IQueryHandler<GetShareSendsQuery, CloudDriveShareListDto>
 {
@@ -23,15 +24,11 @@ internal sealed class GetShareSendsQueryHandler(
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Result.Failure<CloudDriveShareListDto>(
-                CloudDriveFileHandlerSupport.CloudAccountUidRequired);
-        }
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
 
         JsonElement response = await openApiGateway.SendWebApiRequestAsync<JsonElement>(
             request.UserId,
-            request.Input.CloudAccountUid,
+            cloudAccountUid,
             HttpMethod.Get,
             "share/send",
             CloudDriveShareSupport.CreateListContext(request.Input),

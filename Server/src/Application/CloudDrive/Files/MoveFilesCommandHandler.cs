@@ -12,6 +12,7 @@ namespace Application.CloudDrive.Files;
 
 internal sealed class MoveFilesCommandHandler(
     ICloudDriveJobOrchestrator jobOrchestrator,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : ICommandHandler<MoveFilesCommand, CloudDriveOperationResultDto>
 {
@@ -21,17 +22,13 @@ internal sealed class MoveFilesCommandHandler(
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Result.Failure<CloudDriveOperationResultDto>(
-                CloudDriveFileHandlerSupport.CloudAccountUidRequired);
-        }
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
 
         if (CloudDriveFileHandlerSupport.ShouldRunBatchAsync(request.Input.FileIds.Count))
         {
             Guid jobId = await jobOrchestrator.EnqueueBatchOperationAsync(
                 request.UserId,
-                request.Input.CloudAccountUid,
+                cloudAccountUid,
                 CloudDriveJobType.BatchMove,
                 request.Input,
                 cancellationToken);

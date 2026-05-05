@@ -12,6 +12,7 @@ namespace Application.CloudDrive.Files;
 internal sealed class SearchFilesQueryHandler(
     ICloudDriveOpenApiGateway openApiGateway,
     ICloudDriveRateLimiter rateLimiter,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : IQueryHandler<SearchFilesQuery, CloudDriveSearchListDto>
 {
@@ -21,11 +22,7 @@ internal sealed class SearchFilesQueryHandler(
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Result.Failure<CloudDriveSearchListDto>(
-                CloudDriveFileHandlerSupport.CloudAccountUidRequired);
-        }
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
 
         if (string.IsNullOrWhiteSpace(request.Input.Keyword))
         {
@@ -38,14 +35,14 @@ internal sealed class SearchFilesQueryHandler(
         CloudDriveApiContext context = CloudDriveFileHandlerSupport.CreateSearchContext(request.Input);
         using IDisposable permit = await rateLimiter.AcquireAsync(
             request.UserId,
-            request.Input.CloudAccountUid,
+            cloudAccountUid,
             context.Category,
             cancellationToken);
 
         CloudDriveSearchListDto result =
             await openApiGateway.SendWebApiRequestAsync<CloudDriveSearchListDto>(
                 request.UserId,
-                request.Input.CloudAccountUid,
+                cloudAccountUid,
                 HttpMethod.Get,
                 "files/search",
                 context,

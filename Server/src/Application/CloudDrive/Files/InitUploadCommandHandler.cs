@@ -11,6 +11,7 @@ namespace Application.CloudDrive.Files;
 
 internal sealed class InitUploadCommandHandler(
     ICloudDriveOpenApiGateway openApiGateway,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : ICommandHandler<InitUploadCommand, CloudDriveUploadSessionDto>
 {
@@ -20,17 +21,13 @@ internal sealed class InitUploadCommandHandler(
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Result.Failure<CloudDriveUploadSessionDto>(
-                CloudDriveFileHandlerSupport.CloudAccountUidRequired);
-        }
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
 
         CloudDriveUploadSessionDto result =
             await openApiGateway.SendUploadInitRequestAsync<CloudDriveUploadSessionDto>(
                 request.UserId,
-                request.Input.CloudAccountUid,
-                CloudDriveFileHandlerSupport.CreateUploadInitContext(request.Input),
+                cloudAccountUid,
+                CloudDriveFileHandlerSupport.CreateUploadInitContext(cloudAccountUid, request.Input),
                 cancellationToken);
 
         return Result.Success(result);

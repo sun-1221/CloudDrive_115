@@ -12,7 +12,7 @@ namespace Application.CloudDrive.Preview;
 
 internal sealed class GetImagePreviewQueryHandler(
     CloudDriveFileManager fileManager,
-    ICloudDriveOpenApiGateway openApiGateway,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : IQueryHandler<GetImagePreviewQuery, CloudDriveImagePreviewDto>
 {
@@ -22,23 +22,19 @@ internal sealed class GetImagePreviewQueryHandler(
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Result.Failure<CloudDriveImagePreviewDto>(
-                CloudDriveFileHandlerSupport.CloudAccountUidRequired);
-        }
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
 
         CloudDriveFileDetailDto? file = await fileManager.GetFileDetailAsync<CloudDriveFileDetailDto?>(
             request.UserId,
-            request.Input.CloudAccountUid,
-            request.Input.FileId,
+            cloudAccountUid,
+            request.Input.PickCode,
             CloudDrivePreviewSupport.CreateFileDetailContext(request.Input),
             cancellationToken);
 
         if (file is null)
         {
             return Result.Failure<CloudDriveImagePreviewDto>(
-                CloudDrivePreviewSupport.FileNotFound(request.Input.FileId));
+                CloudDrivePreviewSupport.FileNotFound(request.Input.PickCode));
         }
 
         string extension = CloudDrivePreviewSupport.ResolveExtension(file);
@@ -50,23 +46,9 @@ internal sealed class GetImagePreviewQueryHandler(
         string previewUrl = file.OriginalImageUrl ?? string.Empty;
         if (string.IsNullOrWhiteSpace(previewUrl))
         {
-            CloudDriveDownloadDto download = await openApiGateway.SendWebApiRequestAsync<CloudDriveDownloadDto>(
-                request.UserId,
-                request.Input.CloudAccountUid,
-                HttpMethod.Get,
-                "files/download",
-                CloudDrivePreviewSupport.CreateDownloadContext(file),
-                cancellationToken);
-
-            previewUrl = download.DownloadUrl;
-        }
-
-        if (string.IsNullOrWhiteSpace(previewUrl))
-        {
+            // 下载地址 API 待补采集，不得使用猜测路径 files/download 调用 115 API
             return Result.Failure<CloudDriveImagePreviewDto>(
-                CloudDriveFileHandlerSupport.InvalidInput(
-                    "cloud_drive_image_preview_url_unavailable",
-                    "图片预览地址不可用，请稍后重试。"));
+                CloudDriveFileHandlerSupport.ApiNotCollected("图片下载地址"));
         }
 
         return Result.Success(new CloudDriveImagePreviewDto

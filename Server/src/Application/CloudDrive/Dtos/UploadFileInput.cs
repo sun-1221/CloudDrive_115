@@ -3,7 +3,7 @@ namespace Application.CloudDrive.Dtos;
 /// <summary>
 /// 上传文件输入。
 /// </summary>
-public class UploadFileInput : CloudDriveAccountScopedInput
+public class UploadFileInput
 {
     /// <summary>
     /// 获取或设置上传目标目录 ID。

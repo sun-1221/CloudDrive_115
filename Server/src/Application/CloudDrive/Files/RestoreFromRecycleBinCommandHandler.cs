@@ -12,6 +12,7 @@ namespace Application.CloudDrive.Files;
 
 internal sealed class RestoreFromRecycleBinCommandHandler(
     ICloudDriveJobOrchestrator jobOrchestrator,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : ICommandHandler<RestoreFromRecycleBinCommand, CloudDriveOperationResultDto>
 {
@@ -21,17 +22,13 @@ internal sealed class RestoreFromRecycleBinCommandHandler(
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Result.Failure<CloudDriveOperationResultDto>(
-                CloudDriveFileHandlerSupport.CloudAccountUidRequired);
-        }
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
 
         if (CloudDriveFileHandlerSupport.ShouldRunBatchAsync(request.Input.RecycleBinItemIds.Count))
         {
             Guid jobId = await jobOrchestrator.EnqueueBatchOperationAsync(
                 request.UserId,
-                request.Input.CloudAccountUid,
+                cloudAccountUid,
                 CloudDriveJobType.BatchRecycleBinRestore,
                 request.Input,
                 cancellationToken);

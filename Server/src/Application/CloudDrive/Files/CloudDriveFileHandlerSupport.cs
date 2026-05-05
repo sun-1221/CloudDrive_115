@@ -47,6 +47,13 @@ internal static class CloudDriveFileHandlerSupport
         AddOptional(queryParameters, "star", input.Star);
         AddOptional(queryParameters, "cur", input.Cur);
         AddOptional(queryParameters, "show_dir", input.ShowDir);
+        AddOptional(queryParameters, "natsort", input.NatSort);
+        AddOptional(queryParameters, "snap", input.Snap);
+        AddOptional(queryParameters, "count_folders", input.CountFolders);
+        AddOptional(queryParameters, "record_open_time", input.RecordOpenTime);
+        AddOptional(queryParameters, "code", input.Code);
+        AddOptional(queryParameters, "scid", input.Scid);
+        AddOptional(queryParameters, "source", input.Source);
 
         return new CloudDriveApiContext
         {
@@ -126,19 +133,19 @@ internal static class CloudDriveFileHandlerSupport
         };
     }
 
-    public static CloudDriveApiContext CreateUploadInitContext(InitUploadInput input)
+    public static CloudDriveApiContext CreateUploadInitContext(string cloudAccountUid, InitUploadInput input)
     {
         return CreateUploadInitContext(
-            input.CloudAccountUid,
+            cloudAccountUid,
             input.DirectoryId,
             input.FileName,
             input.FileSize);
     }
 
-    public static CloudDriveApiContext CreateUploadInitContext(UploadFileInput input)
+    public static CloudDriveApiContext CreateUploadInitContext(string cloudAccountUid, UploadFileInput input)
     {
         return CreateUploadInitContext(
-            input.CloudAccountUid,
+            cloudAccountUid,
             input.DirectoryId,
             input.FileName,
             input.FileSize);

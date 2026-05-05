@@ -3,7 +3,7 @@ namespace Application.CloudDrive.Dtos;
 /// <summary>
 /// 创建文件夹输入。
 /// </summary>
-public class CreateFolderInput : CloudDriveAccountScopedInput
+public class CreateFolderInput
 {
     /// <summary>
     /// 获取或设置父目录 ID。

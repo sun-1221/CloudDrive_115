@@ -15,6 +15,7 @@ namespace Application.CloudDrive.Video;
 internal sealed class RememberVideoPlayProgressCommandHandler(
     CloudDriveFileManager fileManager,
     ICloudDriveOpenApiGateway openApiGateway,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : ICommandHandler<RememberVideoPlayProgressCommand>
 {
@@ -23,11 +24,6 @@ internal sealed class RememberVideoPlayProgressCommandHandler(
         CancellationToken cancellationToken)
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
-
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Result.Failure(CloudDriveFileHandlerSupport.CloudAccountUidRequired);
-        }
 
         if (request.Input.Time < 0)
         {
@@ -46,7 +42,7 @@ internal sealed class RememberVideoPlayProgressCommandHandler(
 
         await openApiGateway.SendWebApiRequestAsync<JsonElement>(
             request.UserId,
-            request.Input.CloudAccountUid,
+            accountContextAccessor.CloudAccountUid,
             HttpMethod.Post,
             "files/history",
             CloudDriveVideoSupport.CreateProgressWriteContext(request.Input, pickCodeResult.Value),
@@ -67,13 +63,13 @@ internal sealed class RememberVideoPlayProgressCommandHandler(
                 : Result.Success(input.PickCode);
         }
 
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
         CloudDriveFileDetailDto? file = await fileManager.GetFileDetailAsync<CloudDriveFileDetailDto?>(
             userId,
-            input.CloudAccountUid,
+            cloudAccountUid,
             input.FileId,
             CloudDriveFileHandlerSupport.CreateFileDetailContext(new GetFileInput
             {
-                CloudAccountUid = input.CloudAccountUid,
                 FileId = input.FileId,
             }),
             cancellationToken);

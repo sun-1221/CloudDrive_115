@@ -14,7 +14,6 @@ public sealed class RecycleBinOperationInputValidator : AbstractValidator<Recycl
     /// </summary>
     public RecycleBinOperationInputValidator()
     {
-        this.RequireCloudAccount();
         this.RequireNonEmptyItems(input => input.RecycleBinItemIds, "RecycleBinItemIds");
     }
 }

@@ -15,6 +15,7 @@ namespace Application.CloudDrive.Video;
 internal sealed class GetVideoPlayProgressQueryHandler(
     CloudDriveFileManager fileManager,
     ICloudDriveOpenApiGateway openApiGateway,
+    ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : IQueryHandler<GetVideoPlayProgressQuery, CloudDriveVideoPlayProgressDto>
 {
@@ -24,15 +25,11 @@ internal sealed class GetVideoPlayProgressQueryHandler(
     {
         CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
 
-        if (string.IsNullOrWhiteSpace(request.Input.CloudAccountUid))
-        {
-            return Result.Failure<CloudDriveVideoPlayProgressDto>(
-                CloudDriveFileHandlerSupport.CloudAccountUidRequired);
-        }
+        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
 
         Result<string> pickCodeResult = await ResolvePickCodeAsync(
             request.UserId,
-            request.Input.CloudAccountUid,
+            cloudAccountUid,
             request.Input.FileId,
             request.Input.PickCode,
             cancellationToken);
@@ -44,7 +41,7 @@ internal sealed class GetVideoPlayProgressQueryHandler(
 
         JsonElement response = await openApiGateway.SendWebApiRequestAsync<JsonElement>(
             request.UserId,
-            request.Input.CloudAccountUid,
+            cloudAccountUid,
             HttpMethod.Get,
             "files/history",
             CloudDriveVideoSupport.CreateProgressReadContext(pickCodeResult.Value),
@@ -69,11 +66,10 @@ internal sealed class GetVideoPlayProgressQueryHandler(
 
         CloudDriveFileDetailDto? file = await fileManager.GetFileDetailAsync<CloudDriveFileDetailDto?>(
             userId,
-            cloudAccountUid,
+            accountContextAccessor.CloudAccountUid,
             fileId,
             CloudDriveFileHandlerSupport.CreateFileDetailContext(new GetFileInput
             {
-                CloudAccountUid = cloudAccountUid,
                 FileId = fileId,
             }),
             cancellationToken);

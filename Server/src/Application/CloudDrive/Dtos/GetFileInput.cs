@@ -3,7 +3,7 @@ namespace Application.CloudDrive.Dtos;
 /// <summary>
 /// 获取单个文件输入。
 /// </summary>
-public class GetFileInput : CloudDriveAccountScopedInput
+public class GetFileInput
 {
     /// <summary>
     /// 获取或设置文件或目录 ID。

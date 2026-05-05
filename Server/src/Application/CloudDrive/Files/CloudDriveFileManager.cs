@@ -62,27 +62,21 @@ public sealed class CloudDriveFileManager(
     /// <param name="fileId">文件 ID。</param>
     /// <param name="context">API 请求上下文。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    /// <returns>文件详情结果。</returns>
-    public async Task<T> GetFileDetailAsync<T>(
+    /// <returns>文件详情结果；files/file 接口尚未采集时返回 default。</returns>
+    public Task<T?> GetFileDetailAsync<T>(
         Guid userId,
         string cloudAccountUid,
         string fileId,
         CloudDriveApiContext context,
         CancellationToken cancellationToken = default)
     {
-        CloudDriveAppConfig config = configOptions.Value;
-        string cacheKey = BuildFileCacheKey(userId, cloudAccountUid, fileId, "detail");
+        // 网页端详情接口（files/file）待补采集，不得使用猜测路径调用 115 API。
+        // 调用方（Preview Handler 等）需处理 null 返回值。
+        logger.LogDebug(
+            "文件详情无法获取，files/file 接口尚未采集 FileId={FileId}",
+            fileId);
 
-        T? result = await metadataCache.GetOrSetAsync(cacheKey, async token =>
-        {
-            using IDisposable permit = await rateLimiter.AcquireAsync(
-                userId, cloudAccountUid, context.Category, token);
-
-            return await openApiGateway.SendWebApiRequestAsync<T>(
-                userId, cloudAccountUid, HttpMethod.Get, "files/file", context, token);
-        }, TimeSpan.FromSeconds(config.CacheTtlSeconds), cancellationToken);
-
-        return result!;
+        return Task.FromResult(default(T));
     }
 
     /// <summary>

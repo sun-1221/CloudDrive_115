@@ -14,7 +14,6 @@ public sealed class UploadFileInputValidator : AbstractValidator<UploadFileInput
     /// </summary>
     public UploadFileInputValidator()
     {
-        this.RequireCloudAccount();
         RuleFor(input => input.DirectoryId).NotEmptyText("上传目标目录 ID 不能为空。");
         RuleFor(input => input.FileName).NotEmptyText("文件名不能为空。");
         RuleFor(input => input.FileSize).GreaterThanOrEqualTo(0);
