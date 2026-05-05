@@ -26,6 +26,7 @@ internal sealed class CloudDriveBatchOperationJob(
     ITransactionManager transactionManager,
     IPublisher publisher,
     ICloudDriveJobAuditLogger auditLogger,
+    ICloudDriveSensitiveFieldsFilter sensitiveFieldsFilter,
     ILogger<CloudDriveBatchOperationJob> logger) : IJob
 {
     private const string JobIdDataKey = "JobId";
@@ -65,7 +66,7 @@ internal sealed class CloudDriveBatchOperationJob(
                 ex,
                 "115 批量后台任务失败 JobId={JobId}, CloudAccountUid={CloudAccountUid}, JobType={JobType}",
                 job.Id,
-                job.CloudAccountUid,
+                sensitiveFieldsFilter.Redact(job.CloudAccountUid),
                 job.JobType);
 
             await MarkFailedAsync(job, CreateSafeErrorMessage(ex), context.CancellationToken);

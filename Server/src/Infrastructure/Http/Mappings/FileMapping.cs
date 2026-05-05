@@ -19,6 +19,9 @@ internal static class FileMapping
             TotalCount = response.Count,
             SkipCount = response.Offset,
             MaxResultCount = response.Limit,
+            Paths = response.Path.Count > 0
+                ? response.Path.Select(p => p.ToDto()).ToList()
+                : null,
         };
     }
 
@@ -83,16 +86,29 @@ internal static class FileMapping
             Name = item.Name,
             Size = item.Size,
             FileType = item.FileClass ?? item.Icon ?? string.Empty,
+            RawCategoryCode = item.FileCategory,
+            FileClass = item.FileClass,
+            Ico = item.Icon,
             IsDirectory = item.IsDirectory,
             ModifiedTime = CloudDriveTimeMapping.FromUnixSeconds(item.UpdateTime ?? item.UploadTime),
+            UploadTime = item.UploadTime.HasValue
+                ? CloudDriveTimeMapping.FromUnixSeconds(item.UploadTime)
+                : null,
+            UpdateTime = item.UpdateTime.HasValue
+                ? CloudDriveTimeMapping.FromUnixSeconds(item.UpdateTime)
+                : null,
             PickCode = item.PickCode,
             Sha1 = item.Sha1,
             IsStar = item.IsStarred ?? false,
             IsVideo = item.IsVideo ?? false,
             PlayLong = item.PlayDuration,
             VideoDefinition = ParseNullableInt(item.VideoDefinition),
+            IsPrivate = item.IsPrivate,
+            UploadStatusRaw = item.UploadStatus,
+            UploadStatus = "unknown",
             ThumbnailUrl = item.ThumbnailUrl ?? item.VideoImageUrl,
             OriginalImageUrl = item.OriginalUrl,
+            VideoImageUrl = item.VideoImageUrl,
         };
     }
 
@@ -107,8 +123,13 @@ internal static class FileMapping
             Name = file.Name,
             Size = file.Size,
             FileType = file.FileType,
+            RawCategoryCode = file.RawCategoryCode,
+            FileClass = file.FileClass,
+            Ico = file.Ico,
             IsDirectory = file.IsDirectory,
             ModifiedTime = file.ModifiedTime,
+            UploadTime = file.UploadTime,
+            UpdateTime = file.UpdateTime,
             PickCode = file.PickCode,
             Sha1 = file.Sha1,
             IsStar = file.IsStar,
@@ -116,8 +137,12 @@ internal static class FileMapping
             IsVideo = file.IsVideo,
             PlayLong = file.PlayLong,
             VideoDefinition = file.VideoDefinition,
+            IsPrivate = file.IsPrivate,
+            UploadStatusRaw = file.UploadStatusRaw,
+            UploadStatus = file.UploadStatus,
             ThumbnailUrl = file.ThumbnailUrl,
             OriginalImageUrl = file.OriginalImageUrl,
+            VideoImageUrl = file.VideoImageUrl,
             CreatedTime = CloudDriveTimeMapping.FromUnixSeconds(item.UploadTime),
             SizeBytes = item.Size,
             Paths = paths,

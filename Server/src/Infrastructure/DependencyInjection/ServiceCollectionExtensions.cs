@@ -1,7 +1,9 @@
 using System.Reflection;
 
 using Application.Abstractions;
+using Application.Abstractions.CloudDrive;
 using Application.Behaviors;
+using Application.CloudDrive.Auth;
 
 using Domain.Entities;
 using Domain.Repositories;
@@ -59,6 +61,7 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<IDomainEventSource, DomainEventSource>();
         services.AddScoped<ITransactionManager, SqlSugarTransactionManager>();
+        services.AddScoped<ICloudDriveAccountContextAccessor, CloudDriveAccountContextAccessor>();
 
         return services;
     }

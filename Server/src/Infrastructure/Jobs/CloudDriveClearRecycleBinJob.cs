@@ -26,6 +26,7 @@ internal sealed class CloudDriveClearRecycleBinJob(
     ITransactionManager transactionManager,
     IPublisher publisher,
     ICloudDriveJobAuditLogger auditLogger,
+    ICloudDriveSensitiveFieldsFilter sensitiveFieldsFilter,
     ILogger<CloudDriveClearRecycleBinJob> logger) : IJob
 {
     private const string JobIdDataKey = "JobId";
@@ -71,7 +72,7 @@ internal sealed class CloudDriveClearRecycleBinJob(
                 ex,
                 "115 清空回收站后台任务失败 JobId={JobId}, CloudAccountUid={CloudAccountUid}",
                 job.Id,
-                job.CloudAccountUid);
+                sensitiveFieldsFilter.Redact(job.CloudAccountUid));
 
             await MarkFailedAsync(job, CreateSafeErrorMessage(ex), context.CancellationToken);
         }

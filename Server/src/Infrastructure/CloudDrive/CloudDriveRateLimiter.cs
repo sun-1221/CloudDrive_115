@@ -14,6 +14,7 @@ namespace Infrastructure.CloudDrive;
 
 internal sealed class CloudDriveRateLimiter(
     IOptions<CloudDriveAppConfig> configOptions,
+    ICloudDriveSensitiveFieldsFilter sensitiveFieldsFilter,
     ILogger<CloudDriveRateLimiter> logger) : ICloudDriveRateLimiter
 {
     private readonly ConcurrentDictionary<string, TokenBucket> _buckets = new(StringComparer.Ordinal);
@@ -42,7 +43,7 @@ internal sealed class CloudDriveRateLimiter(
                 logger.LogInformation(
                     "115 本地限流排队 UserId={UserId}, CloudAccountUid={CloudAccountUid}, Category={Category}, DelayMs={DelayMs}",
                     userId,
-                    cloudAccountUid,
+                    sensitiveFieldsFilter.Redact(cloudAccountUid),
                     normalizedCategory,
                     waitDelay.TotalMilliseconds);
             },
@@ -52,7 +53,7 @@ internal sealed class CloudDriveRateLimiter(
                 logger.LogWarning(
                     "115 本地限流拒绝请求 UserId={UserId}, CloudAccountUid={CloudAccountUid}, Category={Category}",
                     userId,
-                    cloudAccountUid,
+                    sensitiveFieldsFilter.Redact(cloudAccountUid),
                     normalizedCategory);
             },
             cancellationToken);
@@ -74,7 +75,7 @@ internal sealed class CloudDriveRateLimiter(
         logger.LogWarning(
             "115 上游频控信号已记录 UserId={UserId}, CloudAccountUid={CloudAccountUid}, Category={Category}",
             userId,
-            cloudAccountUid,
+            sensitiveFieldsFilter.Redact(cloudAccountUid),
             normalizedCategory);
     }
 

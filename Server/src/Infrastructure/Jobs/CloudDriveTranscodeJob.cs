@@ -29,6 +29,7 @@ internal sealed class CloudDriveTranscodeJob(
     ITransactionManager transactionManager,
     IPublisher publisher,
     ICloudDriveJobAuditLogger auditLogger,
+    ICloudDriveSensitiveFieldsFilter sensitiveFieldsFilter,
     ILogger<CloudDriveTranscodeJob> logger) : IJob
 {
     private const string JobIdDataKey = "JobId";
@@ -82,7 +83,7 @@ internal sealed class CloudDriveTranscodeJob(
                 ex,
                 "115 视频转码后台任务失败 JobId={JobId}, CloudAccountUid={CloudAccountUid}",
                 job.Id,
-                job.CloudAccountUid);
+                sensitiveFieldsFilter.Redact(job.CloudAccountUid));
 
             await MarkFailedAsync(job, CreateSafeErrorMessage(ex), context.CancellationToken);
         }
@@ -144,8 +145,8 @@ internal sealed class CloudDriveTranscodeJob(
         for (int attempt = 1; attempt <= ProbeMaxAttempts; attempt++)
         {
             CloudDriveVideoPlayResponse response = await ProbePlayAsync(job, input.PickCode!, cancellationToken);
-            bool isReady = response.VideoUrls.Count > 0
-                || !string.Equals(response.Status, "transcoding", StringComparison.OrdinalIgnoreCase);
+            // 仅依赖 Status 字段判断转码完成；成功播放 schema 未完整采集前不得依赖 VideoUrls 推断
+            bool isReady = !string.Equals(response.Status, "transcoding", StringComparison.OrdinalIgnoreCase);
 
             await UpdateCheckpointAsync(
                 job,

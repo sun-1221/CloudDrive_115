@@ -32,6 +32,7 @@ internal sealed class CloudDriveUploadJob(
     ITransactionManager transactionManager,
     IPublisher publisher,
     ICloudDriveJobAuditLogger auditLogger,
+    ICloudDriveSensitiveFieldsFilter sensitiveFieldsFilter,
     ILogger<CloudDriveUploadJob> logger) : IJob
 {
     private const string JobIdDataKey = "JobId";
@@ -72,7 +73,7 @@ internal sealed class CloudDriveUploadJob(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             auditLogger.LogError(job, ex);
-            logger.LogError(ex, "115 上传后台任务失败 JobId={JobId}, CloudAccountUid={CloudAccountUid}", job.Id, job.CloudAccountUid);
+            logger.LogError(ex, "115 上传后台任务失败 JobId={JobId}, CloudAccountUid={CloudAccountUid}", job.Id, sensitiveFieldsFilter.Redact(job.CloudAccountUid));
             await MarkFailedAsync(job, CreateSafeErrorMessage(ex), context.CancellationToken);
         }
     }
@@ -113,7 +114,7 @@ internal sealed class CloudDriveUploadJob(
         CloudDriveUploadInitResponse initResponse = await openApiGateway.SendUploadInitRequestAsync<CloudDriveUploadInitResponse>(
             job.UserId,
             job.CloudAccountUid,
-            BuildUploadInitContext(input),
+            BuildUploadInitContext(job.CloudAccountUid, input),
             cancellationToken);
 
         CloudDriveUploadSessionDto session = initResponse.ToDto();
@@ -150,14 +151,14 @@ internal sealed class CloudDriveUploadJob(
         await UpdateCheckpointAsync(job, job.CheckpointData, progress: 95, cancellationToken);
     }
 
-    private static CloudDriveApiContext BuildUploadInitContext(UploadFileInput input)
+    private static CloudDriveApiContext BuildUploadInitContext(string cloudAccountUid, UploadFileInput input)
     {
         return new CloudDriveApiContext
         {
             Category = "upload",
             FormFields = new Dictionary<string, string>
             {
-                ["userid"] = input.CloudAccountUid,
+                ["userid"] = cloudAccountUid,
                 ["filename"] = input.FileName,
                 ["filesize"] = input.FileSize.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 ["target"] = $"U_1_{input.DirectoryId}",
