@@ -21,7 +21,7 @@ public sealed class PreviewController(ISender sender) : ControllerBase
         var result = await sender.Send(
             new GetImagePreviewQuery(
                 this.GetAuthenticatedUserId(),
-                new GetPreviewInput { FileId = pickCode }),
+                new GetPreviewInput { PickCode = pickCode }),
             cancellationToken);
 
         return result.ToHttpResult();

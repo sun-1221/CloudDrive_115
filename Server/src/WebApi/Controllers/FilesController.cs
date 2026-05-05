@@ -27,6 +27,13 @@ public sealed class FilesController(ISender sender) : ControllerBase
         [FromQuery(Name = "o")] string? orderBy = null,
         [FromQuery] int? star = null,
         [FromQuery(Name = "showDir")] int? showDir = null,
+        [FromQuery(Name = "natsort")] int? natSort = null,
+        [FromQuery] int? snap = null,
+        [FromQuery(Name = "count_folders")] int? countFolders = null,
+        [FromQuery(Name = "record_open_time")] int? recordOpenTime = null,
+        [FromQuery] string? code = null,
+        [FromQuery] string? scid = null,
+        [FromQuery] string? source = null,
         CancellationToken cancellationToken = default)
     {
         var input = new GetFileListInput
@@ -40,6 +47,13 @@ public sealed class FilesController(ISender sender) : ControllerBase
             OrderBy = orderBy,
             Star = star,
             ShowDir = showDir,
+            NatSort = natSort,
+            Snap = snap,
+            CountFolders = countFolders,
+            RecordOpenTime = recordOpenTime,
+            Code = code,
+            Scid = scid,
+            Source = source,
         };
 
         var result = await sender.Send(

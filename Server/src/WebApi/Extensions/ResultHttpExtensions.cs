@@ -52,11 +52,10 @@ public static class ResultHttpExtensions
         detail: error.Description,
         statusCode: statusCode,
         title: error.Code,
-        type: null,
-        instance: null,
+        type: $"https://httpstatuses.io/{statusCode}",
         extensions: new Dictionary<string, object?>
         {
-            ["errorCode"] = error.Code,
+            ["code"] = error.Code,
             ["upstreamCode"] = null,
             ["upstreamMessage"] = null,
         });

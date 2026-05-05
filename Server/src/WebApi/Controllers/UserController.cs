@@ -1,5 +1,4 @@
 using Application.CloudDrive.Auth;
-using Application.CloudDrive.Dtos;
 using Application.CloudDrive.User;
 
 using MediatR;
@@ -20,7 +19,7 @@ public sealed class UserController(ISender sender) : ControllerBase
     public async Task<IResult> GetProfileAsync(CancellationToken cancellationToken)
     {
         var result = await sender.Send(
-            new GetUserProfileQuery(this.GetAuthenticatedUserId(), new CloudDriveAccountScopedInput()),
+            new GetUserProfileQuery(this.GetAuthenticatedUserId()),
             cancellationToken);
 
         return result.ToHttpResult();
@@ -30,7 +29,7 @@ public sealed class UserController(ISender sender) : ControllerBase
     public async Task<IResult> GetInfoAsync(CancellationToken cancellationToken)
     {
         var result = await sender.Send(
-            new GetUserInfoQuery(this.GetAuthenticatedUserId(), new CloudDriveAccountScopedInput()),
+            new GetUserInfoQuery(this.GetAuthenticatedUserId()),
             cancellationToken);
 
         return result.ToHttpResult();
@@ -40,7 +39,7 @@ public sealed class UserController(ISender sender) : ControllerBase
     public async Task<IResult> GetVipAsync(CancellationToken cancellationToken)
     {
         var result = await sender.Send(
-            new GetUserVipQuery(this.GetAuthenticatedUserId(), new CloudDriveAccountScopedInput()),
+            new GetUserVipQuery(this.GetAuthenticatedUserId()),
             cancellationToken);
 
         return result.ToHttpResult();
@@ -50,7 +49,7 @@ public sealed class UserController(ISender sender) : ControllerBase
     public async Task<IResult> GetBalanceAsync(CancellationToken cancellationToken)
     {
         var result = await sender.Send(
-            new GetUserBalanceQuery(this.GetAuthenticatedUserId(), new CloudDriveAccountScopedInput()),
+            new GetUserBalanceQuery(this.GetAuthenticatedUserId()),
             cancellationToken);
 
         return result.ToHttpResult();
@@ -60,7 +59,7 @@ public sealed class UserController(ISender sender) : ControllerBase
     public async Task<IResult> GetStorageAsync(CancellationToken cancellationToken)
     {
         var result = await sender.Send(
-            new GetUserSpaceQuery(this.GetAuthenticatedUserId(), new CloudDriveAccountScopedInput()),
+            new GetUserSpaceQuery(this.GetAuthenticatedUserId()),
             cancellationToken);
 
         return result.ToHttpResult();

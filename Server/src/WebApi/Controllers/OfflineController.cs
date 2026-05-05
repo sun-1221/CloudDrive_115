@@ -37,7 +37,7 @@ public sealed class OfflineController(ISender sender) : ControllerBase
     public async Task<IResult> GetQuotaAsync(CancellationToken cancellationToken)
     {
         var result = await sender.Send(
-            new GetOfflineQuotaQuery(this.GetAuthenticatedUserId(), new CloudDriveAccountScopedInput()),
+            new GetOfflineQuotaQuery(this.GetAuthenticatedUserId()),
             cancellationToken);
 
         return result.ToHttpResult();
@@ -47,7 +47,7 @@ public sealed class OfflineController(ISender sender) : ControllerBase
     public async Task<IResult> GetStatsAsync(CancellationToken cancellationToken)
     {
         var result = await sender.Send(
-            new GetOfflineStatsQuery(this.GetAuthenticatedUserId(), new CloudDriveAccountScopedInput()),
+            new GetOfflineStatsQuery(this.GetAuthenticatedUserId()),
             cancellationToken);
 
         return result.ToHttpResult();
@@ -63,8 +63,9 @@ public sealed class OfflineController(ISender sender) : ControllerBase
                 this.GetAuthenticatedUserId(),
                 new AddOfflineTaskInput
                 {
+                    TaskKind = "Url",
                     Urls = request.Urls,
-                    SavePath = request.SaveDirectoryId,
+                    SaveDirectoryId = request.SaveDirectoryId,
                 }),
             cancellationToken);
 
@@ -78,8 +79,11 @@ public sealed class OfflineController(ISender sender) : ControllerBase
     {
         var input = new AddOfflineTaskInput
         {
+            TaskKind = "Bt",
+            InfoHash = request.InfoHash,
             Urls = [$"magnet:?xt=urn:btih:{request.InfoHash}"],
-            SavePath = request.SaveDirectoryId ?? request.SavePath,
+            SaveDirectoryId = request.SaveDirectoryId,
+            SavePath = request.SavePath,
         };
 
         var result = await sender.Send(
