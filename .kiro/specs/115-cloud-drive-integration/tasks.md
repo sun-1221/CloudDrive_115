@@ -328,8 +328,7 @@
     - 通过调用 `GET webapi.115.com/files?cid=0&limit=1` 探测 Cookie 是否仍然可用
     - 判定规则：(1) 业务成功响应 → `IsLoggedIn = true`；(2) `IErrorFieldAdapter` 返回 `login_required` 或 HTTP 401/403 → `IsLoggedIn = false` 并触发 `EnterCookieCooldownCommand`；(3) 网络异常或未分类错误 → `IsLoggedIn = null`（未知状态），不触发冷却
     - 若当前 `CookieSession.Status == Invalidated` 且 `IsInCooldown()`，直接返回冷却状态快照，不发起官方探测请求
-    - 更新 `CookieSession.LastProbedAt` 时间戳供审计
-    - 返回 `CloudDriveLoginStatusDto`（含 `IsLoggedIn`、`LastCheckedAt`、`CooldownUntil?`、`FailureReason?`）
+    - 返回 `CloudDriveAuthCheckDto`（含 `IsLoggedIn`、`LastCheckedAt`、`CooldownUntil?`、`FailureReason?`）
     - Query Handler 不触发写副作用（CD0007）；但状态更新通过内部调用 `EnterCookieCooldownCommand` 实现隔离（侧面触发副作用）
     - _需求: 3_ _设计: §1. 认证与会话管理模块 (Auth), §LoginCheckHandler（需求 3 登录态检测）_
 
@@ -729,8 +728,8 @@
     - GET /api/jobs?status={status?}&offset={offset}&limit={limit} → `IMediator.Send(new GetJobListQuery(this.GetAuthenticatedUserId(), input))`
     - _需求: 28_ _设计: §5. 后台任务模块 (Quartz.NET Job)_
 
-- [ ] 13. 模块注册与集成
-  - [ ] 13.1 创建 `IServiceCollection` 扩展方法注册所有依赖
+- [x] 13. 模块注册与集成
+  - [x] 13.1 创建 `IServiceCollection` 扩展方法注册所有依赖
     - 创建 `AddCloudDrive(this IServiceCollection services, IConfiguration configuration)` 扩展方法（CD0009）
     - 内部调用 `AddCloudDriveInfrastructure()` 注册 Named HttpClient（`Cloud115Web` / `Cloud115My` / `Cloud115Vip` / `Cloud115Pay` / `Cloud115Offline`）、Polly 策略、仓储
     - 注册应用层服务（`CookieSessionManager`、`CloudDriveFileManager`、`UserAggregationService`、`CloudDriveJobOrchestrator`）为 Scoped
@@ -745,7 +744,7 @@
     - 在 `Program.cs` 中调用 `builder.Services.AddCloudDrive(builder.Configuration)`
     - _需求: 2, 26_ _设计: §9. 基础设施组件, §P8: 配置完整性校验_
 
-  - [ ] 13.2 配置限流与缓存协同
+  - [x] 13.2 配置限流与缓存协同
     - 将 `CloudDriveRateLimiter` 集成到 `CloudDriveApiClient` 的请求管道中（`SendWebApiRequestAsync` / `SendUserCenterRequestAsync` / `SendOfflineApiRequestAsync` 入口统一 `AcquireAsync`）
     - 配置 `CloudDriveMetadataCache` 使用 `IDistributedCache` + `DistributedCacheExtensions`
     - 配置 `RateLimitOverflowStrategy`、队列长度、限流/瞬态异常重试参数，并输出排队/拒绝/重试/失败计数到日志与 metrics
@@ -754,7 +753,7 @@
     - 云下载请求通过独立的 `Cloud115Offline` 限流桶隔离，避免与普通读请求竞争配额
     - _需求: 24, 27_ _设计: §CloudDriveRateLimiter, §CloudDriveMetadataCache_
 
-  - [ ] 13.3 执行模块级装配验证
+  - [x] 13.3 执行模块级装配验证
     - 验证配置缺失时启动期校验与运行期保护同时生效（`CookieEncryptionKeyName` / `WebApiBaseUrl` 缺失即可触发）
     - 验证主要 Handler、Controller、Quartz Job 可从容器成功解析
     - 验证 `ErrorFieldAdapter` 注册表在启动时完整加载需求 25 错误字段变体表对应的全部 URL 规则
@@ -766,14 +765,14 @@
     - 验证应用重启后后台任务恢复协调服务会重新调度可恢复任务或将不可恢复任务收敛为失败
     - _需求: 2, 24, 25, 26, 27, 28_ _设计: §P8: 配置完整性校验, §P13: 后台任务重启恢复协调, §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
 
-  - [ ] 13.4 对齐 2026-05-04 刷新后的 DTO 与 Handler 契约
+  - [x] 13.4 对齐 2026-05-04 刷新后的 DTO 与 Handler 契约
     - 将搜索链路从旧 `PagedResultDto<CloudDriveSearchResultDto>` 对齐为 `CloudDriveSearchListDto`，补齐 `ItemSchemaStatus`、已采集搜索 item 字段、`HighlightNameRaw/ns` 安全边界与 schema 异常 fallback
     - 将视频播放 DTO 与 Handler 对齐到 `PlaybackSchemaStatus = "not_collected"`；成功播放 schema 未采集前不得返回 `Ready`、播放地址、清晰度或音轨字段
     - 将播放历史 DTO 与映射对齐到空数组/对象双形态：`FileId/FileName/Hash/PlayedSeconds` 可空，空数组返回从头播放语义，不写入空字符串或伪造 `0`
     - 补充对应单元测试和契约测试，覆盖搜索 schema available、schema fallback、视频播放 schema not collected、播放历史空数组与对象分支
     - _需求: 5, 16, 18, 25, 30_ _设计: §DTO 定义, §2. 文件管理模块 (File), §4. 视频模块 (Video), §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）_
 
-- [ ] 14. 最终检查点 - 全部测试通过
+- [x] 14. 最终检查点 - 全部测试通过
   - 当前阶段通过条件：
     - 所有未标记 `*` 的任务完成且测试通过
     - 需求、设计、任务三份文档与实现计划保持一致（Cookie 会话认证方案；不使用 OAuth 2.0 / AppID / AppSecret / PKCE）
