@@ -10,6 +10,8 @@ description: 对后端代码进行全面审核，检查 DDD 分层、CQRS 模式
 - **审核范围**：指定目录或文件路径（如 `src/Application/CloudDrive/`），默认为全量 `Server/src/` + `Server/tests/`
 - **审核模式**：`full`（全量）或 `quick`（仅自动化检查 + 高优规则），默认 `full`
 
+本工作流只用于 `Server/**` 后端代码审核。`web/**`、`collector/**` 和 `.kiro/specs/**` 的审核应由 `$115web-project-rules` 按路径读取对应规则后直接输出问题表，避免执行无关的后端分层扫描。
+
 ---
 
 ## 第 0 步：确认审核范围与基线
@@ -57,12 +59,6 @@ description: 对后端代码进行全面审核，检查 DDD 分层、CQRS 模式
 - `.windsurf/rules/unit-testing-standards.md`
 // turbo
 - `.windsurf/rules/integration-testing-standards.md`
-
-触碰前端项目时：
-// turbo
-- `.windsurf/rules/frontend-general-standards.md`
-// turbo
-- `.windsurf/rules/frontend-development-standards.md`
 
 ---
 
@@ -254,7 +250,9 @@ dotnet test .\CloudDrive.slnx --no-build --nologo --verbosity minimal
 
 ---
 
-## 第 5 步：持久化报告
+## 第 5 步：持久化报告（仅用户要求时）
+
+默认不写入审核报告文件，因为只读审核不应产生用户未请求的仓库改动。只有用户明确要求保存、归档或更新审核历史时，才执行以下步骤：
 
 1. 确定报告归属的 spec（根据审核范围推断，如 `115-cloud-drive-net10`）
 2. 将报告写入：

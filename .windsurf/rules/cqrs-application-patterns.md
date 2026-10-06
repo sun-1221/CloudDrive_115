@@ -141,15 +141,19 @@ internal sealed class GetUserInfoQueryHandler(
 ### 注册顺序（必须严格遵守）
 
 ```
-Request → LoggingBehavior → ValidationBehavior → TransactionBehavior → DomainEventDispatchBehavior → Handler → Response
+Request → LoggingBehavior → [可选 PreValidationBehavior] → ValidationBehavior → TransactionBehavior → DomainEventDispatchBehavior → Handler → Response
 ```
 
 | Behavior | 作用于 | 说明 |
 |---|---|---|
 | `LoggingBehavior` | Command + Query | 记录请求日志，使用静态日志模板（CA2254） |
+| 可选 `PreValidationBehavior` | Command + Query | 业务模块显式插入的上下文解析行为，必须通过标记接口跳过不相关请求，不得执行写操作或发布领域事件 |
 | `ValidationBehavior` | Command + Query | FluentValidation 校验，失败必须抛出 `ValidationException` |
 | `TransactionBehavior` | **仅 Command** | 数据库事务包裹 |
 | `DomainEventDispatchBehavior` | **仅 Command** | Handler 执行后、事务提交前统一分发领域事件 |
+
+默认 Application 注册只包含 `LoggingBehavior → ValidationBehavior → TransactionBehavior → DomainEventDispatchBehavior`；
+业务模块若需要账号上下文、租户上下文等验证前解析，必须在模块总入口中显式传入扩展 Behavior。
 
 ### 验证器规范（FluentValidation）
 

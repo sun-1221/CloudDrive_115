@@ -94,8 +94,12 @@ Infrastructure 层负责实现 Domain 和 Application 层定义的接口，提�
 - Pipeline Behavior 注册顺序**必须严格遵守**：
 
 ```
-LoggingBehavior → ValidationBehavior → TransactionBehavior → DomainEventDispatchBehavior
+LoggingBehavior → [可选业务前置 Behavior] → ValidationBehavior → TransactionBehavior → DomainEventDispatchBehavior
 ```
+
+- 默认 Application 注册只包含四段通用 Pipeline Behavior
+- 业务前置 Behavior 必须由业务模块总入口显式传入，不得硬编码进通用 `AddApplicationServices`
+- 业务前置 Behavior 必须通过标记接口跳过不相关请求，不得执行写操作或发布领域事件
 
 ---
 

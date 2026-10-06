@@ -40,6 +40,72 @@ dotnet_diagnostic.SA1309.severity = none
 dotnet_diagnostic.SA1200.severity = none
 dotnet_diagnostic.SA1633.severity = none
 
+# SA1101: 本项目使用 _field 命名，不使用 this. 前缀
+dotnet_diagnostic.SA1101.severity = none
+
+# SA1313: 与主构造函数参数/record 位置参数命名冲突
+dotnet_diagnostic.SA1313.severity = none
+
+# SA1623/SA1642: 英文模板要求与中文注释不兼容
+dotnet_diagnostic.SA1623.severity = none
+dotnet_diagnostic.SA1642.severity = none
+
+# SA1629: 中文句末不使用英文句号
+dotnet_diagnostic.SA1629.severity = none
+
+# SA1000/SA1008/SA1009/SA1010/SA1011: C# 9+/12+ 语法误报（nullable byte[]?、is not(...)、集合表达式）
+dotnet_diagnostic.SA1000.severity = none
+dotnet_diagnostic.SA1008.severity = none
+dotnet_diagnostic.SA1009.severity = none
+dotnet_diagnostic.SA1010.severity = none
+dotnet_diagnostic.SA1011.severity = none
+
+# AD0001: StyleCop 分析器内部崩溃，不影响代码质量
+dotnet_diagnostic.AD0001.severity = none
+
+# ── 文档注释：存量代码量大，暂降为 suggestion，修改时逐步补齐 ──
+dotnet_diagnostic.SA1611.severity = suggestion
+dotnet_diagnostic.SA1614.severity = suggestion
+dotnet_diagnostic.SA1615.severity = suggestion
+dotnet_diagnostic.SA1616.severity = suggestion
+dotnet_diagnostic.SA1618.severity = suggestion
+dotnet_diagnostic.SA1600.severity = suggestion
+dotnet_diagnostic.SA1606.severity = suggestion
+dotnet_diagnostic.RCS1138.severity = suggestion
+
+# ── StyleCop 排版/排序：无法自动修复，降为 suggestion ──
+dotnet_diagnostic.SA1128.severity = suggestion
+dotnet_diagnostic.SA1204.severity = suggestion
+dotnet_diagnostic.SA1203.severity = suggestion
+dotnet_diagnostic.SA1202.severity = suggestion
+dotnet_diagnostic.SA1201.severity = suggestion
+dotnet_diagnostic.SA1117.severity = suggestion
+dotnet_diagnostic.SA1018.severity = suggestion
+dotnet_diagnostic.SA1106.severity = suggestion
+dotnet_diagnostic.SA1401.severity = suggestion
+dotnet_diagnostic.SA1516.severity = suggestion
+dotnet_diagnostic.SA1312.severity = suggestion
+
+# ── 性能建议：不影响正确性，降为 suggestion ──
+dotnet_diagnostic.CA1848.severity = suggestion
+dotnet_diagnostic.CA1859.severity = suggestion
+dotnet_diagnostic.CA1873.severity = suggestion
+dotnet_diagnostic.CA1869.severity = suggestion
+dotnet_diagnostic.CA1826.severity = suggestion
+dotnet_diagnostic.CA1822.severity = suggestion
+dotnet_diagnostic.CA1870.severity = suggestion
+dotnet_diagnostic.CA1000.severity = suggestion
+
+# ── 命名/设计建议 ──
+dotnet_diagnostic.CA1720.severity = suggestion
+dotnet_diagnostic.CA1716.severity = suggestion
+dotnet_diagnostic.CA1711.severity = suggestion
+dotnet_diagnostic.CA1310.severity = suggestion
+dotnet_diagnostic.RCS1194.severity = suggestion
+
+# ── 测试分析器：降级避免误报阻断 CI ──
+dotnet_diagnostic.xUnit1031.severity = suggestion
+
 # 命名规则：接口 I 前缀
 dotnet_naming_symbols.interfaces.applicable_kinds = interface
 dotnet_naming_style.interface_prefix.required_prefix = I
@@ -48,14 +114,23 @@ dotnet_naming_rule.interfaces_should_have_prefix.symbols = interfaces
 dotnet_naming_rule.interfaces_should_have_prefix.style = interface_prefix
 dotnet_naming_rule.interfaces_should_have_prefix.severity = warning
 
-# 命名规则：私有字段 _camelCase
-dotnet_naming_symbols.private_fields.applicable_kinds = field
-dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+# 命名规则：私有实例字段 _camelCase（排除 static、const）
+dotnet_naming_symbols.private_instance_fields.applicable_kinds = field
+dotnet_naming_symbols.private_instance_fields.applicable_accessibilities = private
 dotnet_naming_style.private_field_style.required_prefix = _
 dotnet_naming_style.private_field_style.capitalization = camel_case
-dotnet_naming_rule.private_fields_should_be_underscore_prefixed.symbols = private_fields
-dotnet_naming_rule.private_fields_should_be_underscore_prefixed.style = private_field_style
-dotnet_naming_rule.private_fields_should_be_underscore_prefixed.severity = warning
+dotnet_naming_rule.private_instance_fields_should_be_underscore_prefixed.symbols = private_instance_fields
+dotnet_naming_rule.private_instance_fields_should_be_underscore_prefixed.style = private_field_style
+dotnet_naming_rule.private_instance_fields_should_be_underscore_prefixed.severity = warning
+
+# 命名规则：私有静态字段 PascalCase
+dotnet_naming_symbols.private_static_fields.applicable_kinds = field
+dotnet_naming_symbols.private_static_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_static_fields.required_modifiers = static
+dotnet_naming_style.private_static_field_style.capitalization = pascal_case
+dotnet_naming_rule.private_static_fields_should_be_pascal_case.symbols = private_static_fields
+dotnet_naming_rule.private_static_fields_should_be_pascal_case.style = private_static_field_style
+dotnet_naming_rule.private_static_fields_should_be_pascal_case.severity = warning
 
 # 命名规则：常量使用 PascalCase
 dotnet_naming_symbols.constants.applicable_kinds = field, local
@@ -67,5 +142,14 @@ dotnet_naming_rule.constants_should_be_pascal_case.severity = warning
 
 # 测试项目放宽文档与部分风格约束
 [**/tests/**/*.cs]
+dotnet_diagnostic.IDE1006.severity = none
 dotnet_diagnostic.SA1600.severity = none
 dotnet_diagnostic.SA1649.severity = none
+dotnet_diagnostic.SA1611.severity = none
+dotnet_diagnostic.SA1615.severity = none
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.RCS1046.severity = none
+dotnet_diagnostic.SA1413.severity = none
+dotnet_diagnostic.SA1502.severity = none
+dotnet_diagnostic.SA1118.severity = none
+dotnet_diagnostic.SA1117.severity = none

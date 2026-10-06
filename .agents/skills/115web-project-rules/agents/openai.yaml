@@ -1,0 +1,4 @@
+interface:
+  display_name: "115web Project Rules"
+  short_description: "Apply 115web code, spec, audit, and skill rules"
+  default_prompt: "Use $115web-project-rules to apply 115web repository rules, audits, specs, or skill maintenance to this task."

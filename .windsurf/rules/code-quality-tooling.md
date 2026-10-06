@@ -204,7 +204,7 @@ dotnet_diagnostic.SA1649.severity = none
 | `CD0007` | Query Handler 中禁止写操作和 `IMediator.Publish()` | NetArchTest | ✅ 测试时 |
 | `CD0008` | 映射扩展方法统一命名为 `ToDto()`/`ToEntity()` | NetArchTest | ✅ 测试时 |
 | `CD0009` | `IServiceCollection` 扩展方法必须以 `Add` 开头 | NetArchTest | ✅ 测试时 |
-| `CD0010` | Pipeline Behavior 注册顺序校验 | DI 容器测试 | ✅ 测试时 |
+| `CD0010` | Pipeline Behavior 注册顺序校验（含可选业务前置扩展点） | DI 容器测试 | ✅ 测试时 |
 
 ---
 
@@ -290,7 +290,7 @@ T:StackExchange.Redis.ConnectionMultiplexer; CD0002: Application 层禁止直接
 | `ControllerDependencyTests.cs` | CD0003: Controller 禁注入仓储/ORM | 2 |
 | `NamingConventionTests.cs` | CD0005 命名 + CD0008 映射命名 + CD0009 Add 前缀 | 5 |
 | `QueryHandlerSideEffectTests.cs` | CD0007: QueryHandler 禁写操作 | 2 |
-| `PipelineBehaviorOrderTests.cs` | CD0010: Pipeline Behavior 注册顺序 | 1 |
+| `PipelineBehaviorOrderTests.cs` | CD0010: Pipeline Behavior 注册顺序 | 2 |
 
 ---
 

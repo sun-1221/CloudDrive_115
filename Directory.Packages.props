@@ -13,32 +13,33 @@
     <PackageVersion Include="FluentValidation.DependencyInjectionExtensions" Version="11.11.0" />
 
     <!-- SqlSugar ORM (CodeFirst) -->
-    <PackageVersion Include="SqlSugarCore" Version="5.1.4.198" />
+    <PackageVersion Include="SqlSugarCore" Version="5.1.4.221" />
     <PackageVersion Include="System.Data.SQLite.Core" Version="1.0.119" />
 
     <!-- Quartz.NET (后台任务调度) -->
-    <PackageVersion Include="Quartz" Version="3.13.1" />
-    <PackageVersion Include="Quartz.Extensions.DependencyInjection" Version="3.13.1" />
-    <PackageVersion Include="Quartz.Extensions.Hosting" Version="3.13.1" />
+    <PackageVersion Include="Quartz" Version="4.3.0" />
 
     <!-- Polly (HTTP 韧性) -->
     <PackageVersion Include="Polly" Version="8.5.2" />
-    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="9.10.0" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0" />
 
     <!-- Microsoft.Extensions.* (.NET 10 aligned) -->
-    <PackageVersion Include="Microsoft.Extensions.Caching.Abstractions" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.12" />
 
     <!-- ASP.NET Core -->
-    <PackageVersion Include="Microsoft.AspNetCore.DataProtection" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.DataProtection" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
+
+    <!-- 集成测试 -->
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
 
     <!-- 代码质量分析器 -->
     <PackageVersion Include="StyleCop.Analyzers" Version="1.1.118" />

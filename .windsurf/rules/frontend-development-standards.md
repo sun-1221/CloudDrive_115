@@ -12,7 +12,7 @@ trigger: manual
 - 115 Cloud Drive 前端页面、组件、Store、Service、API 适配层设计
 - 与当前 Cloud Drive 后端契约直接相关的交互与实现对齐
 
-通用前端规则请优先参考：`E:\Code\115\.windsurf\rules\frontend-general-standards.md`
+通用前端规则请优先参考：`.windsurf/rules/frontend-general-standards.md`
 
 当以下来源发生冲突时，优先级如下：
 

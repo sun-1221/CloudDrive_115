@@ -90,3 +90,6 @@ yarn-error.log*
 *.tmp
 *.temp
 *.cache
+
+# Local WebApi development database and Data Protection keys
+Server/src/WebApi/App_Data/
