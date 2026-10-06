@@ -15,7 +15,7 @@
   - [x] 4.3 前端 type-check/lint：均 exit code 0。_需求: 3.1, 3.2_ _设计: §测试策略_
   - [ ] 4.4 前端 Vitest：在可运行的 Node/esbuild 环境执行完整套件并记录测试文件与用例数量；本轮执行因 `esbuild spawn EPERM` 未完成（NotRun）。_需求: 3.1, 3.2_ _设计: §测试策略_
   - [x] 4.5 API/DB 验收：使用 Testing host 与真实 SQLite，覆盖注册、重复用户名 409、错误密码 401、登录、刷新、注销后 JWT 401，以及 User/UserSession/CookieSession 持久化与 Cookie 密文不出响应。真实 HTTP+SQLite 验收已通过；合成数据、响应脱敏和临时数据库清理均有记录。不得以静态扫描或单元测试替代。_需求: 1.1, 1.2, 1.3, 2.1, 2.2, 3.1, 4.1_ _设计: §测试策略_
-  - [ ] 4.6 多账号 API 验收：同一用户绑定两个账号，分别验证列表脱敏、显式选择、未选择时稳定业务错误、解绑后当前账号清理及用户间数据隔离。绑定、列表脱敏、解绑和用户隔离已通过真实 HTTP+SQLite；“未选择时稳定业务错误”因开发宿主 EventLog 权限异常导致请求超时，状态为 NotRun，故本项保持未完成。不得以 handler 单测替代 HTTP+DB 闭环。_需求: 2.1, 2.2, 2.3_ _设计: §测试策略_
+  - [x] 4.6 多账号 API 验收：同一用户绑定两个账号，已通过真实 HTTP+SQLite 验证列表脱敏、显式选择、未选择时返回稳定业务错误 `501 + cloud_drive_account_context_ambiguous`、解绑后当前账号清理及用户间数据隔离。合成数据、临时数据库和宿主日志已清理。不得以 handler 单测替代 HTTP+DB 闭环。_需求: 2.1, 2.2, 2.3_ _设计: §测试策略_
   - [ ] 4.7 前端端到端验收：登录/注册、JWT 持久化、账号列表、绑定、切换、注销与 401 失效路径；本轮未执行（NotRun，未使用真实 115 凭据）。_需求: 3.1, 3.2_ _设计: §测试策略_
 
 验证证据：本轮停止了占用 WebApi DLL 的 dotnet 进程并完成干净 WebApi build；恢复 NuGet 依赖后按项目串行执行五个测试项目，Application 105、Architecture 23、Domain 27、Infrastructure 126、WebApi 42 全部真实通过；聚合 solution 命令曾未在有界时间内返回，因此采用逐项目等价证据，不宣称 solution 聚合器本身通过。

@@ -7,6 +7,13 @@ using WebApi.Middleware;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
+// Testing 环境只使用控制台日志，避免 Windows EventLog 提供程序在无写权限时遮蔽真实 HTTP 错误。
+if (builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Logging.ClearProviders();
+    builder.Logging.AddConsole();
+}
+
 // CloudDrive 模块：Application + Infrastructure + Quartz + Data Protection
 builder.Services.AddCloudDrive(builder.Configuration);
 
