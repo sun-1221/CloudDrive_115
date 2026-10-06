@@ -81,4 +81,3 @@ internal sealed class TestUserSessionRepository : IUserSessionRepository
     public Task<int> DeleteAsync(UserSession entity, CancellationToken cancellationToken = default)
         => Task.FromResult(1);
 }
-
