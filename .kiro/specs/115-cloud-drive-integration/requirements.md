@@ -2,37 +2,27 @@
 
 ## 简介
 
-本功能为 .NET 10 原生 DDD + CQRS 项目集成 115 网盘 **网页端原生 API**，通过后端 Cookie 认证机制调用 `webapi.115.com`、`115.com/web/lixian`、`my.115.com`、`vip.115.com`、`pay.115.com` 等网页端 API，为前端提供标准化的 REST 端点。涵盖文件 CRUD（读取优先）、搜索、回收站、图片/视频/文档预览、云下载（离线下载）、分享管理、用户中心等能力。
+本功能为 .NET 10 原生 DDD + CQRS 项目集成 115 网盘 **网页端原生 API**，通过后端 Cookie 认证机制调用 `webapi.115.com`、`clouddownload.115.com`、`vip.115.com`、`pay.115.com` 等网页端 API，为前端提供标准化的 REST 端点。能力是否启用严格取决于已验收脱敏 HTTP 契约；没有闭环证据的入口保持禁用。
 
 > **架构定位**：本 spec 定义 115 网盘**后端业务模块**，基于 `.kiro/specs/115-cloud-drive-net10/` 已搭建的 .NET 10 DDD 四层框架实现。前端 Vue 3 应用通过本模块提供的 `/api/*` REST 端点访问 115 网盘数据。
 
-> **数据源权威性**：本系统仅对接 **115 网页端原生 API**，以 `docs/115-api-docs.md`（2026-05-04 最新自动采集，`runId: 20260504073432-ck05g2`，并保留 2026-04-18 上传链路手动补充，共 76 个唯一接口）为权威数据源。开放平台文档（`/open/*`）仅作为参数含义、业务约束、特殊行为的补充参考。**不**通过 OAuth 换取 Access/Refresh Token 直接调用开放平台 API。
+> **数据源权威性**：本系统仅对接 **115 网页端原生 API**。接口事实只以 `docs/115-api-docs.md` 记录的 2026-08-09 已验收脱敏 capture result 为权威；其他历史采集、外部文档和第三方实现均不得补齐 method、path、参数、响应或错误字段。
 
-> **认证方式**：采用 **Cookie-based 认证**（UID/CID/USSID），由管理员从已登录的 115 网页端导出 Cookie 注入系统配置；后端通过 ASP.NET Core Data Protection 加密存储，请求 115 API 时自动注入。**不使用 OAuth 2.0、AppID/AppSecret、PKCE 流程**。
+> **认证方式**：采用 **Cookie-based 认证**（UID/CID/USSID），由管理员从已登录的 115 网页端导出 Cookie 注入系统配置；后端通过 ASP.NET Core Data Protection 加密存储，请求 115 API 时自动注入。前端不读取、传递或记录 115 Cookie。
 
 > **合规声明**：系统使用的是用户在 115 网页端登录后的 Cookie 会话，归属其本人。系统不得将 API 用于图床、软件床、视频外链播放、OSS 对象存储等违反 115 服务条款的场景。
 
 > **账号模型**：**单账号模型**。系统仅维护一个 115 账号的 Cookie 会话，不支持多账号切换。
 
-> **API 覆盖说明**：已通过 `docs/115-api-docs.md` 获取 76 个网页端接口证据（74 个 2026-05-04 自动采集 + 2 个上传链路手动补充），本系统使用其中 **20 个业务接口**（含 2026-04-18 补充采集的上传初始化 `uplb.115.com/3.0/sampleinitupload.php`、OSS 直传，以及 2026-05-04 自动采集确认的视频转码 `webapi.115.com/files/video_push`、播放进度 `webapi.115.com/files/history`）。对文档中已有采集证据的接口，后端 SHALL 直接按该文档访问 115；不得改写成开放平台 OAuth 口径或继续标注为待联调。**部分写操作接口**（文件增删改、下载地址、云下载创建/删除/清空、回收站还原/彻底删除/清空等）**尚未在该文档中采集**，仍标注为「待补采集」。上传链路涉及外部 OSS 域名 `*.oss-cn-*.aliyuncs.com`（阿里云对象存储直传）。
+> **API 覆盖说明**：已验收 evidence 包含两批共 116 条结构化脱敏记录和四个固定 SHA-256 清单。可启用：文件列表、下载地址、新建、重命名、星标、单样本复制、回收站非空列表、视频播放、播放进度读取、字幕空列表、我的分享非空列表、云下载配额/计数/空列表、VIP/余额/空间。保持禁用：搜索、上传、移动、删除、回收站写操作、播放进度写入、主动转码、云下载写操作及非空任务 item、分享 send/receive 成功列表、基础资料、字幕非空 item、清晰度与音轨。网页 UI 成功但未取得 HTTP body 的动作不得视为接口完成。
 
-> **官方 API 范围排除声明**：以下 13 个官方网页端端点**明确不纳入本系统**，避免引入不必要的数据收集或侵入性调用：
-> - `webapi.115.com/category/shortcut`（快捷分类，非核心功能）
-> - `webapi.115.com/label/list`（文件标签列表，后续迭代）
-> - `webapi.115.com/user/allow_protocol`、`/user/fingerprint`、`/user/setting`（用户协议、设备指纹、用户设置，属浏览器探针）
-> - `webapi.115.com/usershare/list`（与 `/share/slist` 功能重叠）
-> - `115.com/?ac=setting&even=saveedit`（保存编辑设置，无业务需求）
-> - `act.115.com/*`（活动开关，非网盘功能）
-> - `appversion.115.com/*`（客户端版本，非网盘功能）
-> - `msg.115.com/*`、`yunmsg.115.com/*`、`pmsg.115.com/*`、`home.115.com/*`（消息/通讯录，非网盘功能）
-> - `q.115.com/*`（社区功能，非网盘）
-> - `passportapi.115.com/*`（账号安全预警，非网盘）
+> **范围排除声明**：`docs/115-api-docs.md` collected 闭集之外的所有 host/path/query 组合均不纳入当前运行时，不为其建立错误规则、DTO、缓存或后台任务。
 
-> **分页上限说明**：`docs/115-api-docs.md` 当前仅采集到网页端 `offset` / `limit` 参数，未采集到 `limit=1150`、`offset+limit≤10000` 等网页端硬上限。系统不得将开放平台推断值作为 115 网页端硬拦截规则；如需保护服务资源，只能通过系统自有配置（如 `CloudDrive:MaxPageSize`）限制，并在 ProblemDetails 中标注为系统保护限制而非 115 官方限制。
+> **分页上限说明**：`docs/115-api-docs.md` 只记录 observed `offset` / `limit`，没有建立网页端硬上限。服务资源保护只能通过系统自有配置（如 `CloudDrive:MaxPageSize`）实现，并在 ProblemDetails 中标注为系统限制。
 
 ## 前置要求与约束
 
-1. 本系统 SHALL 仅使用 115 网页端已公开接口，严格遵守 115 用户协议
+1. 本系统 SHALL 只调用 `docs/115-api-docs.md` 标记为 collected 且已启用的 115 网页端契约
 2. 本系统 SHALL 以部署方持有有效的 115 网页端 Cookie（UID/CID/USSID）为前提，通过环境变量或安全配置文件注入
 3. IF Cookie 缺失、格式无效或失效，THEN 系统 SHALL 禁用 115 相关功能并记录错误
 4. 所有下载/播放/缩略图地址 SHALL 仅供当前授权用户在本系统内短时使用，不得持久化为公开链接
@@ -40,16 +30,25 @@
 
 ## 术语表
 
-- **Cloud_Drive_Service**：115 网盘集成服务的核心服务层
-- **Auth_Service**：Cookie 认证服务（取代 OAuth Service）
+- **Cloud_Drive_Service**：115 网盘集成服务的核心服务层（应用编排与业务用例入口的统称）
+- **CloudDrive_Module**：Application 层 `src/Application/CloudDrive/` 业务模块（按 Auth/Files/Search/Video 等子领域组织）
+- **WebApi_Layer**：表现层（`src/WebApi/`），提供 REST Controllers、OpenAPI 与 HTTP 适配
+- **Controllers**：WebApi 层 REST 控制器集合（如 `AuthController`/`FilesController`），仅通过 `ISender`/`IMediator` 调用 Application
+- **Infrastructure_Layer**：基础设施层（`src/Infrastructure/CloudDrive/`），实现 Gateway、仓储、缓存、限流与外部 HTTP 客户端
+- **Gateway_Layer**：访问 115 网页端 API 的网关抽象层；物理实现为单一 `ICloudDriveWebApiGateway` / `CloudDriveApiClient`（不得按子域拆出多套并行 HTTP 客户端）
+- **FileGateway**：`Gateway_Layer` / `ICloudDriveWebApiGateway` 的逻辑别名（需求叙述用语；无独立物理类型）
+- **Cookie_Manager** / **CookieManager**：Cookie 会话编排的逻辑别名；物理实现为应用层 `CookieSessionManager`（加密存储/注入/失效/冷却）
+- **ExceptionHandlingMiddleware**：WebApi 全局异常中间件，将已分类异常与失败结果映射为 `ProblemDetails`（**不**负责解析 115 响应错误字段）
+- **ErrorFieldAdapter**：Gateway/ApiClient 解析路径中的错误字段适配器（`IErrorFieldAdapter`），按 URL 路径解析 115 错误字段变体并映射为内部异常
+- **LoggingBehavior**：MediatR Pipeline Behavior，负责结构化请求日志与敏感字段脱敏
+- **Auth_Service**：Cookie 会话认证服务
 - **File_Service**：文件管理服务
 - **Preview_Service**：文件预览服务
 - **Video_Service**：视频管理服务
 - **Offline_Service**：云下载（离线下载）服务
 - **Share_Service**：分享管理服务
 - **User_Service**：用户中心服务（聚合基础信息/VIP/余额/存储空间）
-- **Cookie_Manager**：基于 Data Protection 加密存储 UID/CID/USSID
-- **Signature_Service**：为云下载接口生成 `sign + time + uid` 签名
+- **Signature_Service**：云下载写签名的禁用扩展点；算法未采集时只返回 `offline_signature_not_available`，不得生成占位签名
 - **Rate_Limiter**：按场景控制 115 API 调用频率
 - **Metadata_Cache**：元数据缓存
 - **Background_Job**：基于 Quartz.NET `IJob` 的后台任务
@@ -63,16 +62,16 @@
 
 **用户故事：** 作为系统管理员，我希望通过注入一组 115 网页端 Cookie 建立系统与 115 的会话。
 
-> **说明**：不同于 OAuth 需要用户主动授权，本系统采用**管理员注入 Cookie** 模式。系统不涉及用户密码、短信、二维码等登录流程。
+> **说明**：本系统采用**管理员注入 Cookie** 模式，不涉及用户密码、短信、二维码等登录流程。
 
 #### 验收标准
 
 1. THE Cookie_Manager SHALL 支持通过环境变量（`COOKIE_UID`/`COOKIE_CID`/`COOKIE_USSID`）或配置文件读取明文 Cookie
 2. THE Cookie_Manager SHALL 通过 ASP.NET Core Data Protection（`IDataProtector`）加密 Cookie 并持久化，key ring 持久化共享以支持服务重启和多实例部署
-3. WHEN Gateway 发起 115 API 请求时，THE Cookie_Manager SHALL 在 Header 注入 `Cookie: UID=...; CID=...; USSID=...`
+3. WHEN Gateway_Layer 发起 115 API 请求时，THE Cookie_Manager SHALL 在 Header 注入 `Cookie: UID=...; CID=...; USSID=...`
 4. IF 115 API 响应指示登录态失效（HTTP 401 或 errNo/code 匹配登录失效语义），THEN THE Cookie_Manager SHALL 发布领域事件 `CookieInvalidated`
 5. WHEN `CookieInvalidated` 事件发生后，THE Cloud_Drive_Service SHALL 在冷却时间内（默认 60 秒，可通过 `CookieCooldownSeconds` 配置调整）短路后续 115 API 调用，直接返回 `auth_expired` 错误
-6. THE Cookie_Manager SHALL 严禁通过日志、响应体、异常消息泄露原始 Cookie 值；日志仅记录前 4 位 + `****`
+6. THE Cookie_Manager SHALL 严禁通过日志、响应体、异常消息泄露原始 Cookie 值或任意原值片段；只记录固定占位符与非敏感状态
 7. THE Cloud_Drive_Service SHALL 采用单账号模型，不支持多账号切换
 
 ### 需求 2：Cookie 配置管理
@@ -93,12 +92,12 @@
 
 #### 验收标准
 
-1. THE WebApi_Layer SHALL 提供 `GET /api/auth/check`，返回 `{ isAuthenticated: boolean, failureReason?: string }`
-2. WHEN 收到 `/api/auth/check` 请求时，THE Cloud_Drive_Service SHALL 通过 `FileGateway` 调用 `webapi.115.com/files?cid=0&limit=1` 轻量探测
-3. IF 探测成功，THEN 返回 `{ isAuthenticated: true }`
-4. IF 探测失败且登录态无效，THEN 返回 `{ isAuthenticated: false, failureReason: 'cookie_invalid' }`
-5. IF 探测失败且原因为网络异常，THEN 返回 `{ isAuthenticated: false, failureReason: 'network' }`
-6. THE WebApi_Layer SHALL 对此端点不强制要求认证
+1. THE WebApi_Layer SHALL 提供 `GET /api/auth/check`，返回公开 JSON（camelCase）：`{ isAuthenticated: boolean, isLoggedIn: boolean | null, lastCheckedAt: string (ISO-8601), cooldownUntil?: string | null, failureReason?: 'cookie_invalid' | 'network' | 'cookie_not_active' }`，且始终满足 `isAuthenticated === (isLoggedIn === true)`
+2. WHEN 收到 `/api/auth/check` 请求时，THE Cloud_Drive_Service SHALL 通过 FileGateway（`ICloudDriveWebApiGateway` 逻辑别名）调用 `GET webapi.115.com/files?cid=0&limit=1` 轻量探测；IF Cookie 处于冷却期或会话非 Active，THEN THE Cloud_Drive_Service SHALL 短路且不发起探测，返回 `isLoggedIn=false`、`isAuthenticated=false`、`failureReason='cookie_not_active'`，并在已知时设置 `cooldownUntil`
+3. IF 探测成功，THEN THE Cloud_Drive_Service SHALL 返回 `isLoggedIn=true`、`isAuthenticated=true`，且省略 `failureReason`
+4. IF 探测失败且登录态无效，THEN THE Cloud_Drive_Service SHALL 返回 `isLoggedIn=false`、`isAuthenticated=false`、`failureReason='cookie_invalid'`
+5. IF 探测失败且原因为网络异常，THEN THE Cloud_Drive_Service SHALL 返回 `isLoggedIn=null`、`isAuthenticated=false`、`failureReason='network'`
+6. THE WebApi_Layer SHALL 对此端点不强制要求认证（`AllowAnonymous`）；Controller SHALL NOT 调用 `GetAuthenticatedUserId()`，改为解析系统单账号 Cookie 会话（可选 JWT 用户上下文）
 
 ### 需求 4：获取文件列表
 
@@ -106,11 +105,11 @@
 
 #### 验收标准
 
-1. WHEN 用户请求获取指定目录的文件列表时，THE File_Service SHALL 调用 `GET webapi.115.com/files`，必填参数 `aid=1`（网盘档案 ID；回收站为 `aid=7`）、`cid=0` 表示根目录、`format=json`
-2. THE File_Service SHALL 采用 `offset + limit` 分页，默认 `offset=0`、`limit=50`；`docs/115-api-docs.md` 未采集网页端最大 `limit`，实现不得以开放平台推断值作为 115 硬上限
-3. THE File_Service SHALL 支持透传筛选与排序参数：`o`（`user_ptime`/`file_name`/`file_size`）、`asc`（1/0）、`type`（网页端已采集参数存在但值域未采集）、`show_dir`、`star=1`（仅星标）、`natsort`、`snap`、`count_folders`、`record_open_time`、`code`（待采集含义）、`scid`（待采集含义）、`source`、`suffix`；不得将未采集的 `type=1..7` 语义当作 115 官方枚举
-4. THE File_Service SHALL 归一化网页端响应字段为 `CloudDriveFileDto`：`fid→fileId, n→fileName, s→size, fc→rawCategoryCode, pc→pickCode, tu→thumb, u→originalUrl, tp→videoImg, iv→isVideo, fvs→videoDefinition, play_long→playDuration, te→uploadTime, t→updateTime, m→isStarred, hdf→isPrivate, sta→uploadStatus, sha→sha1, ico→ico, class→fileClass`；`fc/sta/hdf/class/fvs/iv` 等字段值域未在 `docs/115-api-docs.md` 中定义，派生 `category/isDirectory/uploadStatus` 前 SHALL 通过真实网页端样本验证，未知时返回 `category='unknown'` / `isDirectory=null`，不得硬编码互相冲突的开放平台推断值
-5. THE File_Service SHALL 归一化响应中的 `path` 数组为 `CloudDriveBreadcrumbDto[]`
+1. WHEN 用户请求获取指定目录的文件列表时，THE File_Service SHALL 调用 `GET webapi.115.com/files`；已保留的非敏感控制值包括 `aid=1,format=json`，当前未通过省略实验证明任何上游参数必填性。应用默认根目录可发送 `cid=0`，但不得把该默认值写成上游必填规则
+2. THE File_Service SHALL 采用 `offset + limit` 分页，默认 `offset=0`、`limit=50`；最大值只受系统自有保护配置约束
+3. THE File_Service SHALL 只传递已观察到的 query：`aid,asc,cid,count_folders,custom_order,fc_mix,format,limit,natsort,nf,o,offset,show_dir,stdir,type`；其必填性和枚举未建立，未列参数不得自行加入
+4. THE File_Service SHALL 归一化网页端响应字段为 `CloudDriveFileDto`：`fid→fileId, n→fileName, s→size, fc→rawCategoryCode, pc→pickCode, tu→thumb, u→originalUrl, tp→videoImg, iv→isVideo, fvs→videoDefinition, play_long→playDuration, te→uploadTime, t→updateTime, m→isStarred, hdf→isPrivate, sta→uploadStatus, sha→sha1, ico→ico, class→fileClass`；未建立值域的字段只保留 raw/null 语义，不得硬编码枚举
+5. THE File_Service SHALL 将已采集响应键 `path` 归一化为公开契约 `paths`（`CloudDrivePathNodeDto[]`），并只映射 `aid,cid,isp,name,pid`
 6. WHEN 未指定目录时，THE File_Service SHALL 默认返回根目录（`cid=0`）
 7. IF 目录不存在，THEN 返回 HTTP 404 ProblemDetails
 8. WHEN `offset < 0`、`limit <= 0` 或 `limit` 超出系统自有 `CloudDrive:MaxPageSize` 配置时，THE File_Service SHALL 抛出 `ValidationException`，返回 HTTP 400 ProblemDetails；错误码 SHALL 表示系统保护限制，不得表述为 115 网页端官方上限
@@ -121,16 +120,16 @@
 
 #### 验收标准
 
-1. WHEN 用户提交搜索关键词时，THE File_Service SHALL 调用 `GET webapi.115.com/files/search`
-2. THE File_Service SHALL 支持筛选参数：`search_value`（必填）、`aid`（默认 1）、`cid`（默认 0，指定搜索目录）、`type`（网页端为 empty/数值）、`date`（`YYYY-MM-DD`，日期筛选）、`pick_code`（可选，按提取码查询）、`count_folders`（默认 1）、`source`、`format=json`；**开放平台的 `gte_day`/`lte_day`/`fc`/`suffix`/`file_label` 参数在网页端采集中未出现**，本系统暂不采用
-3. THE File_Service SHALL 采用 `offset + limit` 分页；`docs/115-api-docs.md` 未采集网页端 `offset + limit` 总上限，系统不得以 `10000` 作为 115 硬限制
-4. WHEN 关键词为空或纯空白时，返回 HTTP 400 ProblemDetails
-5. WHEN `offset < 0`、`limit <= 0` 或 `limit` 超出系统自有 `CloudDrive:MaxPageSize` 配置时，返回 HTTP 400 ProblemDetails；错误码 SHALL 表示系统保护限制，不得表述为 115 网页端官方上限
-6. THE File_Service SHALL 按 `docs/115-api-docs.md` 已采集 schema 归一化 `/files/search` 顶层字段：`count`、`page_size`、`page_count`、`offset`、`is_asc`、`order`、`suffix`、`fc_mix`、`type`、`state`、`error`、`errCode`
-7. WHEN 搜索响应 `data` 为数组时，THE File_Service SHALL 映射 2026-05-04 已采集的搜索 item 字段：`fid`、`aid`、`cid`、`n`、`s`、`sta`、`pc`、`fc`、`m`、`t`、`te`、`tp`、`ico`、`dp`、`ns`、`sha`、`hdf`、`fl`、`u`、`iv`、`play_long` 等；未在文档中列明的字段不得推断
-8. THE File_Service SHALL 将 `CloudDriveSearchListDto.ItemSchemaStatus` 置为 `"available"`；IF 后续响应不再符合已采集数组 item schema，THEN 返回 `Items = []` 与 `ItemSchemaStatus = "not_collected"`，并记录 Warning 日志
-9. THE File_Service SHALL 将搜索 item 的 `ns` 作为高亮片段原文或清洗后的显示名候选保存，不得要求前端把 `ns` 作为可信 HTML 直接渲染；`fc`、`type`、`sta`、`m` 等值域仍以未采集语义处理，不得硬编码为官方枚举
-10. WHEN 搜索无匹配结果时，返回 HTTP 200 + 空数组，`ItemSchemaStatus` 保持 `"available"`
+1. WHILE `GET webapi.115.com/files/search` 没有出现在已验收证据中，THE WebApi_Layer SHALL 将 `GET /api/files/search` 标记为 disabled，并返回 HTTP 501 ProblemDetails，`extensions.code='cloud_drive_api_not_collected'`
+2. THE File_Service SHALL NOT 发起任何 `/files/search` 上游请求，也不得沿用旧 manual-capture 的参数表
+3. THE File_Service SHALL NOT 声明 `search_value/date/pick_code/type` 等参数的必填性、默认值或值域
+4. WHEN 关键词为空或纯空白时，THE WebApi_Layer MAY 先返回 HTTP 400 ValidationProblemDetails，但有效关键词仍不得越过契约门禁
+5. WHEN `offset < 0`、`limit <= 0` 或 `limit` 超出系统保护配置时，THE WebApi_Layer MAY 返回 HTTP 400 ValidationProblemDetails，但不得将该校验描述为 115 限制
+6. THE CloudDriveSearchListDto SHALL 将 `itemSchemaStatus` 置为 `not_collected`，不得构造 items
+7. THE File_Service SHALL NOT 映射旧搜索 item 字段或高亮片段
+8. THE File_Service SHALL NOT 将搜索空结果与未采集状态混为一谈
+9. WHEN 新的脱敏成功证据通过验收后，THEN THE File_Service SHALL 只按新证据更新参数、顶层和 item schema
+10. UNTIL AC 5.9 完成，THE Frontend_App SHALL 保持搜索入口禁用
 
 ### 需求 6：查看文件详情
 
@@ -139,7 +138,7 @@
 #### 验收标准
 
 1. THE WebApi_Layer SHALL 提供 `GET /api/files/{fileId}` 端点
-2. THE File_Service SHALL 通过网页端详情接口（待补采集）或从文件列表响应提取字段返回
+2. THE File_Service SHALL 仅从已采集文件列表条目与 `path` 上下文提取字段返回；独立网页端详情接口未采集且不得调用
 3. THE File_Service SHALL 返回可获取属性：`fileId`/`fileName`/`pickCode`/`sha1`/`uploadTime`/`updateTime`/`size`/`isVideo`/`playDuration`/`thumb`/`originalUrl`；未返回字段使用 `null` 而非伪造
 4. IF 文件不存在，THEN 返回 HTTP 404 ProblemDetails
 
@@ -147,53 +146,54 @@
 
 **用户故事：** 作为用户，我希望将本地文件上传到 115 网盘。
 
-> **状态**：**已采集完整三步上传链路**（2026-04-18 手动抓包实测）。网页端统一使用 `sampleinitupload.php`（无论文件大小），大文件与小文件走同一初始化接口，通过响应字段分流秒传/OSS 直传。
+> **状态**：**not-collected / disabled**。旧上传样本不在本轮已验收脱敏 evidence 中，不能作为实现依据。
 
 #### 验收标准
 
-1. THE WebApi_Layer SHALL 提供 `POST /api/files/upload` 端点
-2. THE File_Service SHALL 首先调用 `POST uplb.115.com/3.0/sampleinitupload.php`（Content-Type: `application/x-www-form-urlencoded`），必填参数 `userid`（当前 115 账号 UID）、`filename`、`filesize`（字节）、`target=U_1_{cid}`（`cid=0` 表示根目录）；响应为 `text/html` 实际为 JSON 载荷
-3. IF 响应载荷包含 `file_id` 且无 OSS 凭证字段，THEN 判定为秒传成功并直接返回文件信息
-4. 非秒传时响应包含 OSS 直传凭证：`{ object, accessid, host, policy, signature, expire, callback }`（`host` 形如 `https://fhnfile.oss-cn-shenzhen.aliyuncs.com`；`callback` 为 base64 编码的 OSS callback 配置，其 `callbackUrl` 固定为 `http://uplb.115.com/3.0/samplecompleteupload.php`）
-5. THE File_Service SHALL 使用 OSS PostObject 方式（`POST {host}/`，multipart/form-data，字段包含 `key=${object}`、`policy`、`OSSAccessKeyId=${accessid}`、`signature`、`callback`、`file`）将文件直传至 115 的 OSS bucket
-6. THE File_Service SHALL 将 OSS 直传的响应体（OSS callback 透传回的 115 业务响应）归一化为 `{ state, code, data: { file_id, file_name, pick_code, sha1, file_size, cid, user_id, is_video, ... } }` 并作为完成结果返回
-7. THE File_Service SHALL 支持在请求中指定目标目录 ID（映射到 `target=U_1_{cid}`）
-8. THE File_Service SHALL 为大文件后台上传保留可恢复元数据（`TempFilePath` + `pickCode` + OSS 凭证快照），凭证过期（`expire` 字段到期）时重新调用 `sampleinitupload.php` 获取新凭证
-9. WHEN 文件较大或可能超时时，THE File_Service SHALL 通过 Background_Job 异步执行并提供进度查询
-10. IF 网络中断且本地恢复资源不可用，THEN 返回 HTTP 502 ProblemDetails 并释放资源
-11. IF OSS 直传响应 `state=false`，THEN 将响应的 `code` 与 `message` 映射为上传错误并返回 HTTP 502
-12. WHEN 上传成功后，THE File_Service SHALL 返回文件信息（`fileId`/`fileName`/`directoryId`/`pickCode`/`sha1`）
+1. WHILE 上传 HTTP 契约未通过新的脱敏 evidence 验收，THE WebApi_Layer SHALL 将 `POST /api/files/upload` 标记为 disabled，并返回 HTTP 501 + `cloud_drive_api_not_collected`
+2. THE File_Service SHALL NOT 调用旧样本中的上传初始化路径
+3. THE File_Service SHALL NOT 依据旧样本声明秒传判定条件
+4. THE File_Service SHALL NOT 保存、记录或复用任何 OSS access ID、policy、signature、callback、host 或临时凭据
+5. THE File_Service SHALL NOT 向外部对象存储发送文件
+6. THE File_Service SHALL NOT 构造上传成功 DTO
+7. THE WebApi_Layer SHALL NOT 接受目标目录写入请求并假装已排队
+8. THE Background_Job SHALL NOT 创建上传任务或持久化本地临时文件路径
+9. THE Frontend_App SHALL 禁用上传入口并展示“接口契约待采集”说明
+10. IF 请求命中禁用端点，THEN 返回 501，不得转写为网络失败
+11. THE ErrorFieldAdapter SHALL NOT 注册旧上传错误字段
+12. WHEN 新的脱敏上传成功与错误 evidence 完整闭环后，THEN THE File_Service SHALL 再定义归一化成功 DTO
+13. UNTIL AC 7.12 完成，THE File_Service SHALL NOT 声明 SHA1/PreSha1、秒传或分片规则
 
 ### 需求 8：文件下载
 
 **用户故事：** 作为用户，我希望从 115 网盘下载文件。
 
-> **状态**：**下载地址 API 待补采集**。
+> **状态**：**collected**。已取得 `GET webapi.115.com/files/download` 成功契约；URL 与标识值未保存。
 
 #### 验收标准
 
-1. THE WebApi_Layer SHALL 预留 `GET /api/files/{pickCode}/download` 端点
-2. THE File_Service SHALL 调用网页端下载地址接口（待补采集）获取临时下载 URL
+1. THE WebApi_Layer SHALL 提供 `GET /api/files/{pickCode}/download` 端点
+2. THE File_Service SHALL 调用 `GET webapi.115.com/files/download`，query 只传递 observed `_,dl,pickcode`；`_` 语义、`dl` 枚举和必填性未建立
 3. THE File_Service SHALL 返回临时下载 URL 或受控代理地址
 4. IF 文件不存在，THEN 返回 HTTP 404 ProblemDetails
 5. IF 下载地址获取失败，THEN 返回 HTTP 502 ProblemDetails
-6. THE File_Service SHALL 在响应中标识地址的临时性
+6. THE File_Service SHALL 只映射顶层 `file_id,file_name,file_size,file_url_302,is_115chrome,is_snap,is_vip,msg,msg_code,pickcode,state,user_id`，并在归一化响应中标识地址临时性；不得记录 URL、文件名、pickCode 或账号标识
 7. IF 下载链接过期，THEN 前端可再次请求 `/api/files/{pickCode}/download` 获取新链接
 
 ### 需求 9：新建文件夹
 
 **用户故事：** 作为用户，我希望在网盘中创建新文件夹。
 
-> **状态**：**新建文件夹 API 待补采集**。
+> **状态**：**collected**。3 个真实成功样本。
 
 #### 验收标准
 
-1. THE WebApi_Layer SHALL 预留 `POST /api/files/folders` 端点
-2. THE File_Service SHALL 调用网页端新建文件夹接口（待补采集），参数含 `parentId`/`folderName`
+1. THE WebApi_Layer SHALL 提供 `POST /api/files/folders` 端点
+2. THE File_Service SHALL 调用 `POST webapi.115.com/files/add`，无 query，form body observed `cname,pid`；必填性未通过省略实验建立
 3. THE File_Service SHALL 验证名称非空、不含非法字符（`/ \ : * ? " < > |`）、长度 ≤ 255 字符
 4. IF 父目录不存在，THEN 返回 HTTP 404 ProblemDetails
 5. IF 名称格式无效，THEN 返回 HTTP 400 ProblemDetails
-6. WHEN 创建成功后，THE File_Service SHALL 返回新文件夹的 `fileId`/`fileName`
+6. WHEN 响应 `state=true` 且 `errno=""` 时，THE File_Service SHALL 只按顶层 `aid,cid,cname,errno,error,file_id,file_name,state` 返回新文件夹的 `fileId`/`fileName`
 
 ### 需求 10：文件移动
 
@@ -203,25 +203,25 @@
 
 #### 验收标准
 
-1. THE WebApi_Layer SHALL 预留 `POST /api/files/move` 端点
-2. THE File_Service SHALL 调用网页端移动接口（待补采集），参数含 `fileIds[]` 和 `targetDirectoryId`
-3. THE File_Service SHALL 支持批量移动
-4. IF 目标或源不存在，THEN 返回 HTTP 404 ProblemDetails
-5. WHEN 成功后，THE File_Service SHALL 返回操作结果并使受影响目录缓存失效
+1. THE WebApi_Layer SHALL 将 `POST /api/files/move` 标记为 disabled，并返回 HTTP 501 + `cloud_drive_api_not_collected`
+2. THE File_Service SHALL NOT 调用上游移动接口；网页 UI 成功不构成 method/path/body/response 证据
+3. THE File_Service SHALL NOT 声明批量参数或请求体形态
+4. WHILE 能力 disabled，THE WebApi_Layer SHALL 在资源存在性探测前直接返回 501，避免借错误差异泄露资源状态
+5. THE File_Service SHALL NOT 返回成功结果、创建 Background_Job 或改变缓存
 
 ### 需求 11：文件复制
 
 **用户故事：** 作为用户，我希望将文件复制到其他目录。
 
-> **状态**：**复制 API 待补采集**。
+> **状态**：**collected（单样本）**。只确认 `fid[0]` 单下标形态，不证明批量规则。
 
 #### 验收标准
 
-1. THE WebApi_Layer SHALL 预留 `POST /api/files/copy` 端点
-2. THE File_Service SHALL 调用网页端复制接口（待补采集）
-3. THE File_Service SHALL 支持批量复制，允许控制是否重名副本（以采集为准）
+1. THE WebApi_Layer SHALL 提供 `POST /api/files/copy` 端点；当前一次请求只接受单个 fileId
+2. THE File_Service SHALL 调用 `POST webapi.115.com/files/copy`，无 query，form body observed `fid[0],format,pid`
+3. THE File_Service SHALL NOT 声明批量下标、重名控制或字段必填性；批量输入必须逐个顺序调用或返回不支持
 4. IF 目标或源不存在，THEN 返回 HTTP 404 ProblemDetails
-5. WHEN 成功后返回操作结果
+5. WHEN 响应 `state=true` 且 `errno=""` 时返回操作结果；只解析顶层 `errno,error,state`
 
 ### 需求 12：文件删除
 
@@ -231,68 +231,68 @@
 
 #### 验收标准
 
-1. THE WebApi_Layer SHALL 预留 `DELETE /api/files` 端点（请求体含 `fileIds[]`）
-2. THE File_Service SHALL 调用网页端删除接口（待补采集）
-3. THE File_Service SHALL 支持批量删除
-4. IF 文件不存在，THEN 返回 HTTP 404 ProblemDetails
-5. WHEN 成功后返回操作结果并使缓存失效
+1. THE WebApi_Layer SHALL 将 `DELETE /api/files` 标记为 disabled，并返回 HTTP 501 + `cloud_drive_api_not_collected`
+2. THE File_Service SHALL NOT 调用上游删除接口；网页 UI 进入回收站不构成 HTTP 契约
+3. THE File_Service SHALL NOT 声明批量删除请求体
+4. WHILE 能力 disabled，THE WebApi_Layer SHALL 在资源存在性探测前直接返回 501，避免借错误差异泄露资源状态
+5. THE File_Service SHALL NOT 返回成功结果、创建 Background_Job 或改变缓存
 
 ### 需求 13：文件重命名
 
 **用户故事：** 作为用户，我希望重命名文件或文件夹。
 
-> **状态**：**重命名 API 待补采集**。
+> **状态**：**collected**。4 个真实成功样本。
 
 #### 验收标准
 
-1. THE WebApi_Layer SHALL 预留 `PATCH /api/files/{fileId}` 端点（请求体含 `newFileName`）
-2. THE File_Service SHALL 调用网页端重命名接口（待补采集）
-3. THE File_Service SHALL 验证名称非空、不含非法字符、长度符合限制
+1. THE WebApi_Layer SHALL 提供 `PATCH /api/files/{fileId}` 端点（请求体含 `newFileName`）
+2. THE File_Service SHALL 调用 `POST webapi.115.com/files/batch_rename`，无 query，form body observed `files_new_name[{dynamic}],format`
+3. THE File_Service SHALL 验证名称非空、不含非法字符（`/ \ : * ? " < > |`）、UTF-8 编码长度 ≤ **255 字节**（`CloudDriveFileNameValidator.ValidateRenameFileName`；与新建文件夹的「255 字符」规则不同）
 4. IF 文件不存在，THEN 返回 HTTP 404 ProblemDetails
 5. IF 名称格式无效，THEN 返回 HTTP 400 ProblemDetails
-6. WHEN 成功后返回更新后文件信息
+6. WHEN 响应 `state=true` 且 `errno=0` 时返回更新后文件信息；只解析顶层 `data,errno,error,state`
 
 ### 需求 13a：文件星标
 
 **用户故事：** 作为用户，我希望给文件添加/取消星标。
 
-> **状态**：**星标切换 API 待补采集**。列表接口已支持 `star=1` 筛选。
+> **状态**：**collected**。5 个真实成功样本；`star` 枚举未建立。
 
 #### 验收标准
 
-1. THE WebApi_Layer SHALL 预留 `POST /api/files/{fileId}/star` 端点（请求体含 `starred: boolean`）
-2. THE File_Service SHALL 调用网页端星标切换接口（待补采集）
+1. THE WebApi_Layer SHALL 提供 `POST /api/files/{fileId}/star` 端点（请求体含 `starred: boolean`）
+2. THE File_Service SHALL 调用 `POST webapi.115.com/files/star`，无 query，form body observed `file_id,format,star`；系统 SHALL 只映射自身 boolean，不声明上游完整枚举
 3. IF 文件不存在，THEN 返回 HTTP 404 ProblemDetails
-4. WHEN 成功后返回更新后星标状态
+4. WHEN 响应 `state=true` 时返回更新后星标状态；只解析顶层 `error,state`
 
 ### 需求 14：回收站管理
 
 **用户故事：** 作为用户，我希望查看和管理回收站中的文件。
 
-> **状态**：列表查询顶层字段已采集（`GET webapi.115.com/rb`）；回收站项目明细字段、还原/彻底删除/清空 API **待补采集**。
+> **状态**：列表顶层与非空 `data[]` item 已采集；还原/彻底删除/清空只有 UI 场景或无成功证据，HTTP 能力保持 disabled。
 
 #### 验收标准
 
 1. THE WebApi_Layer SHALL 提供 `GET /api/recycle` 端点，支持 query 参数 `offset`/`limit`
-2. WHEN 用户请求查看回收站时，THE File_Service SHALL 调用 `GET webapi.115.com/rb`，必填参数 `aid=7`（回收站档案）、`cid=0`、`format=json`，采用 `offset + limit` 分页（默认 `limit=30`；最大值仅受系统自有 `CloudDrive:MaxPageSize` 配置约束）
-3. THE File_Service SHALL 仅按 `docs/115-api-docs.md` 已采集 schema 归一化顶层字段：`count`、`rb_pass`、`state`、`error`、`offset`、`page_size`、`order`、`is_asc`
-4. IF 响应缺失项目明细字段或 `data` 字段，THEN THE File_Service SHALL 返回 `CloudDriveRecycleListDto { items: [], itemSchemaStatus: 'not_collected' }`，不得伪造 `fileName/fileSize/deletedTime/pickCode/status` 等未采集字段
-5. IF 后续 `docs/115-api-docs.md` 补充回收站项目明细 schema，THEN THE File_Service SHALL 只映射文档中明确采集到的字段；在此之前 `CloudDriveRecycleBinItemDto` 字段均视为不可用
+2. WHEN 用户请求查看回收站时，THE File_Service SHALL 调用 `GET webapi.115.com/rb`，query 只传递 observed `asc,format,limit,o,offset`，采用 `offset + limit` 分页；不得补入未采集的 `aid/cid`
+3. THE File_Service SHALL 归一化顶层 `count,data,error,is_asc,offset,order,page_size,rb_pass,state`
+4. WHEN `data` 非空时，THE File_Service SHALL 只映射 item `cid,dtime,file_name,file_size,id,parent_name,status,type`，这些字段在样本中均为 string
+5. THE File_Service SHALL 将 `itemSchemaStatus='available'`；但不得声明 `status/type` 枚举、pickCode 或字段必填性
 6. THE File_Service SHALL 将响应的 `count` 字段从 string 转 number
-7. THE WebApi_Layer SHALL 预留 `POST /api/recycle/restore` 端点（还原，待采集）
-8. THE WebApi_Layer SHALL 预留 `DELETE /api/recycle/{id}` 端点（彻底删除，待采集）
-9. THE WebApi_Layer SHALL 预留 `DELETE /api/recycle` 端点（清空，待采集）；清空 SHALL 提交为 Background_Job 异步执行
+7. THE WebApi_Layer SHALL 将 `POST /api/recycle/restore` 标记为 disabled，并返回 501
+8. THE WebApi_Layer SHALL 将 `DELETE /api/recycle/{id}` 标记为 disabled，并返回 501；用户完成安全密钥验证的网页场景不能替代 HTTP 契约
+9. THE WebApi_Layer SHALL 将 `DELETE /api/recycle` 标记为 disabled，并返回 501；不得创建虚假的 Background_Job
 
 ### 需求 15：图片文件预览
 
 **用户故事：** 作为用户，我希望在线预览网盘中的图片。
 
-> **说明**：网页端文件列表响应中 `u` 字段（`originalUrl`）为图片原图地址，可直接渲染；若过期，通过重新请求列表或下载地址获取新 URL。
+> **说明**：当前不推断文件列表 `u` 字段的资源语义；图片预览统一复用已采集下载地址契约。
 
 #### 验收标准
 
-1. WHEN 用户请求预览图片时，THE Preview_Service SHALL 直接返回 `CloudDriveFileDto.originalUrl`
-2. IF `originalUrl` 为空，THEN THE Preview_Service SHALL 调用下载地址接口（待补采集）兜底
+1. WHEN 用户请求预览图片时，THE Preview_Service SHALL 调用已采集的 `GET webapi.115.com/files/download` 获取临时地址或返回受控代理地址
+2. THE Preview_Service SHALL NOT 直接使用文件列表 `u/tu/tp` 作为原图契约；这些字段的完整资源语义与有效期未通过本轮证据建立
 3. THE Preview_Service SHALL 支持 JPG/JPEG/PNG/GIF/BMP/WEBP
 4. THE Preview_Service SHALL 排除 SVG（脚本注入风险）
 5. IF 文件类型不属于支持格式，THEN 返回 HTTP 400 ProblemDetails
@@ -302,22 +302,22 @@
 
 **用户故事：** 作为用户，我希望在线播放视频。
 
-> **重要**：`webapi.115.com/files/video` 网页端实际为 **GET** 方法（非开放平台的 POST），参数名 `pickcode`（小写无下划线）。
+> **状态**：`GET webapi.115.com/files/video` 已取得成功与错误 schema；清晰度与音轨列表仍未采集。
 
 #### 验收标准
 
 1. THE WebApi_Layer SHALL 提供 `GET /api/videos/{pickCode}/play` 端点
-2. THE Video_Service SHALL 调用 `GET webapi.115.com/files/video?pickcode=...&share_id=0&local=1&format=json` 获取视频播放端点响应；`share_id=0` 表示非分享场景，分享场景传入实际分享 ID。当前仅采集错误响应 schema，成功播放地址与元数据待补采集
-3. THE Video_Service SHALL 仅按 `docs/115-api-docs.md` 当前已采集 schema 处理 `/files/video` 错误响应字段：`state`、`errno`、`error`
-4. IF `/files/video` 尚未采集到成功播放 schema，THEN THE Video_Service SHALL 返回 `video_play_schema_not_collected` ProblemDetails 或 `CloudDriveVideoPlayDto { playbackSchemaStatus: 'not_collected', qualityOptions: [], audioTracks: [] }`，不得伪造播放地址、清晰度枚举或播放元数据
-5. IF 后续 `docs/115-api-docs.md` 补充成功播放 schema，THEN THE Video_Service SHALL 只映射文档中明确采集到的播放地址、清晰度、音轨与元数据字段，并将未采集字段返回 `null` 或空数组
-6. IF 视频尚未完成转码，THEN 返回 `status: 'transcoding'` 状态并附带 `jobId`（若已提交转码）
-6a. THE Video_Service SHALL 通过 `GET webapi.115.com/files/video_push?pickcode=...&op=vip_push&format=json` 提交主动转码请求（`op=pay_push` 为备选，用于按量计费场景）；备选路径为 `GET webapi.115.com/movies/transcode?pickcode=...&format=json`；两路径均在非 VIP 场景下返回 `{ state: false, errNo: N, errno: N, error: '...', request: '...' }` 错误响应
-7. IF 后续已采集成功播放 schema 中包含 VIP 受限或升级引导字段，THEN THE Video_Service SHALL 按采集字段映射到 `restrictionReason` 或 `usageRestrictionNotice`；在字段未采集前不得基于 URL 猜测受限状态
+2. THE Video_Service SHALL 调用 `GET webapi.115.com/files/video`，query 只传递 observed `format,local,pickcode,share_id`
+3. THE Video_Service SHALL 按错误样本解析 `state,errno,error`，并按成功样本只映射 `download_url,dv_profile,file_id,file_name,file_size,file_status,hdr_type,inlay_power,is_dolby_vision,is_hdr,is_mark,parent_id,pick_code,sha1,state,video_push_state`
+4. WHEN 成功响应可映射时，THE Video_Service SHALL 返回 `playbackSchemaStatus='available'`；播放/下载 URL、文件名、pickCode、SHA1 等上游敏感值不得记录日志或持久化
+5. THE Video_Service SHALL 返回 `qualityOptions=[]` 与 `audioTracks=[]`，不得从 `download_url` 或 `dv_profile` 推断清晰度或音轨枚举
+6. IF 已映射字段只能表明不可播放或上游处理未完成，THEN THE Video_Service SHALL 返回已知状态；不得自动提交转码，也不得创建无真实提交契约的 jobId
+7. THE Video_Service SHALL NOT 构造 `restrictionReason` 或 `usageRestrictionNotice`；当前成功 schema 未提供这些字段
 8. IF 文件不是视频类型，THEN 返回 HTTP 400 ProblemDetails
 9. IF 文件不存在，THEN 返回 HTTP 404 ProblemDetails
 10. IF 后续成功播放 schema 可用并返回播放地址，THEN THE Video_Service SHALL 在响应中标识播放地址的临时性
-11. THE WebApi_Layer SHALL 将主动转码提交暴露为独立端点 `POST /api/videos/{pickCode}/transcode`；播放端点本身 SHALL 保持 `GET /api/videos/{pickCode}/play`
+11. THE WebApi_Layer SHALL 将 `POST /api/videos/{pickCode}/transcode` 标记为 disabled，并返回 501；播放端点 SHALL NOT 内嵌自动转码
+12. THE Video_Service SHALL NOT 调用 `files/video_push` 或 `movies/transcode`；当前只确认 `video_push` 的 method/path/query 已发送，JSON 结果和费用语义未采集
 
 ### 需求 17：视频字幕
 
@@ -336,15 +336,15 @@
 
 **用户故事：** 作为用户，我希望视频播放进度能被记忆。
 
-> **状态**：**已采集读/写端点**（2026-05-04 自动化场景确认；2026-04-18 手动场景补充历史对象字段）。网页端使用 `webapi.115.com/files/history`，错误字段为 `state:boolean` + `error:string`（非 `errNo`/`errCode` 风格）。
+> **状态**：**读取 collected；写入 not-collected/disabled**。
 
 #### 验收标准
 
 1. THE WebApi_Layer SHALL 提供 `GET /api/videos/{pickCode}/history` 端点
-2. THE WebApi_Layer SHALL 提供 `POST /api/videos/{pickCode}/history` 端点（请求体含 `time: number`/`watchEnd: boolean`）
-3. THE Video_Service SHALL 调用 `GET webapi.115.com/files/history?pick_code=...&format=json`（可选 `&fetch=one`）读取播放进度；2026-05-04 自动样本返回空数组，2026-04-18 手动样本记录 `fetch=one&category=1` 分支可能返回对象字段 `{ file_id, file_name, hash, pick_code, time, add_time }`，实现 SHALL 兼容空数组/对象两种形态
-4. THE Video_Service SHALL 调用 `POST webapi.115.com/files/history`（Content-Type: `application/x-www-form-urlencoded`，body: `pick_code=...&op=...&time=N&definition=N`）写入播放进度；`watchEnd` 映射为特定 `op` 值；响应结构 `{ state: boolean, error: string }`
-5. IF 读取响应缺失播放进度对象字段或返回空数组，THEN THE Video_Service SHALL 返回空播放进度/从头播放语义，不得伪造 `file_id/file_name/hash/time/add_time`
+2. THE WebApi_Layer SHALL 将 `POST /api/videos/{pickCode}/history` 标记为 disabled，并返回 501
+3. THE Video_Service SHALL 调用 `GET webapi.115.com/files/history`，query 只传递 observed `fetch,format,pick_code`
+4. THE Video_Service SHALL NOT 调用 `POST webapi.115.com/files/history`，不得猜测 `op/time/definition/watchEnd` 映射
+5. WHEN 读取成功时，THE Video_Service SHALL 只映射 `data.add_time,category,file_name,hash,pick_code,thumb,time,watch_end`；`time/watch_end` 的单位与枚举保持 unknown，敏感值不得记录
 
 ### 需求 19：文档预览
 
@@ -369,34 +369,34 @@
 
 **用户故事：** 作为用户，我希望查看当前账号下的云下载任务、配额和统计。
 
-> **状态**：列表/配额/统计接口已采集；创建/删除/清空**待补采集**（见需求 21）。
+> **状态**：配额、计数与空列表 envelope collected；非空 item 与所有写操作 HTTP 契约未采集。
 
 #### 验收标准
 
 1. THE WebApi_Layer SHALL 提供 `GET /api/offline/tasks` 端点，参数 `page`（默认 1）
-2. THE Offline_Service SHALL 调用 `POST 115.com/web/lixian/?ct=lixian&ac=task_lists`（必填 Query 参数 `ct=lixian&ac=task_lists`；**Body 需签名参数** `page/stat/uid/sign/time`）
-3. THE Offline_Service SHALL 使用 `Signature_Service` 生成 POST Body `{ page, stat, uid, sign, time }`（`stat` 为任务状态过滤参数，默认 0 表示全部）；签名算法尚未在 `docs/115-api-docs.md` 中采集，默认实现 SHALL 返回 `offline_signature_not_available` ProblemDetails，直到通过真实 Cookie 场景补采集并验证签名算法
-4. THE Offline_Service SHALL 仅按 `docs/115-api-docs.md` 已采集 schema 归一化任务列表顶层字段：`page`、`page_count`、`page_row`、`page_size`、`count`、`quota`、`total`、`state`、`real_state`、`errtype`
+2. THE Offline_Service SHALL 调用 `POST clouddownload.115.com/web/?ac=task_lists&page=...&page_size=15&stat=12`；当前只观察 `page=1,page_size=15,stat=12`，公开 `page` 可用于分页但不得把 `stat=12` 推断为枚举；该读取请求无 body
+3. THE Offline_Service SHALL NOT 为配额、计数或列表读取生成 `sign,time,uid` body；签名只在已观察到的 URL 创建 form 中出现且算法未采集
+4. THE Offline_Service SHALL 归一化任务列表顶层 `count,errcode,errtype,page,page_count,page_row,page_size,quota,real_state,state,tasks,total`
 5. IF `tasks` 对象的 item schema 未采集，THEN THE Offline_Service SHALL 返回 `CloudDriveOfflineTaskListDto { items: [], itemSchemaStatus: 'not_collected' }`，不得伪造 `infoHash/name/size/addTime/lastUpdate/percentDone/url/fileId/parentId/status` 等任务字段
-6. IF 后续 `docs/115-api-docs.md` 补充云下载任务 item schema，THEN THE Offline_Service SHALL 只映射文档中明确采集到的字段；在此之前不得采用开放平台 `status -1/0/1/2` 推断值域
-7. THE WebApi_Layer SHALL 提供 `GET /api/offline/quota` 端点，调用 `GET 115.com/web/lixian/?ct=lixian&ac=get_quota_package_info`；归一化响应为 `CloudDriveOfflineQuotaDto { package: object, count, surplus, maxSize, used }`
-8. THE WebApi_Layer SHALL 提供 `GET /api/offline/stats` 端点，调用 `POST 115.com/web/lixian/?ct=lixian&ac=task_count`；统计字段映射：`total_count→total`、`failed_count→failed`、`finished_count→completed`、`downloading_count→active`；归一化为 `{ total, active, completed, failed }`
+6. IF 后续证据补充非空 task item，THEN THE Offline_Service SHALL 只映射新 evidence 字段；在此之前不得推断状态值域
+7. THE WebApi_Layer SHALL 提供 `GET /api/offline/quota`，内部调用 `POST clouddownload.115.com/web/?ac=get_quota_package_info&uid=...`（无 body），映射 `count,max_size,package,surplus,used`
+8. THE WebApi_Layer SHALL 提供 `GET /api/offline/stats`，内部调用 `POST clouddownload.115.com/web/?ac=task_count`（无 body），映射 `total_count,failed_count,finished_count,downloading_count,errcode,errtype,state`
 9. THE Cloud_Drive_Service SHALL 将签名 `sign` 参数从日志中脱敏
 
 ### 需求 21：云下载任务管理
 
 **用户故事：** 作为用户，我希望创建、删除、清空云下载任务。
 
-> **状态**：创建/删除/清空任务 API **待补采集**。
+> **状态**：URL/BT 创建与单任务删除只有网页 UI 成功场景；HTTP 成功契约、BT 解析、删除、清空与签名算法均 **not-collected / disabled**。
 
 #### 验收标准
 
-1. THE WebApi_Layer SHALL 预留 `POST /api/offline/tasks/urls`（`{ urls: string[], saveDirectoryId? }`）
-2. THE WebApi_Layer SHALL 预留 `POST /api/offline/tasks/bt`（`{ infoHash, wanted, savePath, torrentSha1, pickCode, saveDirectoryId? }`）
-3. THE WebApi_Layer SHALL 预留 `POST /api/offline/parse-torrent` 端点（BT 种子解析）
-4. THE WebApi_Layer SHALL 预留 `DELETE /api/offline/tasks/{infoHash}`
-5. THE WebApi_Layer SHALL 预留 `POST /api/offline/tasks:clear`（清空）；SHALL 提交为 Background_Job 异步执行
-6. WHEN 任务操作完成后，THE Offline_Service SHALL 使任务列表缓存失效
+1. THE WebApi_Layer SHALL 将 `POST /api/offline/tasks/urls` 标记为 disabled；已观察 `ac=add_task_urls` form `savepath,sign,time,uid,url[0],wp_path_id` 只有错误响应，不能启用
+2. THE WebApi_Layer SHALL 将 `POST /api/offline/tasks/bt` 标记为 disabled；UI 创建成功不构成 HTTP 契约
+3. THE WebApi_Layer SHALL 将 `POST /api/offline/parse-torrent` 标记为 disabled
+4. THE WebApi_Layer SHALL 将 `DELETE /api/offline/tasks/{infoHash}` 标记为 disabled
+5. THE WebApi_Layer SHALL 将 `POST /api/offline/tasks:clear` 标记为 disabled；页面存在非本轮任务且未执行清空，不得创建 Background_Job
+6. WHILE 上述能力 disabled，THE Offline_Service SHALL 返回 501 且不得修改任务缓存
 
 ### 需求 22：分享管理
 
@@ -405,14 +405,14 @@
 #### 验收标准
 
 1. THE WebApi_Layer SHALL 提供 `GET /api/shares` 端点，参数 `tab: 'slist' | 'send' | 'receive'`（必填）/`offset`/`limit`
-2. WHEN `tab=slist` 时，THE Share_Service SHALL 调用 `GET webapi.115.com/share/slist?offset=0&limit=30&format=json`
-3. WHEN `tab=send` 时，调用 `GET webapi.115.com/share/send?offset=0&limit=30&format=json`
-4. WHEN `tab=receive` 时，调用 `GET webapi.115.com/share/receive?offset=0&limit=30&format=json`
-5. THE Share_Service SHALL 仅按 `docs/115-api-docs.md` 已采集 schema 归一化分享顶层字段：`/share/slist` 的 `count/list/define_receive_code/bind_receive_code/state/error/errno`，以及 `/share/send`、`/share/receive` 的 `state/error/errNo/errno/request`
-6. IF `list` item schema 或 send/receive 成功列表 schema 未采集，THEN THE Share_Service SHALL 返回 `CloudDriveShareListDto { items: [], itemSchemaStatus: 'not_collected' }`，不得伪造 `shareId/title/createTime/status/receiveCode/shareUrl` 等字段
-7. IF 后续 `docs/115-api-docs.md` 补充分享 item schema，THEN THE Share_Service SHALL 只映射文档中明确采集到的字段
+2. WHEN `tab=slist` 时，THE Share_Service SHALL 调用 `GET webapi.115.com/share/slist`，query 只传递 observed `asc,format,limit,offset,order,show_cancel_share`
+3. WHEN `tab=send` 时，THE WebApi_Layer SHALL 返回 501 + `cloud_drive_api_not_collected`，不得发起上游请求
+4. WHEN `tab=receive` 时，THE WebApi_Layer SHALL 返回 501 + `cloud_drive_api_not_collected`，不得发起上游请求
+5. THE Share_Service SHALL 归一化 `/share/slist` 顶层 `bind_receive_code,count,define_receive_code,errno,error,list,state`
+6. WHEN `list` 非空时，THE Share_Service SHALL 只映射本文档列出的 33 个 item 字段及样本类型，将 `itemSchemaStatus='available'`；分享码、访问码、URL、文件名和账号标识不得记录
+7. THE Share_Service SHALL NOT 声明 item 状态枚举、必填性或未采集字段语义；send/receive 的错误字段 `errNo,errno,error,request,state` 只用于 501 前的历史证据说明，不构成成功列表能力
 8. WHEN `tab` 值不支持时，返回 HTTP 400 ProblemDetails
-9. **注**：三个分享接口当前采集样本均为失败或空列表响应（低置信度），成功 item 结构待实际验证
+9. **注**：`slist` 已取得真实非空成功 item；send/receive 只有错误样本，前端对应 Tab 必须禁用
 
 ### 需求 23：用户中心聚合
 
@@ -422,26 +422,16 @@
 
 1. THE WebApi_Layer SHALL 提供 `GET /api/user/profile` 聚合端点，返回 `CloudDriveUserProfileDto`
 2. THE User_Service SHALL 并行调用并聚合：
-   - `GET my.115.com/proapi/3.0/index.php?method=user_info&uid=...`（基础信息）
    - `GET webapi.115.com/user/vip_limit?feature=2`（VIP 状态）
    - `GET vip.115.com/?ct=order&ac=get_yun_card`（VIP 卡详情）
-   - `GET pay.115.com/`（账户余额）
+   - `GET pay.115.com/?ct=balance&ac=getBalance`（账户余额）
    - `GET webapi.115.com/files/index_info?count_space_nums=1`（存储空间）
-3. THE User_Service SHALL 归一化基础信息为 `CloudDriveUserInfoDto`：`user_id→uid, user_name→nickname, user_face→avatarUrl, is_vip→isVip, pub_mobile_mask→maskedPhone, pub_email_mask→maskedEmail`
-4. THE User_Service SHALL **严禁**透传以下原始敏感字段（官方响应 `proapi/3.0/index.php` 返回的个人隐私字段）至前端：
-   - **联系方式**：`pub_mobile`、`pub_email`
-   - **支付账号**：`alipay`、`wechat`、`weibo`
-   - **住址与位置**：`address`、`homepage`、`location`、`location_show`、`location_birth`、`location_birth_show`、`location_link`、`location_link_show`
-   - **生日与风水**：`birthday`、`birthday_show`、`star`、`calendar_type`
-   - **人口信息**：`gender`、`gender_show`、`blood_type`、`blood_type_show`、`is_marry`、`is_marry_show`、`height`、`weight`
-   - **职业与收入**：`education`、`job`、`job_show`、`salary`
-   - **兴趣爱好**：`like_celeb`、`like_music`、`like_animal`、`like_book`、`like_video`、`interest`
-   - **其他隐私**：`user_name_checking`、`user_name_prepub`、`qrcode_url`、`share_url`、`user_public`（权限配置对象）
-   SHALL 在归一化层过滤或脱敏，严禁将 `data` 对象原样透传
-5. THE User_Service SHALL 处理 `vip.115.com/?ct=order&ac=get_yun_card` 响应字段：`{ num, url, vip_count, space_count, forever_count, sqcode_count, sqcode_cancel_count, 00_balance }`；其中 `00_balance`（以数字开头）需通过 `data["00_balance"]` 索引访问，归一化为 `balance`
-6. THE User_Service SHALL 仅在 `docs/115-api-docs.md` 明确采集到空间详情字段时展示空间占用格式化字段；当前 `webapi.115.com/files/index_info` 仅采集 `data: object`，因此 `CloudDriveSpaceInfoDto` SHALL 标注 `schemaStatus='not_collected'`，不得伪造 `size_format`、总空间、已用空间或分类占比字段
+3. THE User_Service SHALL 将 `info=null`，并将 `GET /api/user/info` 标记为 disabled；基础资料成功 schema 未采集，不得使用任何旧基础资料字段
+4. THE User_Service SHALL 严禁从任何响应或日志构造昵称、头像、UID、手机号、邮箱或其他基础资料；不得将上游 `data` 原样透传
+5. THE User_Service SHALL 按 `get_yun_card` 的 `data.00_balance,forever_count,num,space_count,sqcode_cancel_count,sqcode_count,url,vip_count` 映射卡片子模块；`00_balance` 业务语义/单位 unknown，不得与 pay 余额混用
+6. THE User_Service SHALL 按 `files/index_info` 的 `space_info.all_remain/all_total/all_use.{size,size_format}` 与动态 `type_nums/type_summury` 映射存储空间，并保留原始拼写 `type_summury/pecent`；将 `schemaStatus='available'`
 7. IF 任一子接口失败，THEN 对应子模块设为 `null`，其他正常返回（错误隔离）
-8. THE WebApi_Layer SHALL 提供细粒度端点：`GET /api/user/info`/`GET /api/user/vip`/`GET /api/user/balance`/`GET /api/user/storage`
+8. THE WebApi_Layer SHALL 提供 `GET /api/user/vip`、`GET /api/user/balance`、`GET /api/user/storage`；`GET /api/user/info` 返回 501
 9. IF Cookie 无效，THEN 返回 HTTP 401 ProblemDetails
 
 ### 需求 24：API 频控与限流
@@ -461,40 +451,61 @@
 
 **用户故事：** 作为前端工程师，我希望后端统一使用 ProblemDetails 返回错误。
 
-> **重要**：115 网页端各接口错误字段**不统一**，经自动化采集验证至少有 **9 种变体**（包括字段名大小写、类型差异、同时出现双字段等），`ExceptionHandlingMiddleware` 需按接口来源**逐 URL 路径**适配。
+> **重要**：115 网页端各接口 envelope 字段不统一。下表只记录已验收 evidence 中实际出现的字段；“仅成功样本”不等于错误契约已建立。字段解析由 Gateway/ApiClient 路径中的 `ErrorFieldAdapter` 按 host + path + 必要操作 query 逐项适配；`ExceptionHandlingMiddleware` 只负责映射已分类异常。
+>
+> **业务错误码（前端词汇）**：ProblemDetails 的 `extensions.code` 使用稳定应用业务码；`extensions.upstreamCode` 为可选 115 上游码。**完整闭集**见 `design.md`「应用业务错误码表」（不含「其他」占位；业务失败路径必须填入表中某一码）。当冷却期短路业务 API（禁止继续调用 115）时返回 HTTP 401 + `auth_expired`。
 
 #### 验收标准
 
 1. THE WebApi_Layer SHALL 使用 `application/problem+json` 返回所有错误响应
-2. THE ExceptionHandlingMiddleware SHALL 按 **URL 路径逐项匹配**以下网页端错误字段变体：
+2. THE ErrorFieldAdapter SHALL 在 Gateway/ApiClient 解析路径中按 **URL 路径逐项匹配**以下网页端错误字段变体：
 
    | # | 端点 | state 类型 | 错误码字段（类型） | 错误消息字段 |
    |---|------|----------|------------------|------------|
-   | 1 | `webapi.115.com/files` | boolean | `errNo`（number） | `error` |
-   | 2 | `webapi.115.com/files/search` | boolean | **`errCode`**（number） | `error` |
-   | 3 | `webapi.115.com/files/video` | boolean | **`errno`**（小写，number） | `error` |
-   | 4 | `webapi.115.com/movies/subtitle` | boolean | **`errNo`**（大写 N，number） | `error` |
-   | 5 | `webapi.115.com/rb` | boolean | *（无）* | `error` |
-   | 6 | `webapi.115.com/share/slist` | boolean | `errno`（小写，number） | `error` |
-   | 7 | `webapi.115.com/share/send`、`/share/receive` | boolean | **同时返回 `errNo` 和 `errno`** 两字段（优先读 `errNo`，fallback `errno`） | `error` |
-   | 8 | `webapi.115.com/user/vip_limit`、`/user/fingerprint` | boolean | **`code`（string）** | `message` |
-   | 9 | `webapi.115.com/files/index_info` | boolean | `code`（number） | `error` |
-   | 10 | `my.115.com/proapi/*` | boolean | `code`（number） | `message` |
-   | 11 | `vip.115.com/` | boolean | *（无）* | *（无）* |
-   | 12 | **`pay.115.com/`** | boolean | `code`（number） | **`msg`**（非 `message`） |
-   | 13 | `act.115.com/*` | **number** | `code`（number） | `message` |
+   | 1 | `GET webapi.115.com/files` | boolean | `errNo`（number，仅成功值 0） | `error` |
+   | 2 | `POST webapi.115.com/files/add` | boolean | `errno`（string，仅成功值空串） | `error` |
+   | 3 | `POST webapi.115.com/files/batch_rename` | boolean | `errno`（number，仅成功值 0） | `error` |
+   | 4 | `POST webapi.115.com/files/copy` | boolean | `errno`（string，仅成功值空串） | `error` |
+   | 5 | `POST webapi.115.com/files/star` | boolean | *（无）* | `error` |
+   | 6 | `GET webapi.115.com/files/download` | boolean | `msg_code`（number；错误枚举未建立） | `msg` |
+   | 7 | `GET webapi.115.com/files/video` | boolean | `errno`（number；已采错误值 406） | `error` |
+   | 8 | `GET webapi.115.com/movies/subtitle` | boolean | `errNo`（number） | `error` |
+   | 9 | `GET webapi.115.com/rb` | boolean | *（无）* | `error` |
+   | 10 | `GET webapi.115.com/share/slist` | boolean | `errno`（number） | `error` |
+   | 11 | `GET webapi.115.com/share/send`、`/share/receive` | boolean | `errNo` + `errno`（number；错误样本同时存在） | `error` |
+   | 12 | `GET webapi.115.com/user/vip_limit` | boolean | `code`（string） | `message` |
+   | 13 | `GET webapi.115.com/files/index_info` | boolean | `code`（number） | `error` |
+   | 14 | `GET webapi.115.com/user/setting` | boolean | `errno`（number） | `error` |
+   | 15 | `GET pay.115.com/?ct=balance&ac=getBalance` | boolean | `code`（number） | `msg` |
+   | 16 | `GET vip.115.com/?ct=order&ac=get_yun_card` | boolean | *（无）* | *（无）* |
+   | 17 | `GET vip.115.com/?ct=product&ac=product_list` | boolean | `code`（number） | `msg` |
+   | 18 | `GET vip.115.com/?ct=act_coupon&ac=get_coupon_yhq_list` | boolean | `code`（number） | *（未采集）* |
+   | 19 | `POST clouddownload.115.com/web/?ac=...` | boolean | `errcode`（number） | `errtype` / `error_msg` |
+   | 20 | `GET webapi.115.com/files/history` | boolean | *（无数字错误码）* | `error` |
 
-   > **指针**：实现时在 `ExceptionHandlingMiddleware` 中定义 `ErrorFieldAdapter` 注册表，按 URL 路径 hostname + path 精确匹配；若新增接口未注册则 fallback 到通用 `{ state, error?, code?, message? }` 解析器，并记录 Warning 日志。
+   > **指针**：实现时在 Gateway/ApiClient 中注册上表 **20 行**已观察 envelope 规则；没有错误样本的行只能作为成功解析，未知失败形态必须 fail closed 为 `api_error` 并记录脱敏 Warning。匹配器契约（与 design/tasks 2.2 同句）：
+   > 1. **webapi 路径精确键**（无 `*`）：对 `webapi.115.com` 上以 `/` 开头的 path 键（如 `/files`、`/files/video`）做 path **字节级精确相等**；`/files` 与 `/files/video` / `/files/history` **不得**互相吞并。
+   > 2. **同 path 操作 query**：`vip.115.com/` 与 `clouddownload.115.com/web/` 必须把 `ct/ac` 的 observed 控制值纳入规则键，不能只按 path 合并不同操作。
+   > 3. **同主机最长且最具体匹配优先**：同一请求命中多行时先取 path 最长，再取操作 query 最具体；仍并列则 fail closed 记 Warning。
+   > 未列接口不得注册猜测规则。`ExceptionHandlingMiddleware` 不承担上游 envelope 解析职责。
 
-3. THE ExceptionHandlingMiddleware SHALL 按请求 URL 路径匹配对应的字段适配器
-4. THE ExceptionHandlingMiddleware SHALL 按 errNo/code 归类为统一错误类别并映射 HTTP 状态码：
-   - 未登录 → 401 Unauthorized
-   - 频控 → 429 Too Many Requests
-   - 文件不存在 → 404 Not Found
-   - 分享过期 → 410 Gone
-   - 网络异常 → 502 Bad Gateway
-   - 未知业务错误 → 502 Bad Gateway
-5. THE ProblemDetails SHALL 包含标准字段 `type`/`title`/`status`/`detail`/`instance`，以及自定义 `extensions.upstreamCode`（115 errNo/code）/`extensions.upstreamMessage`（115 error/message）
+3. THE ErrorFieldAdapter SHALL 按 method + host + 精确 path + 必要操作 query 匹配对应字段规则，并将解析结果映射为内部 `CloudDrive*Exception` / 业务错误
+4. THE ExceptionHandlingMiddleware SHALL 将已分类异常映射为 HTTP 状态码与 ProblemDetails（`extensions.code` 必须取自 design「应用业务错误码表」闭集）：
+   - Cookie 冷却短路 / `auth_expired` → 401 Unauthorized
+   - Cookie 失效 `cookie_invalid` / `CloudDriveCookieInvalidatedException`（探测失效）→ 401 Unauthorized
+   - Cookie 非 Active `cookie_not_active` → 401 Unauthorized
+   - 频控 / `rate_limited` → 429 Too Many Requests
+   - 文件不存在 / `file_not_found` → 404 Not Found
+   - 分享过期 / `share_expired` → 410 Gone
+   - 网络异常 / `network_error` → 502 Bad Gateway
+   - 通用业务 API 失败 / `api_error` → 502 Bad Gateway（非 `unknown_error_shape`）
+   - 名称非法 / `invalid_name` → 400 Bad Request
+   - 上传失败 / `upload_failed` → 500 Internal Server Error
+   - 配置缺失 / `configuration_error` → 503 Service Unavailable
+   - 签名不可用 / `offline_signature_not_available` → 503 Service Unavailable
+   - 未采集占位 / `cloud_drive_api_not_collected` → 501 Not Implemented
+   - CSRF / `csrf_failed` → 403 Forbidden
+5. THE ProblemDetails SHALL 包含标准字段 `type`/`title`/`status`/`detail`/`instance`，以及自定义 `extensions.code`（稳定应用业务码，闭集见 design「应用业务错误码表」）、可选 `extensions.upstreamCode`（115 errNo/code）与 `extensions.upstreamMessage`（115 error/message）
 6. WHEN Application 返回 `Result.Failure(...)` 时，THE WebApi_Layer SHALL 映射为非 2xx ProblemDetails，SHALL NOT 以 HTTP 200 表示失败
 7. THE ExceptionHandlingMiddleware SHALL 对所有异常记录结构化日志
 
@@ -514,7 +525,7 @@
    - **职业与收入**：`education`、`job`、`salary`
    - **兴趣爱好**：`like_celeb`、`like_music`、`like_animal`、`like_book`、`like_video`、`interest`
 2. THE LoggingBehavior SHALL 使用字段黑名单过滤结构化日志敏感字段，黑名单 SHALL 与需求 23 一致
-3. THE Cookie_Manager SHALL 在日志中仅记录 Cookie 前 4 位 + `****`
+3. THE Cookie_Manager SHALL 在日志中只记录固定占位符与会话状态，严禁记录 Cookie 的任何原值片段
 4. THE Signature_Service SHALL 不记录完整 UID 和签名结果
 5. THE Gateway_Layer SHALL 记录 API 调用概要：`endpoint`/`method`/`httpStatus`/`upstreamCode`/`latencyMs`（**不记录**原始请求/响应体）
 6. THE LoggingBehavior SHALL 对 5xx 错误记录 `Error` 级别，对 4xx 错误记录 `Warning` 级别
@@ -526,28 +537,28 @@
 #### 验收标准
 
 1. THE Metadata_Cache SHALL 按用户 + 115 账号 + 目录维度对文件列表元数据使用短 TTL 缓存，默认 TTL 不超过 30 秒，支持配置调低或关闭
-2. THE Metadata_Cache SHALL 缓存用户基础信息 5 分钟（`user:info`）
+2. WHILE 用户基础资料契约未采集，THE Metadata_Cache SHALL NOT 创建 `user:info` 缓存项；聚合 DTO 的 `info` 保持 null
 3. THE Metadata_Cache SHALL 缓存 VIP 状态 5 分钟（`user:vip`）
 4. THE Metadata_Cache SHALL 缓存存储空间 2 分钟（`user:storage`）
 5. THE Metadata_Cache SHALL NOT 对文件列表使用长 TTL 或跨写操作复用旧缓存；手动刷新与写操作成功后必须绕过或失效目录列表短 TTL 缓存
-6. WHEN 写操作成功后（上传/移动/复制/删除/重命名/还原/清空），THE File_Service SHALL 使受影响目录缓存失效（通过领域事件 `DirectoryContentChanged`）
+6. WHEN 已启用写操作（新建目录、单项复制、重命名、星标）得到已采集成功 envelope 后，THE File_Service SHALL 使受影响目录缓存失效（通过领域事件 `DirectoryContentChanged`）；disabled 写操作不得进入该流程
 7. WHEN 用户主动刷新目录时，THE File_Service SHALL 绕过或重建缓存
 8. THE Metadata_Cache SHALL 只缓存 115 实际返回的数据，不得伪造字段
 9. THE CloudDrive_Module SHALL 通过 Application 层抽象 `ICloudDriveMetadataCache`（`Application/Abstractions/`）封装缓存访问，Infrastructure 层基于 `IDistributedCache` 实现
 
 ### 需求 28：长耗时任务管理
 
-**用户故事：** 作为用户，我希望大文件上传、批量操作、清空回收站等长耗时操作能后台执行并可查询进度。
+**用户故事：** 作为用户，我希望后台任务状态只表达已启用且真实执行的操作，并能在重启后保持可信。
 
 #### 验收标准
 
-1. THE File_Service 与 Offline_Service SHALL 支持提交 Background_Job：大文件上传、主动视频转码（已采集：`GET webapi.115.com/files/video_push?pickcode=...&op=vip_push`，见需求 16 第 6a 条），并可为批量复制/移动/删除、清空回收站、云下载清空任务等未采集写操作创建任务占位；未采集写操作的任务执行结果 SHALL 返回 `cloud_drive_api_not_collected`，直到 `docs/115-api-docs.md` 补充真实 115 网页端接口证据
-2. THE Background_Job SHALL 记录任务类型、关联资源标识、状态、进度、起止时间、错误信息
-3. THE Cloud_Drive_Service SHALL 提供 `GET /api/jobs/{jobId}` 供客户端轮询
-4. WHEN 操作被受理为 Background_Job 时，THE WebApi_Layer SHALL 返回 HTTP 202 Accepted 并携带 `jobId`
-5. IF 操作支持安全重试，THEN THE Background_Job SHALL 保留可恢复状态（如上传的 `TempFilePath`/`pickCode`），支持从安全检查点继续
-6. THE Cloud_Drive_Service SHALL 为 Background_Job 保留审计日志，不含 Cookie 或签名参数
-7. IF 应用进程在任务完成前重启，THEN THE Cloud_Drive_Service SHALL 启动后根据持久化任务记录协调任务状态；可恢复任务尝试断点续传，不可恢复任务标记为失败
+1. THE Cloud_Drive_Service SHALL NOT 为上传、主动转码、移动、删除、回收站写操作或云下载写操作创建 Background_Job；这些能力未采集，入口直接返回 501。只有未来获得完整脱敏 HTTP 契约并完成对应未勾选任务后才能启用后台任务
+2. THE Background_Job SHALL 记录任务类型、关联资源标识、状态、进度、起止时间、错误信息；记录存在不代表对应 capability 已启用
+3. THE Cloud_Drive_Service SHALL 提供 `GET /api/jobs/{jobId}` 查询已有任务状态，并校验用户与账号归属
+4. WHEN 未来已启用操作被受理为 Background_Job 时，THE WebApi_Layer SHALL 返回 HTTP 202 Accepted 并携带 `jobId`；Accepted SHALL NOT 被映射为 Completed
+5. IF capability matrix 未启用任务类型，THEN 任务编排器与恢复服务 SHALL 拒绝创建/恢复，并以固定脱敏原因标记失败
+6. THE Cloud_Drive_Service SHALL 为 Background_Job 保留不含 Cookie、签名、账号标识、文件名、pickCode、临时 URL 或金额值的结构化日志
+7. WHEN 且仅当已启用操作取得与已采集成功 envelope 匹配的上游确认时，THE Background_Job SHALL 标记 Completed；占位、未知、仅提交或仅受理不得标记完成
 
 ### 需求 29：业务模块组织结构
 
@@ -556,7 +567,7 @@
 #### 验收标准
 
 1. THE CloudDrive_Module SHALL 位于 `src/Application/CloudDrive/`，按子领域（Auth/Files/Search/Video/RecycleBin/Offline/Share/User）组织 Commands/Queries/Handlers/DTO/Validators
-2. THE Infrastructure_Layer SHALL 在 `src/Infrastructure/CloudDrive/` 实现所有 Gateway（`FileGateway`/`VideoGateway`/`RecycleBinGateway`/`OfflineGateway`/`ShareGateway`/`UserGateway`）及 `CookieManager`/`SignatureService`
+2. THE Infrastructure_Layer SHALL 在 `src/Infrastructure/CloudDrive/` 实现物理单一 Gateway（`ICloudDriveWebApiGateway` / `CloudDriveApiClient`；需求中的 `FileGateway`/`VideoGateway`/`RecycleBinGateway`/`OfflineGateway`/`ShareGateway`/`UserGateway` 均为该网关的逻辑别名/能力分区，不要求独立物理类型）及 `CookieManager`（`CookieSessionManager` 逻辑别名）
 3. THE WebApi_Layer SHALL 在 `src/WebApi/Controllers/` 提供 REST 控制器：`AuthController`/`FilesController`/`VideosController`/`DocumentsController`/`RecycleBinController`/`OfflineController`/`SharesController`/`UserController`/`JobsController`
 4. THE CloudDrive_Module SHALL 通过 Infrastructure 层 Gateway 抽象接口访问 115 API，**严禁** Application 层直接依赖 `IHttpClientFactory` 或 `HttpClient`
 5. THE Controllers SHALL 仅通过 `ISender`/`IMediator.Send()` 调用 Application 层，**严禁**直接注入 Gateway 或仓储
@@ -577,24 +588,37 @@
 7. THE WebApi_Layer SHALL NOT 将 Cookie、签名 `sign`、`UID` 等敏感字段暴露至前端响应
 8. THE WebApi_Layer SHALL NOT 在公开前端端点中要求或暴露 `CloudAccountUid`；单账号上下文由后端根据已配置 Cookie 会话解析。`CloudAccountUid` 仅允许出现在受保护的运维端点、内部实体、缓存键、限流键和审计记录中。
 
+### 需求 31：CSRF 与浏览器 Cookie 安全属性
+
+**用户故事：** 作为安全工程师，我希望 WebApi 对状态变更请求提供 CSRF 防护，并对浏览器可见 Cookie 设置安全属性。
+
+#### 验收标准
+
+1. THE WebApi_Layer SHALL 对 `POST`/`PUT`/`PATCH`/`DELETE` 等状态变更请求执行 CSRF 校验（ASP.NET Core Antiforgery 或等价方案），并在 `/openapi/v1.json` 暴露凭据契约（header 或 cookie 名）
+2. IF CSRF 校验失败，THEN THE WebApi_Layer SHALL 返回 HTTP 403 ProblemDetails，且 `extensions.code` 为稳定业务码（如 `csrf_failed`）
+3. WHEN WebApi 向浏览器签发任何会话/CSRF 相关 Cookie 时，THE WebApi_Layer SHALL 设置 `HttpOnly`、`Secure`（非本地开发）与显式 `SameSite` 策略
+4. THE WebApi_Layer SHALL NOT 将 115 会话三元组（UID/CID/USSID）以浏览器 Cookie 形式下发；115 Cookie 仅服务端加密持久化并注入上游请求
+5. THE WebApi_Layer SHALL 确保前端可按 OpenAPI 契约自动携带 CSRF 凭据，无需自造 token
+
 ## 非功能性需求
 
 ### 性能与响应
 
 1. 文件列表查询首屏 P95 响应时间 ≤ 1.5 秒（缓存命中场景 ≤ 300ms）
-2. 视频播放端点响应 P95 ≤ 2 秒；成功播放地址 schema 未采集时该指标仅覆盖错误/不可用空态返回
+2. 视频播放端点响应 P95 ≤ 2 秒；指标覆盖已采集基础字段映射与错误返回，不包含主动转码
 3. 用户聚合接口 P95 ≤ 2 秒（并行子调用）
-4. 单个 API 调用默认超时 10 秒，批量上传/清空任务等长耗时操作不受限
-5. Polly 策略：瞬时错误重试 3 次 + 指数退避 (1s/2s/4s)，超过阈值熔断 30 秒
+4. 单个已启用上游 API 调用默认超时 10 秒；disabled 能力不发起调用
+5. Polly 策略只对已启用幂等读取应用：瞬时错误最多重试 3 次 + 指数退避 (1s/2s/4s)，超过阈值熔断 30 秒；写操作不自动重放
 
 ### 安全
 
 1. **Cookie 加密存储**：使用 ASP.NET Core Data Protection，`IDataProtector` purpose: `CloudDrive.Cookie.v1`
 2. **Cookie 热加载**：通过 `IOptionsMonitor<CookieOptions>` 监听配置变更
 3. **敏感字段归一化层过滤**：用户信息聚合端点严禁透传原始 `pub_mobile`/`pub_email` 等字段
-4. **日志脱敏**：Cookie 前 4 位 + `****`；签名 `sign` 完全脱敏
+4. **日志脱敏**：Cookie、签名、账号标识、文件名、pickCode、临时 URL 与金额均不得记录原值或原值片段
 5. **CORS 白名单**：仅允许显式配置的前端域名
 6. **速率限制**：基于 ASP.NET Core `RateLimiter` 中间件按场景分类限流
+7. **CSRF 防护**：状态变更请求须执行 Antiforgery 校验并在 OpenAPI 暴露凭据契约；详见需求 31
 
 ### 可观测性
 

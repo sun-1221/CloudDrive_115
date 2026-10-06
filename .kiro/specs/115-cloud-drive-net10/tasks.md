@@ -1,4 +1,4 @@
-# 实施计划：.NET 10 原生框架搭建（替代 ABP）
+# 实现计划：.NET 10 原生框架搭建（替代 ABP）
 
 ## 概述
 
@@ -14,7 +14,7 @@
     - 创建 `Server/src/WebApi/WebApi.csproj`（web 项目，net10.0）
     - 创建解决方案文件并添加所有项目
     - _需求: 1.1, 1.2, 1.3, 1.4_
-    - _设计: §分层架构_
+    - _设计: §整体结构_
   - [x] 1.2 配置项目引用与依赖关系
     - Application.csproj 引用 Domain.csproj
     - Infrastructure.csproj 引用 Domain.csproj 和 Application.csproj
@@ -22,21 +22,22 @@
     - Domain.csproj 不引用任何其他项目
     - 为各项目添加所需 NuGet 包引用（MediatR、SqlSugarCore、Quartz、FluentValidation、Polly 等）
     - _需求: 1.1, 1.2, 1.3, 1.4, 1.5_
-    - _设计: §分层架构_
+    - _设计: §整体结构, §分层依赖规则_
 
 - [x] 2. 实现 Domain 层基础组件
   - [x] 2.1 创建实体基类与领域事件基类
-    - 创建 `Server/src/Domain/Entities/Entity.cs`：包含 Id 属性、领域事件集合 `_domainEvents`、`AddDomainEvent()` 方法、`ClearDomainEvents()` 方法
+    - 创建 `Server/src/Domain/Entities/Entity.cs`：包含 Id 属性
+    - 创建 `Server/src/Domain/Entities/AggregateRoot.cs`：实现 `IEntity`，包含领域事件集合 `_domainEvents`、受保护的 `RaiseDomainEvent()` 方法、`ClearDomainEvents()` 方法与 `DomainEvents` 只读暴露
     - 创建 `Server/src/Domain/Events/DomainEvent.cs`：不依赖 MediatR 或其他外部框架的抽象基类
     - _需求: 4.1, 4.2_
     - _设计: §领域事件_
-  - [x] 2.2 编写属性测试：实体领域事件收集
-    - **Property 6: 实体领域事件收集**
-    - 验证调用 `AddDomainEvent()` 后事件出现在集合中，集合长度增加 1
+  - [x] 2.2 编写属性测试：聚合根领域事件收集
+    - **Property 6: 聚合根领域事件收集**
+    - 验证经聚合根领域方法调用 `RaiseDomainEvent()` 后事件出现在集合中，集合长度增加 1
     - _需求: 4.2_
-    - _设计: §Property 6: 实体领域事件收集_
+    - _设计: §Property 6: 聚合根领域事件收集_
   - [x] 2.3 创建仓储接口
-    - 创建 `Server/src/Domain/Repositories/IRepository.cs`：定义泛型仓储接口 `IRepository<TEntity, TId>`，包含 GetByIdAsync、GetListAsync、InsertAsync、UpdateAsync、DeleteAsync 等方法
+    - 创建 `Server/src/Domain/Repositories/IRepository.cs`：定义泛型仓储接口 `IRepository<TEntity, TId> where TEntity : AggregateRoot<TId>`，包含 GetByIdAsync、GetListAsync、InsertAsync、UpdateAsync、DeleteAsync 等方法
     - _需求: 5.6_
     - _设计: §1. SqlSugar 配置与仓储_
 
@@ -47,8 +48,8 @@
     - 创建 `Server/src/Application/Queries/IQuery.cs`：标记接口 `IQuery<TResponse> : IRequest<Result<TResponse>>`，用于标识读操作
     - 创建 `Server/src/Application/Queries/IQueryHandler.cs`：定义 `IQueryHandler<TQuery, TResponse>` 基接口
     - TransactionBehavior 和 DomainEventDispatchBehavior 通过 `ICommand` / `ICommand<TResponse>` 标记接口区分 Command 与 Query
-    - _需求: 2.1, 2.2_
-    - _设计: §CQRS 架构_
+    - _需求: 2.1, 2.2, 2.4_
+    - _设计: §Command/Query 分离_
   - [x] 3.2 实现 LoggingBehavior
     - 创建 `Server/src/Application/Behaviors/LoggingBehavior.cs`：实现 `IPipelineBehavior<TRequest, TResponse>`
     - 记录请求类型名称、参数信息和响应耗时
@@ -101,23 +102,36 @@
     - 注入并使用 `IDomainEventSource`，在 Handler 执行后遍历被追踪实体收集的领域事件，包装为 MediatR 通知后通过 `IMediator.Publish()` 或 `IPublisher.Publish()` 逐一发布
     - 发布完成后调用 `ClearDomainEvents()` 清空事件集合
     - 普通 Command Handler 不手动调用 `IMediator.Publish()` 发布实体领域事件
-    - _需求: 3.9, 4.3, 4.5, 4.6_
-    - _设计: §MediatR Pipeline Behaviors, §领域事件_
+    - **Property 19: DomainEventDispatchBehavior 发布、清空与 Query 跳过**
+    - 编写场景测试（Fact）或属性测试：验证 Command 路径包装发布并清空事件，Query 路径跳过分发
+    - _需求: 3.9, 4.3, 4.4, 4.5, 4.6_
+    - _设计: §MediatR Pipeline Behaviors, §领域事件, §Property 19: DomainEventDispatchBehavior 发布、清空与 Query 跳过_
+  - [x] 3.11 编写架构测试：CQRS 分发、Query 无副作用与 Pipeline 顺序
+    - 创建 `Server/tests/Architecture.Tests/ControllerDependencyTests.cs`：验证 Controller 不直接注入仓储、ORM 客户端或基础设施实现类型
+    - 创建 `Server/tests/Architecture.Tests/QueryHandlerSideEffectTests.cs`：验证 Query Handler 不调用写操作或领域事件发布
+    - 创建 `Server/tests/Architecture.Tests/PipelineBehaviorOrderTests.cs`：验证默认 Pipeline 四段顺序，以及业务 PreValidation_Behavior 插入 Logging 与 Validation 之间
+    - _需求: 1.5, 2.3, 2.5, 3.8, 12.4, 12.5_
+    - _设计: §分层依赖规则, §Command/Query 分离, §MediatR Pipeline Behaviors, §Property 12: Pipeline Behavior 注册顺序, §Property 13: Controller 仅通过 CQRS 分发请求, §Property 14: Query Handler 无副作用_
 
 - [x] 4. 检查点 - 确保所有测试通过
-  - 确保所有测试通过，如有问题请向用户确认。
+  - 运行 `dotnet build CloudDrive.slnx --no-restore`
+  - 运行 `dotnet test Server/tests/Domain.Tests/Domain.Tests.csproj --no-build --nologo --verbosity minimal`
+  - 运行 `dotnet test Server/tests/Application.Tests/Application.Tests.csproj --no-build --nologo --verbosity minimal`
+  - 运行 `dotnet test Server/tests/Architecture.Tests/Architecture.Tests.csproj --no-build --nologo --verbosity minimal`
+  - _需求: 1.5, 2.3, 2.5, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 8.2, 8.3, 8.4, 12.4, 12.5_
+  - _设计: §测试策略_
 
 - [x] 5. 实现 Infrastructure 层基础设施
   - [x] 5.1 实现 SqlSugar 配置与仓储基类
     - 创建 `Server/src/Infrastructure/Persistence/SqlSugarSetup.cs`：配置 ISqlSugarClient 注册为 Scoped，IsAutoCloseConnection = true，InitKeyType = Attribute
-    - 创建 `Server/src/Infrastructure/Persistence/Repository.cs`：实现 `IRepository<TEntity, TId>`，封装 GetByIdAsync、GetListAsync、InsertAsync、UpdateAsync、DeleteAsync
-    - 在 Insert/Update 等持久化成功后通过 `IDomainEventSource.Track(entity)` 追踪聚合，供 `DomainEventDispatchBehavior` 统一分发领域事件
-    - 提供应用启动时 `db.CodeFirst.InitTables<T>()` 自动建表的调用入口
+    - 创建 `Server/src/Infrastructure/Persistence/Repository.cs`：实现 `IRepository<TEntity, TId> where TEntity : AggregateRoot<TId>`，封装 GetByIdAsync、GetListAsync、InsertAsync、UpdateAsync、DeleteAsync
+    - 在 InsertAsync/UpdateAsync 等持久化成功后通过 `IDomainEventSource.Track(entity)` 追踪聚合，供 `DomainEventDispatchBehavior` 统一分发领域事件
+    - 提供应用启动时集中 CodeFirst 初始化入口（如 `SqlSugarSetup.InitTables(ISqlSugarClient, params Type[] entityTypes)` 或等效机制）自动建表
     - _需求: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7_
     - _设计: §1. SqlSugar 配置与仓储_
   - [x] 5.2 编写属性测试：Repository CRUD 往返一致性
     - **Property 7: Repository CRUD 往返一致性**
-    - 验证 Insert 后 GetById 返回与原始实体等价的对象
+    - 验证 InsertAsync 后 GetByIdAsync 返回与原始实体等价的对象
     - _需求: 5.5_
     - _设计: §Property 7: Repository CRUD 往返一致性_
   - [x] 5.3 实现 Quartz.NET 注册
@@ -126,12 +140,13 @@
     - 首期使用内存 JobStore
     - 约定 `JobDataMap` 仅传递最小调度标识（如 `JobId`），业务载荷与恢复检查点由 Job 通过持久化存储加载
     - 约定 Quartz Job 不假设 MediatR Pipeline 自动生效；涉及事务、领域事件发布或恢复处理时需显式实现
+    - 编写 DI/Quartz 测试验证模块入口注册 Quartz 服务、HostedService 与业务 Job，并覆盖 JobDataMap 最小载荷和 Job 执行边界约定
     - _需求: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6_
-    - _设计: §2. Quartz.NET 调度_
+    - _设计: §2. Quartz.NET 调度, §Property 18: Quartz 调度注册与 Job 执行边界_
   - [x] 5.4 实现 IDistributedCache 缓存封装
     - 创建 `Server/src/Infrastructure/Caching/DistributedCacheExtensions.cs`：封装 GetAsync<T>()、SetAsync<T>()、GetOrSetAsync<T>() 方法
     - 使用 System.Text.Json 进行序列化/反序列化
-    - 支持配置默认 TTL
+    - 写入缓存时仅应用调用方显式传入的 TTL；调用方未传入 TTL 时不隐式设置过期时间
     - 创建 `Server/src/Infrastructure/Caching/CachingSetup.cs`：注册 AddDistributedMemoryCache()
     - _需求: 7.1, 7.2, 7.3, 7.4, 7.5_
     - _设计: §3. IDistributedCache 封装_
@@ -147,25 +162,37 @@
     - _设计: §Property 9: GetOrSetAsync 缓存命中与未命中行为_
   - [x] 5.7 实现 IHttpClientFactory + Polly 配置
     - 创建 `Server/src/Infrastructure/Http/HttpClientSetup.cs`：通过 Named HttpClient 注册
-    - 读请求配置重试 + 超时 + 熔断策略
-    - 写请求仅配置超时 + 熔断策略
+    - 读请求配置最多 3 次瞬时错误重试、指数退避基准 1 秒并启用 jitter、10 秒超时、采样窗口 30 秒内失败率 100% 且至少 5 次请求时熔断 30 秒
+    - 写请求仅配置 10 秒超时 + 同等熔断策略，不配置自动重试
     - 为业务模块保留 query string、`application/x-www-form-urlencoded`、`multipart/form-data` 与 JSON 四类请求构造扩展点
     - _需求: 9.1, 9.2, 9.3, 9.4, 9.5_
     - _设计: §5. IHttpClientFactory + Polly_
   - [x] 5.8 实现 FluentValidation 注册
     - 创建 `Server/src/Infrastructure/DependencyInjection/ValidationSetup.cs`：通过 AddValidatorsFromAssembly() 自动注册 Application 层验证器
-    - _需求: 8.1_
-    - _设计: §4. FluentValidation + MediatR 集成_
+    - 扫描实现 `IHasInput<TInput>` 的 Command/Query，并通过 `InputPropertyValidator<TRequest, TInput>` 将输入 DTO 验证器自动适配为请求级验证器
+    - 创建 `Server/tests/Infrastructure.Tests/DependencyInjection/ValidationSetupTests.cs`：验证 `IValidator<TInput>` 可自动适配为 `IValidator<TRequest>`
+    - _需求: 8.1, 8.5_
+    - _设计: §4. FluentValidation + MediatR 集成, §Property 15: 输入 DTO 验证器适配_
   - [x] 5.9 实现 DI 扩展方法汇总
     - 创建 `Server/src/Infrastructure/DependencyInjection/ServiceCollectionExtensions.cs`：提供 AddApplicationServices()（注册 MediatR + Pipeline Behaviors + FluentValidation）和 AddRepositories() 等聚合扩展方法；基础设施子模块由 AddSqlSugar()、AddQuartzJobs()、AddCaching()、AddSecretsProtection() 与 HTTP 客户端扩展方法分别注册
-    - Pipeline Behavior 按 LoggingBehavior → ValidationBehavior → TransactionBehavior → DomainEventDispatchBehavior 顺序注册
+    - `AddApplicationServices()` 默认按 LoggingBehavior → ValidationBehavior → TransactionBehavior → DomainEventDispatchBehavior 注册；业务模块可通过显式参数插入 PreValidation_Behavior 到 Logging 与 Validation 之间
     - 仓储实现注册为 Scoped
-    - 预留基于 ASP.NET Core Data Protection 的机密保护注册入口，并支持 key ring 持久化配置
+    - 预留基于 ASP.NET Core Data Protection 的机密保护注册入口（Cookie 密文 / 签名密钥等平台机密，非 OAuth AccessToken/RefreshToken/AppSecret 基线），并支持 key ring 持久化配置
     - _需求: 3.8, 12.1, 12.3, 12.4, 12.5, 12.7_
-    - _设计: §MediatR Pipeline Behaviors, §8. WebApi 启动与认证_
+    - _设计: §MediatR Pipeline Behaviors, §8. WebApi 启动与认证, §Property 12: Pipeline Behavior 注册顺序_
+  - [x] 5.10 编写基础设施策略测试：缓存 TTL 与 HTTP 韧性边界
+    - 验证 Cache_Extensions 在调用方提供 TTL 时写入相对过期时间，未提供 TTL 时不隐式写入默认过期时间
+    - 验证读请求客户端会对瞬时错误执行重试
+    - 验证写请求客户端不会自动重试非幂等请求
+    - _需求: 7.3, 9.2, 9.3_
+    - _设计: §3. IDistributedCache 封装, §5. IHttpClientFactory + Polly, §Property 16: HTTP 读写韧性策略边界, §Property 17: 缓存写入仅应用显式 TTL_
 
 - [x] 6. 检查点 - 确保所有测试通过
-  - 确保所有测试通过，如有问题请向用户确认。
+  - 运行 `dotnet build CloudDrive.slnx --no-restore`
+  - 运行 `dotnet test Server/tests/Infrastructure.Tests/Infrastructure.Tests.csproj --no-build --nologo --verbosity minimal`
+  - 运行 `dotnet test Server/tests/Architecture.Tests/Architecture.Tests.csproj --no-build --nologo --verbosity minimal`
+  - _需求: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 7.1, 7.2, 7.3, 7.4, 7.5, 8.1, 8.5, 9.1, 9.2, 9.3, 9.4, 9.5, 12.1, 12.3, 12.4, 12.5, 12.7_
+  - _设计: §测试策略_
 
 - [x] 7. 实现 WebApi 层
   - [x] 7.1 实现全局异常处理中间件
@@ -173,16 +200,19 @@
     - ValidationException → 400 + 字段级错误详情
     - 业务异常 → 对应 HTTP 状态码（401/404/429/502/503 等）
     - 未知异常 → 500，隐藏内部详情
-    - 返回 `application/problem+json` 格式
+    - 返回 `application/problem+json` 格式，包含 RFC 7807 标准字段 `type`/`title`/`status`/`detail`/`instance`
+    - 业务失败时在 `extensions.code` 提供稳定应用业务码槽位；可选追加 `extensions.upstreamCode`/`extensions.upstreamMessage`
+    - ValidationException 路径保留 `errors` 字段级详情，允许与 `extensions.code` 并存
     - 记录日志：请求路径、异常类型、异常消息
     - 为 WebApi 适配层提供统一的 `Result.Failure(...)` → 非 2xx `ProblemDetails` 映射约定
-    - _需求: 10.1, 10.2, 10.3, 10.4, 10.5, 10.6_
+    - _需求: 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7, 10.8, 10.9_
     - _设计: §6. 全局异常处理中间件_
   - [x] 7.2 编写属性测试：异常中间件状态码映射
     - **Property 10: 异常中间件状态码映射**
     - 验证不同异常类型映射为正确的 HTTP 状态码和 ProblemDetails 格式
     - 验证 `Result.Failure(...)` 不会以 HTTP 200 返回，而会被映射为非 2xx ProblemDetails
-    - _需求: 10.1, 10.2, 10.3, 10.4, 10.6_
+    - 验证响应包含 RFC 7807 标准字段；业务失败时 `extensions.code` 存在；ValidationException 时 `errors` 与 `extensions.code` 可并存
+    - _需求: 10.1, 10.2, 10.3, 10.4, 10.6, 10.7, 10.8, 10.9_
     - _设计: §Property 10: 异常中间件状态码映射_
   - [x] 7.3 编写属性测试：异常中间件日志记录
     - **Property 11: 异常中间件日志记录**
@@ -207,12 +237,18 @@
     - _设计: §7. 手动对象映射_
 
 - [x] 9. 最终检查点 - 确保所有测试通过
-  - 确保所有测试通过，如有问题请向用户确认。
+  - 运行 `dotnet build CloudDrive.slnx --no-restore`
+  - 运行 `dotnet test Server/tests/Domain.Tests/Domain.Tests.csproj --no-build --nologo --verbosity minimal`
+  - 运行 `dotnet test Server/tests/Application.Tests/Application.Tests.csproj --no-build --nologo --verbosity minimal`
+  - 运行 `dotnet test Server/tests/Infrastructure.Tests/Infrastructure.Tests.csproj --no-build --nologo --verbosity minimal`
+  - 运行 `dotnet test Server/tests/WebApi.Tests/WebApi.Tests.csproj --no-build --nologo --verbosity minimal`
+  - 运行 `dotnet test Server/tests/Architecture.Tests/Architecture.Tests.csproj --no-build --nologo --verbosity minimal`
+  - _需求: 1.1, 2.1, 3.1, 4.1, 5.1, 6.1, 7.1, 8.1, 9.1, 10.1, 11.1, 12.1_
+  - _设计: §测试策略_
 
 ## 备注
 
-- 标记 `*` 的任务为可选任务，可跳过以加速 MVP 交付
 - 每个任务引用了具体的需求编号以确保可追溯性
 - 检查点任务确保增量验证
-- 属性测试验证设计文档中定义的正确性属性（Property 1-11）
+- 属性测试 / 场景测试验证设计文档中定义的正确性属性（Property 1-19）
 - 单元测试验证具体示例和边界情况
