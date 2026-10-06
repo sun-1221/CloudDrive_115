@@ -10,10 +10,10 @@ export const useRecycleBinStore = defineStore('recycleBin', () => {
   const totalCount = ref(0);
   const offset = ref(0);
   const hasMore = ref(false);
-  const selectedFileIds = ref<string[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
   const needsRefresh = ref(false);
+  const itemSchemaStatus = ref<'available' | 'not_collected'>('available');
 
   async function fetchItems(): Promise<void> {
     loading.value = true;
@@ -21,16 +21,7 @@ export const useRecycleBinStore = defineStore('recycleBin', () => {
     offset.value = 0;
 
     try {
-      const { useAuthStore } = await import('@/stores/authStore');
-      const authStore = useAuthStore();
-
-      if (!authStore.currentAccountUid) {
-        error.value = '未选择账号';
-        return;
-      }
-
       const result = await recycleBinApi.getRecycleBinList({
-        cloudAccountUid: authStore.currentAccountUid,
         offset: 0,
         limit: PAGE_SIZE,
       });
@@ -39,7 +30,7 @@ export const useRecycleBinStore = defineStore('recycleBin', () => {
       totalCount.value = result.totalCount;
       offset.value = result.items.length;
       hasMore.value = result.items.length < result.totalCount;
-      selectedFileIds.value = [];
+      itemSchemaStatus.value = result.itemSchemaStatus ?? 'available';
       needsRefresh.value = false;
     } catch (e) {
       error.value = e instanceof Error ? e.message : '加载回收站失败';
@@ -56,13 +47,7 @@ export const useRecycleBinStore = defineStore('recycleBin', () => {
     if (!hasMore.value || loading.value) return;
 
     try {
-      const { useAuthStore } = await import('@/stores/authStore');
-      const authStore = useAuthStore();
-
-      if (!authStore.currentAccountUid) return;
-
       const result = await recycleBinApi.getRecycleBinList({
-        cloudAccountUid: authStore.currentAccountUid,
         offset: offset.value,
         limit: PAGE_SIZE,
       });
@@ -75,93 +60,6 @@ export const useRecycleBinStore = defineStore('recycleBin', () => {
     }
   }
 
-  async function restore(fileIds: string[]): Promise<void> {
-    const { useAuthStore } = await import('@/stores/authStore');
-    const authStore = useAuthStore();
-
-    if (!authStore.currentAccountUid) return;
-
-    const result = await recycleBinApi.restoreFiles({
-      cloudAccountUid: authStore.currentAccountUid,
-      fileIds,
-    });
-
-    if (result.accepted && result.jobId) {
-      const { useJobStore } = await import('@/stores/jobStore');
-      const jobStore = useJobStore();
-      jobStore.addJob(
-        result.jobId,
-        [{ type: 'recycleBin' }],
-        { kind: 'recycleRestore', fileCount: fileIds.length },
-      );
-    } else {
-      // 同步完成 - 从列表中移除
-      items.value = items.value.filter((item) => !fileIds.includes(item.fileId));
-      selectedFileIds.value = selectedFileIds.value.filter((id) => !fileIds.includes(id));
-    }
-  }
-
-  async function permanentDelete(fileIds: string[]): Promise<void> {
-    const { useAuthStore } = await import('@/stores/authStore');
-    const authStore = useAuthStore();
-
-    if (!authStore.currentAccountUid) return;
-
-    const result = await recycleBinApi.permanentDelete({
-      cloudAccountUid: authStore.currentAccountUid,
-      fileIds,
-    });
-
-    if (result.accepted && result.jobId) {
-      const { useJobStore } = await import('@/stores/jobStore');
-      const jobStore = useJobStore();
-      jobStore.addJob(
-        result.jobId,
-        [{ type: 'recycleBin' }],
-        { kind: 'recyclePermanentDelete', fileCount: fileIds.length },
-      );
-    } else {
-      items.value = items.value.filter((item) => !fileIds.includes(item.fileId));
-      selectedFileIds.value = selectedFileIds.value.filter((id) => !fileIds.includes(id));
-    }
-  }
-
-  async function clearAll(): Promise<void> {
-    const { useAuthStore } = await import('@/stores/authStore');
-    const authStore = useAuthStore();
-
-    if (!authStore.currentAccountUid) return;
-
-    const result = await recycleBinApi.clearRecycleBin(authStore.currentAccountUid);
-
-    if (result.jobId) {
-      const { useJobStore } = await import('@/stores/jobStore');
-      const jobStore = useJobStore();
-      jobStore.addJob(
-        result.jobId,
-        [{ type: 'recycleBin' }],
-        { kind: 'clearRecycleBin' },
-      );
-    }
-  }
-
-  function toggleSelect(fileId: string): void {
-    const index = selectedFileIds.value.indexOf(fileId);
-    if (index >= 0) {
-      selectedFileIds.value = selectedFileIds.value.filter((id) => id !== fileId);
-    } else {
-      selectedFileIds.value = [...selectedFileIds.value, fileId];
-    }
-  }
-
-  function selectAll(): void {
-    selectedFileIds.value = items.value.map((item) => item.fileId);
-  }
-
-  function clearSelection(): void {
-    selectedFileIds.value = [];
-  }
-
   function setNeedsRefresh(): void {
     needsRefresh.value = true;
   }
@@ -171,19 +69,13 @@ export const useRecycleBinStore = defineStore('recycleBin', () => {
     totalCount,
     offset,
     hasMore,
-    selectedFileIds,
     loading,
     error,
     needsRefresh,
+    itemSchemaStatus,
     fetchItems,
     refresh,
     fetchMore,
-    restore,
-    permanentDelete,
-    clearAll,
-    toggleSelect,
-    selectAll,
-    clearSelection,
     setNeedsRefresh,
   };
 });

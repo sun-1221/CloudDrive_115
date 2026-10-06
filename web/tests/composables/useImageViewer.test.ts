@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
+import type { CloudDriveFileDto } from '@/types';
 
 // Mock authStore
 vi.mock('@/stores/authStore', () => ({
@@ -14,27 +15,10 @@ vi.mock('@/api/previewApi', () => ({
   getImagePreview: (...args: unknown[]) => mockGetImagePreview(...args),
 }));
 
-// Mock temporaryResourceService
-vi.mock('@/services/temporaryResourceService', () => ({
-  fetchWithRetry: vi.fn(async ({ fetchUrl, extractUrl }: any) => {
-    try {
-      const data = await fetchUrl();
-      return { success: true, url: extractUrl(data), data };
-    } catch (e: any) {
-      // 模拟重试一次
-      try {
-        const data2 = await fetchUrl();
-        return { success: true, url: extractUrl(data2), data: data2 };
-      } catch (e2: any) {
-        return { success: false, error: e2.message };
-      }
-    }
-  }),
-}));
 
 // Mock fileTypeMapping
 vi.mock('@/utils/fileTypeMapping', () => ({
-  isPreviewableImage: (file: any) => {
+  isPreviewableImage: (file: Pick<CloudDriveFileDto, 'isDirectory' | 'name'>) => {
     if (file.isDirectory) return false;
     const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
     return ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext);
@@ -63,7 +47,7 @@ describe('需求 7.1: 灯箱模式打开', () => {
     const { state, open } = useImageViewer();
     const files = [makeImageFile('f1', '风景.jpg'), makeImageFile('f2', '人像.png')];
 
-    open(files as any, 0);
+    open(files as CloudDriveFileDto[], 0);
 
     // 等待异步加载
     await vi.waitFor(() => expect(state.value.loading).toBe(false));
@@ -83,7 +67,7 @@ describe('需求 7.1: 灯箱模式打开', () => {
       { fileId: 'f2', name: '文档.pdf', size: 100, fileType: 'pdf', isDirectory: false, modifiedTime: '' },
     ];
 
-    open(files as any, 0);
+    open(files as CloudDriveFileDto[], 0);
 
     expect(imageCollection.value).toHaveLength(1);
     expect(imageCollection.value[0]?.name).toBe('照片.jpg');
@@ -100,7 +84,7 @@ describe('需求 7.2: 左右切换', () => {
     const { state, open, next, prev, canPrev, canNext } = useImageViewer();
     const files = [makeImageFile('f1', 'a.jpg'), makeImageFile('f2', 'b.jpg')];
 
-    open(files as any, 0);
+    open(files as CloudDriveFileDto[], 0);
     await vi.waitFor(() => expect(state.value.loading).toBe(false));
 
     expect(canPrev.value).toBe(false);
@@ -169,7 +153,7 @@ describe('需求 7.7: 关闭灯箱', () => {
     mockGetImagePreview.mockResolvedValue({ previewUrl: 'https://example.com/img.jpg' });
 
     const { state, open, close, imageCollection } = useImageViewer();
-    open([makeImageFile('f1', 'a.jpg')] as any, 0);
+    open([makeImageFile('f1', 'a.jpg')] as CloudDriveFileDto[], 0);
 
     close();
 
@@ -184,7 +168,7 @@ describe('需求 7.9-7.10: 加载失败与重试', () => {
     mockGetImagePreview.mockRejectedValue(new Error('过期'));
 
     const { state, open } = useImageViewer();
-    open([makeImageFile('f1', 'a.jpg')] as any, 0);
+    open([makeImageFile('f1', 'a.jpg')] as CloudDriveFileDto[], 0);
     await vi.waitFor(() => expect(state.value.loading).toBe(false));
 
     expect(state.value.error).toBeTruthy();
@@ -197,7 +181,7 @@ describe('需求 7.9-7.10: 加载失败与重试', () => {
       .mockResolvedValue({ previewUrl: 'https://example.com/new.jpg' });
 
     const { state, open, retry } = useImageViewer();
-    open([makeImageFile('f1', 'a.jpg')] as any, 0);
+    open([makeImageFile('f1', 'a.jpg')] as CloudDriveFileDto[], 0);
     await vi.waitFor(() => expect(state.value.loading).toBe(false));
 
     retry();

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, watch } from 'vue';
+import { onMounted, watch, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { NAlert } from 'naive-ui';
 import BreadcrumbNav from '@/components/file/BreadcrumbNav.vue';
@@ -9,10 +9,16 @@ import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import ErrorState from '@/components/common/ErrorState.vue';
 import { useFileStore } from '@/stores/fileStore';
 import type { CloudDriveFileDto } from '@/types';
+import ContextMenu from '@/components/operation/ContextMenu.vue';
+import * as fileOperations from '@/services/fileOperationService';
+import { validateFileName } from '@/utils/fileNameValidator';
+import { useMessage } from 'naive-ui';
 
 const route = useRoute();
 const router = useRouter();
 const fileStore = useFileStore();
+const message = useMessage();
+const contextMenu = ref<{ x: number; y: number; files: CloudDriveFileDto[] } | null>(null);
 
 onMounted(() => {
   const dirId = (route.params.directoryId as string) || '0';
@@ -33,8 +39,41 @@ function handleOpenFile(file: CloudDriveFileDto) {
   // 文件预览在后续任务中实现
 }
 
-function handleContextMenu(_event: MouseEvent, _file: CloudDriveFileDto) {
-  // 右键菜单在文件操作组件任务中实现
+function handleContextMenu(event: MouseEvent, file: CloudDriveFileDto) {
+  if (!fileStore.selectedFileIds.includes(file.fileId)) fileStore.toggleSelect(file.fileId);
+  contextMenu.value = { x: event.clientX, y: event.clientY, files: fileStore.selectedFiles };
+}
+
+async function handleContextAction(action: string, files: CloudDriveFileDto[]) {
+  contextMenu.value = null;
+  const file = files[0];
+  if (!file) return;
+  try {
+    if (action === 'refresh') return fileStore.refreshDirectory();
+    if (action === 'star') {
+      const result = await fileOperations.toggleStar(file.fileId, !file.isStar);
+      if (!result.accepted) { message.success(file.isStar ? '已取消星标' : '已加星标'); await fileStore.refreshDirectory(); }
+    } else if (action === 'rename') {
+      const name = window.prompt('重命名', file.name);
+      if (!name) return;
+      const valid = validateFileName(name);
+      if (!valid.valid) throw new Error(valid.reason);
+      const result = await fileOperations.rename(file.fileId, name);
+      if (!result.accepted) { message.success('已重命名'); await fileStore.refreshDirectory(); }
+    } else if (action === 'copy') {
+      const result = await fileOperations.copySingle(file.fileId, fileStore.currentDirectoryId);
+      if (!result.accepted) { message.success('已复制'); await fileStore.refreshDirectory(); }
+    } else if (action === 'download' && file.pickCode) {
+      const result = await fileOperations.download(file.pickCode);
+      const anchor = document.createElement('a');
+      anchor.href = result.downloadUrl;
+      anchor.download = result.fileName;
+      anchor.rel = 'noopener';
+      anchor.click();
+    }
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '操作失败');
+  }
 }
 
 function handleScroll(event: Event) {
@@ -103,4 +142,13 @@ function handleRetry() {
       </div>
     </div>
   </div>
+  <ContextMenu
+    v-if="contextMenu"
+    :x="contextMenu.x"
+    :y="contextMenu.y"
+    :files="contextMenu.files"
+    :has-clipboard="false"
+    @close="contextMenu = null"
+    @action="handleContextAction"
+  />
 </template>

@@ -81,15 +81,14 @@ describe('Property 2: 路由守卫必须区分未授权与功能不可用', () =
     expect(authStore.authStatus).not.toBe('unauthorized');
   });
 
-  it('handleTokenExpired 将 authorized 转为 unauthorized 并标记需重授权', () => {
+  it('handleTokenExpired 清理登录检查结果并转为 unauthorized', () => {
     const authStore = useAuthStore();
     authStore.authStatus = 'authorized';
-    authStore.currentAccountUid = 'uid-1';
+    authStore.loginCheckResult = { isAuthenticated: true, isLoggedIn: true, lastCheckedAt: '' };
 
     authStore.handleTokenExpired();
 
     expect(authStore.authStatus).toBe('unauthorized');
-    expect(authStore.requiresReauthorization).toBe(true);
-    expect(authStore.currentAccount).toBeNull();
+    expect(authStore.loginCheckResult).toBeNull();
   });
 });

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
+import type { KeyboardScope } from '@/types';
 
 // Mock uiStore 返回值
 const mockUIStore = {
@@ -175,7 +176,7 @@ describe('keyboardService 多快捷键支持', () => {
     const imageViewerHandler = vi.fn();
 
     keyboardService.register({ key: 'Escape', scope: 'fileBrowser', handler: fileBrowserHandler });
-    keyboardService.register({ key: 'Escape', scope: 'imageViewer' as any, handler: imageViewerHandler });
+    keyboardService.register({ key: 'Escape', scope: 'imageViewer' as KeyboardScope, handler: imageViewerHandler });
 
     document.dispatchEvent(new KeyboardEvent('keydown', {
       key: 'Escape', bubbles: true, cancelable: true,

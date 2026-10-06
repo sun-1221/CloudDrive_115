@@ -1,8 +1,7 @@
 import { ref, computed } from 'vue';
 import * as previewApi from '@/api/previewApi';
 import { isPreviewableImage } from '@/utils/fileTypeMapping';
-import { fetchWithRetry } from '@/services/temporaryResourceService';
-import { useAuthStore } from '@/stores/authStore';
+import { fetchWithRetry, createTemporaryResourceScope } from '@/services/temporaryResourceService';
 import type { CloudDriveFileDto } from '@/types';
 
 export interface ImageViewerState {
@@ -18,8 +17,8 @@ export interface ImageViewerState {
 }
 
 export function useImageViewer() {
-  const authStore = useAuthStore();
-
+  const temporaryResource = createTemporaryResourceScope();
+  let loadToken = 0;
   const state = ref<ImageViewerState>({
     visible: false,
     currentIndex: 0,
@@ -43,23 +42,20 @@ export function useImageViewer() {
 
     state.value.loading = true;
     state.value.error = '';
+    state.value.imageUrl = '';
     state.value.fileName = file.name;
     state.value.currentIndex = index;
     resetTransform();
 
-    const uid = authStore.currentAccountUid;
-    if (!uid) {
-      state.value.error = '未授权';
-      state.value.loading = false;
-      return;
-    }
-
+    const token = ++loadToken;
     const result = await fetchWithRetry({
-      fetchUrl: () => previewApi.getImagePreview(uid, file.fileId),
+      fetchUrl: () => previewApi.getImagePreview(file.pickCode ?? file.fileId),
       extractUrl: (data) => data.previewUrl,
     });
 
+    if (token !== loadToken || !state.value.visible) return;
     if (result.success && result.url) {
+      temporaryResource.set(result.url);
       state.value.imageUrl = result.url;
     } else {
       state.value.error = result.error ?? '加载失败';
@@ -123,6 +119,8 @@ export function useImageViewer() {
   }
 
   function close() {
+    loadToken++;
+    temporaryResource.clear();
     state.value.visible = false;
     state.value.imageUrl = '';
     state.value.error = '';

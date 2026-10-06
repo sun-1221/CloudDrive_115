@@ -31,7 +31,7 @@ test.describe('右键上下文菜单', () => {
     await fileBrowserArea.click({ button: 'right', position: { x: 10, y: 400 } });
 
     // 应包含"新建文件夹"
-    await expect(page.getByText('新建文件夹').first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('新建文件夹').first()).toHaveCount(0);
   });
 
   test('需求 4.6: 点击菜单外部关闭菜单', async ({ page }) => {

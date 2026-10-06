@@ -1,172 +1,119 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import axios from 'axios';
-import type {
-  CloudDriveAccountSummaryDto,
-  CloudDriveUserInfoDto,
-  ApiProblemDetails,
-} from '@/types';
+import type { AuthResponseDto, CloudDriveAuthCheckDto, CurrentUserDto } from '@/types';
+import { parseProblemDetails } from '@/api/problemDetails';
+import { setTokenExpiredHandler } from '@/api/http';
 
-function isServiceUnavailableError(e: unknown): boolean {
-  return axios.isAxiosError(e) && e.response?.status === 503;
+function safeFailureReason(reason: string | undefined): string | null {
+  if (!reason || /(cookie|token|signature|pick.?code|https?:\/\/)/i.test(reason)) return null;
+  return reason.slice(0, 160);
 }
 
-function extractDetailFromError(e: unknown): string {
-  if (axios.isAxiosError(e) && e.response?.data) {
-    const data = e.response.data as Record<string, unknown>;
-    if (typeof data.detail === 'string') return data.detail;
+function getAccessToken(): string | null {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    const token = localStorage.getItem('115web.accessToken');
+    return token && token.split('.').length === 3 ? token : null;
+  } catch {
+    return null;
   }
-  return '功能不可用';
+}
+
+function clearAccessToken(): void {
+  if (typeof localStorage !== 'undefined') localStorage.removeItem('115web.accessToken');
 }
 
 export const useAuthStore = defineStore('auth', () => {
-  const currentAccountUid = ref<string | null>(null);
-  const accounts = ref<CloudDriveAccountSummaryDto[]>([]);
   const authStatus = ref<'unknown' | 'unauthorized' | 'authorized' | 'disabled'>('unknown');
-  const requiresReauthorization = ref(false);
   const featureUnavailableReason = ref<string | null>(null);
   const loading = ref(false);
-  const currentAccount = ref<CloudDriveUserInfoDto | null>(null);
+  const loginCheckResult = ref<CloudDriveAuthCheckDto | null>(null);
+  const currentUser = ref<CurrentUserDto | null>(null);
 
   const isAuthorized = computed(() => authStatus.value === 'authorized');
-  const hasMultipleAccounts = computed(() => accounts.value.length > 1);
+  const isAuthenticated = computed(() => loginCheckResult.value?.isAuthenticated === true);
+  const failureReason = computed(() => loginCheckResult.value?.failureReason ?? null);
+  const cooldownUntil = computed(() => loginCheckResult.value?.cooldownUntil ?? null);
 
-  async function redirectToAuth(): Promise<void> {
-    loading.value = true;
-    try {
-      const { createPkceSession, getAuthorizationUrl } = await import('@/api/authApi');
-
-      // 1. 创建 PKCE 会话
-      const pkceSession = await createPkceSession();
-      sessionStorage.setItem('pkceSessionId', pkceSession.sessionId);
-
-      // 2. 生成随机 state 防止 CSRF
-      const state = crypto.randomUUID();
-      sessionStorage.setItem('oauthState', state);
-
-      // 3. 获取授权 URL 并重定向
-      const authUrl = await getAuthorizationUrl();
-      const separator = authUrl.includes('?') ? '&' : '?';
-      window.location.href = `${authUrl}${separator}state=${encodeURIComponent(state)}`;
-    } finally {
-      loading.value = false;
-    }
-  }
-
-  async function handleCallback(code: string, pkceSessionId?: string): Promise<void> {
-    loading.value = true;
-    try {
-      const { exchangeCode } = await import('@/api/authApi');
-      const result = await exchangeCode({
-        code,
-        flowType: pkceSessionId ? 'AuthorizationCodeWithPkce' : 'AuthorizationCode',
-        pkceSessionId: pkceSessionId ?? undefined,
-      });
-
-      currentAccountUid.value = result.cloudAccountUid;
-      await bootstrapAuthState();
-    } finally {
-      loading.value = false;
-    }
-  }
+  setTokenExpiredHandler(() => {
+    handleTokenExpired();
+  });
 
   async function bootstrapAuthState(): Promise<void> {
     loading.value = true;
     try {
-      const { listAccounts } = await import('@/api/authApi');
-      const accountList = await listAccounts();
-      accounts.value = accountList;
-
-      if (accountList.length === 0) {
-        authStatus.value = 'unauthorized';
-        return;
-      }
-
-      // 基于已保存的 currentAccountUid 或默认账号或首个账号
-      const savedUid = currentAccountUid.value;
-      const matched = savedUid ? accountList.find(a => a.cloudAccountUid === savedUid) : null;
-      const defaultAccount = accountList.find(a => a.isActive) ?? accountList[0];
-      const selected = matched ?? defaultAccount;
-
-      if (selected) {
-        currentAccountUid.value = selected.cloudAccountUid;
-        await fetchUserInfo();
+      const { checkLoginStatus, getCurrentUser } = await import('@/api/authApi');
+      if (getAccessToken()) {
         authStatus.value = 'authorized';
+        currentUser.value = await getCurrentUser();
       } else {
+        // `/auth/check` only probes the upstream 115 Cookie session. It is not
+        // the local JWT session and must never authorize protected pages.
+        const result = await checkLoginStatus();
+        loginCheckResult.value = { ...result, failureReason: safeFailureReason(result.failureReason) ?? undefined };
         authStatus.value = 'unauthorized';
       }
     } catch (e: unknown) {
-      // 503 → 功能不可用
-      if (isServiceUnavailableError(e)) {
+      const problem = parseProblemDetails(e);
+      if (problem?.code === 'cloud_drive_api_not_collected' || problem?.status === 503) {
         authStatus.value = 'disabled';
-        featureUnavailableReason.value = extractDetailFromError(e);
+        featureUnavailableReason.value = problem.detail || '115 网盘功能暂不可用';
       } else {
         authStatus.value = 'unauthorized';
+        featureUnavailableReason.value = null;
       }
     } finally {
       loading.value = false;
     }
   }
 
-  async function fetchUserInfo(): Promise<void> {
-    if (!currentAccountUid.value) return;
-    try {
-      const { getUserInfo } = await import('@/api/authApi');
-      const info = await getUserInfo(currentAccountUid.value);
-      currentAccount.value = info;
-    } catch {
-      // 用户信息获取失败不阻塞流程
-      currentAccount.value = null;
-    }
-  }
-
-  async function switchAccount(_cloudAccountUid: string): Promise<void> {
-    // 将在 AuthStore 完善任务中实现
-    // 顺序：更新 currentAccountUid → 拉取账号信息 → 清空搜索 → 刷新目录 → 刷新任务 → 关闭预览
-    currentAccountUid.value = _cloudAccountUid;
-  }
-
-  async function disconnect(): Promise<void> {
-    if (currentAccountUid.value) {
-      try {
-        const { disconnect: disconnectApi } = await import('@/api/authApi');
-        await disconnectApi(currentAccountUid.value);
-      } catch {
-        // 断开连接失败不阻塞前端状态清理
-      }
-    }
-    currentAccountUid.value = null;
-    currentAccount.value = null;
-    accounts.value = [];
+  function handleTokenExpired(): void {
     authStatus.value = 'unauthorized';
-    requiresReauthorization.value = false;
+    loginCheckResult.value = null;
+    currentUser.value = null;
+    clearAccessToken();
   }
 
-  function handleTokenExpired(_problem?: ApiProblemDetails): void {
-    // 将在 AuthStore 完善任务中实现
-    // 清理当前账号上下文，展示 Toast "授权已过期，请重新连接"
-    // 自动切换到授权连接界面
-    authStatus.value = 'unauthorized';
-    currentAccount.value = null;
-    requiresReauthorization.value = true;
+  async function signIn(userName: string, password: string, isRegister = false): Promise<void> {
+    const { login, register, getCurrentUser } = await import('@/api/authApi');
+    const response: AuthResponseDto = isRegister ? await register(userName, password) : await login(userName, password);
+    if (typeof localStorage !== 'undefined') localStorage.setItem('115web.accessToken', response.accessToken);
+    authStatus.value = 'authorized';
+    currentUser.value = await getCurrentUser();
+  }
+
+  async function refreshSession(): Promise<void> {
+    const { refresh } = await import('@/api/authApi');
+    const response = await refresh();
+    if (typeof localStorage !== 'undefined') localStorage.setItem('115web.accessToken', response.accessToken);
+    currentUser.value = await (await import('@/api/authApi')).getCurrentUser();
+    authStatus.value = 'authorized';
+  }
+
+  async function signOut(): Promise<void> {
+    try { await (await import('@/api/authApi')).logout(); } finally { handleTokenExpired(); }
+  }
+
+  async function selectAccount(cloudAccountUid: string): Promise<void> {
+    await (await import('@/api/accountApi')).selectAccount(cloudAccountUid);
+    if (currentUser.value) currentUser.value.currentCloudAccountUid = cloudAccountUid;
   }
 
   return {
-    currentAccountUid,
-    accounts,
     authStatus,
-    requiresReauthorization,
     featureUnavailableReason,
     loading,
-    currentAccount,
+    loginCheckResult,
+    currentUser,
     isAuthorized,
-    hasMultipleAccounts,
-    redirectToAuth,
-    handleCallback,
+    isAuthenticated,
+    failureReason,
+    cooldownUntil,
     bootstrapAuthState,
-    fetchUserInfo,
-    switchAccount,
-    disconnect,
     handleTokenExpired,
+    signIn,
+    signOut,
+    selectAccount,
+    refreshSession,
   };
 });

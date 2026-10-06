@@ -9,9 +9,6 @@ test.describe('键盘快捷键', () => {
   });
 
   test('Backspace 不触发浏览器后退', async ({ page }) => {
-    // 记录当前 URL
-    const currentUrl = page.url();
-
     // 点击文件浏览器区域使其获得焦点
     await page.click('body');
 

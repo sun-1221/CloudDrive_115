@@ -1,7 +1,6 @@
 import { ref } from 'vue';
 import * as previewApi from '@/api/previewApi';
-import { fetchWithRetry } from '@/services/temporaryResourceService';
-import { useAuthStore } from '@/stores/authStore';
+import { fetchWithRetry, createTemporaryResourceScope } from '@/services/temporaryResourceService';
 import type { CloudDriveDocPreviewDto } from '@/types';
 
 export interface PdfViewerState {
@@ -19,8 +18,8 @@ export interface PdfViewerState {
 }
 
 export function usePdfViewer() {
-  const authStore = useAuthStore();
-
+  const temporaryResource = createTemporaryResourceScope();
+  let loadToken = 0;
   const state = ref<PdfViewerState>({
     visible: false,
     fileName: '',
@@ -41,22 +40,20 @@ export function usePdfViewer() {
     state.value.fileId = fileId;
     state.value.loading = true;
     state.value.error = '';
+    state.value.previewUrl = '';
+    state.value.thirdPartyPreviewUrl = '';
     state.value.currentPage = 1;
     state.value.scale = 1.0;
 
-    const uid = authStore.currentAccountUid;
-    if (!uid) {
-      state.value.error = '未授权';
-      state.value.loading = false;
-      return;
-    }
-
+    const token = ++loadToken;
     const result = await fetchWithRetry<CloudDriveDocPreviewDto>({
-      fetchUrl: () => previewApi.getDocPreview(uid, fileId),
+      fetchUrl: () => previewApi.getDocPreview(fileId),
       extractUrl: (data) => data.previewUrl,
     });
 
+    if (token !== loadToken || !state.value.visible) return;
     if (result.success && result.data) {
+      temporaryResource.set(result.data.previewUrl);
       state.value.renderMode = result.data.renderMode;
       state.value.previewUrl = result.data.previewUrl;
       state.value.thirdPartyPreviewUrl = result.data.thirdPartyPreviewUrl ?? '';
@@ -80,6 +77,8 @@ export function usePdfViewer() {
   }
 
   function destroy() {
+    loadToken++;
+    temporaryResource.clear();
     state.value.visible = false;
     state.value.previewUrl = '';
     state.value.thirdPartyPreviewUrl = '';

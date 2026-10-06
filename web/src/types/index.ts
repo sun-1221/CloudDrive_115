@@ -5,10 +5,14 @@ export interface PagedResult<T> {
   totalCount: number;
   offset: number;
   limit: number;
+  /** 后端归一化的路径节点（文件列表/详情可能返回）。 */
+  paths?: CloudDrivePathDto[];
+  itemSchemaStatus?: 'available' | 'not_collected';
 }
 
 export interface ListResult<T> {
   items: T[];
+  itemSchemaStatus?: 'available' | 'not_collected';
 }
 
 export interface CloudDriveOperationResultDto {
@@ -28,40 +32,45 @@ export interface ApiProblemDetails {
   [key: string]: unknown;
 }
 
-// ===== 认证相关 =====
+export interface SafeUiError {
+  status?: number;
+  code?: string;
+  message: string;
+}
 
+export type CapabilityStatus = 'available' | 'partial' | 'disabled';
 export type CloudDriveAuthorizationFlowType = 'AuthorizationCode' | 'AuthorizationCodeWithPkce';
 
-export interface ExchangeCodeInput {
-  code: string;
-  flowType?: CloudDriveAuthorizationFlowType;
-  pkceSessionId?: string;
-  codeVerifier?: string;
+// ===== 认证相关 =====
+
+export interface CloudDriveAuthCheckDto {
+  isAuthenticated: boolean;
+  isLoggedIn: boolean | null;
+  lastCheckedAt: string;
+  cooldownUntil?: string;
+  failureReason?: string;
 }
 
-export interface CloudDrivePkceAuthorizationDto {
-  sessionId: string;
-  qrCodeContent: string;
+export interface AuthResponseDto {
+  accessToken: string;
+  tokenType: 'Bearer';
   expiresAt: string;
+  userId: string;
 }
 
-export interface CloudDriveTokenDto {
-  cloudAccountUid: string;
-  accessTokenExpiresAt: string;
-  requiresReauthorization: boolean;
+export interface CurrentUserDto {
+  userId: string;
+  userName: string;
+  currentCloudAccountUid?: string;
+  accounts: CloudDriveAccountSummaryDto[];
 }
 
 export interface CloudDriveAccountSummaryDto {
   cloudAccountUid: string;
-  nickname?: string;
-  isActive: boolean;
+  status: string | number;
   creationTime: string;
-}
-
-export interface CloudDriveUserInfoDto {
-  cloudAccountUid: string;
-  nickname: string;
-  avatarUrl?: string;
+  lastModificationTime?: string;
+  cooldownUntil?: string;
 }
 
 // ===== 文件相关 =====
@@ -74,6 +83,10 @@ export interface CloudDriveFileDto {
   isDirectory: boolean;
   modifiedTime: string;
   thumbnailUrl?: string;
+  parentId?: string;
+  pickCode?: string;
+  isStar?: boolean;
+  isVideo?: boolean;
 }
 
 export interface CloudDriveFileDetailDto extends CloudDriveFileDto {
@@ -95,9 +108,24 @@ export interface CloudDriveFolderDto {
   path?: string;
 }
 
-export interface CloudDriveRecycleBinItemDto extends CloudDriveFileDto {
-  deletedTime: string;
-  originalPath?: string;
+export interface CloudDriveRecycleBinItemDto {
+  cid: string;
+  dtime: string;
+  fileName: string;
+  fileSize: string;
+  id: string;
+  parentName: string;
+  status: string;
+  type: string;
+  schemaStatus?: 'available' | 'not_collected';
+}
+
+export interface CloudDrivePathDto {
+  aid?: string;
+  fileId: string;
+  fileName: string;
+  parentId?: string;
+  isSelectedPath?: boolean;
 }
 
 export interface CloudDriveDownloadDto {
@@ -122,7 +150,6 @@ export interface UploadProgressEvent {
 
 export interface UploadQueueItem {
   localId: string;
-  cloudAccountUid: string;
   fileName: string;
   size: number;
   directoryId: string;
@@ -135,23 +162,32 @@ export interface UploadQueueItem {
 // ===== 文件操作输入 =====
 
 export interface GetFileListInput {
-  cloudAccountUid: string;
   directoryId?: string;
   offset: number;
   limit: number;
-  sortField?: 'name' | 'size' | 'modifiedTime';
-  sortOrder?: 'asc' | 'desc';
-  fileTypeFilter?: string;
+  type?: number;
+  suffix?: string;
+  asc?: number;
+  orderBy?: string;
+  star?: number;
+  showDir?: number;
+  natSort?: number;
+  snap?: number;
+  countFolders?: number;
+  recordOpenTime?: number;
+  code?: string;
+  scid?: string;
+  source?: string;
+  customOrder?: string;
+  stdir?: number;
 }
 
 export interface CreateFolderInput {
-  cloudAccountUid: string;
-  parentDirectoryId: string;
-  name: string;
+  parentId: string;
+  folderName: string;
 }
 
 export interface UploadFileInput {
-  cloudAccountUid: string;
   directoryId: string;
   file: File;
   forceAsync?: boolean;
@@ -166,62 +202,57 @@ export interface CloudDriveUploadExecutionDto extends CloudDriveOperationResultD
 }
 
 export interface MoveFilesInput {
-  cloudAccountUid: string;
   fileIds: string[];
   targetDirectoryId: string;
   sourceDirectoryId?: string;
 }
 
 export interface CopyFilesInput {
-  cloudAccountUid: string;
   fileIds: string[];
   targetDirectoryId: string;
 }
 
 export interface DeleteFilesInput {
-  cloudAccountUid: string;
   fileIds: string[];
   sourceDirectoryId?: string;
 }
 
 export interface RenameFileInput {
-  cloudAccountUid: string;
   fileId: string;
-  newName: string;
-  parentDirectoryId?: string;
+  newFileName: string;
 }
 
 export interface SearchFileInput {
-  cloudAccountUid: string;
-  keyword: string;
+  searchValue: string;
   offset: number;
   limit: number;
+  directoryId?: string;
+  date?: string;
+  type?: number;
+  pickCode?: string;
+  countFolders?: number;
+  source?: string;
 }
 
 export interface GetRecycleBinListInput {
-  cloudAccountUid: string;
   offset: number;
   limit: number;
 }
 
 export interface RecycleBinOperationInput {
-  cloudAccountUid: string;
-  fileIds: string[];
+  recycleBinItemIds: string[];
 }
 
 export interface GetVideoPlayInput {
-  cloudAccountUid: string;
-  fileId: string;
-  quality?: string;
+  pickCode: string;
+  definition?: number;
 }
 
 export interface SubmitTranscodeInput {
-  cloudAccountUid: string;
-  fileId: string;
+  pickCode: string;
 }
 
 export interface GetJobListInput {
-  cloudAccountUid?: string;
   status?: CloudDriveJobStatus;
   offset: number;
   limit: number;
@@ -248,10 +279,21 @@ export interface CloudDriveDocPreviewDto {
 // ===== 视频相关 =====
 
 export interface CloudDriveVideoPlayDto {
-  status: 'Ready' | 'Transcoding';
+  playbackSchemaStatus?: 'available' | 'not_collected';
+  fileId?: string;
+  fileName?: string;
+  fileSize?: number | string;
+  pickCode?: string;
+  downloadUrl?: string;
+  dvProfile?: number | string;
+  hdrType?: number | string;
+  isHdr?: boolean;
+  isDolbyVision?: boolean;
+  status: 'Ready' | 'Transcoding' | 'Idle' | 'SchemaNotCollected';
   jobId?: string;
   qualityOptions: VideoQualityOption[];
-  duration: number;
+  audioTracks: AudioTrackOption[];
+  duration?: number;
   playbackMetadata?: Record<string, string>;
   isTemporary: boolean;
 }
@@ -265,6 +307,46 @@ export interface CloudDriveSubtitleDto {
   subtitleId: string;
   language: string;
   subtitleUrl: string;
+}
+
+export interface AudioTrackOption { id?: string; language?: string; name?: string; }
+
+export interface CloudDriveVideoHistoryDto {
+  playedSeconds?: number;
+  time?: number;
+  watchEnd?: boolean;
+  schemaStatus?: 'available' | 'not_collected';
+}
+
+export interface CloudDriveOfflineTaskDto {
+  infoHash?: string;
+  name?: string;
+  status?: string;
+}
+export interface CloudDriveOfflineTaskListDto {
+  items: CloudDriveOfflineTaskDto[];
+  page?: number; pageCount?: number; pageSize?: number; count?: number; total?: number;
+  itemSchemaStatus: 'available' | 'not_collected';
+}
+export interface CloudDriveOfflineStatsDto { total: number; active: number; completed: number; failed: number; }
+export interface CloudDriveOfflineQuotaDto { package?: unknown; count: number; surplus: number; maxSize: number; used: number; }
+
+export interface CloudDriveShareItemDto {
+  shareCode: string; shareTitle: string; fileId: string; fileName: string;
+  pickCode?: string; fileSize?: number; createTime?: string; expireTime?: string; url?: string;
+  schemaStatus: 'available' | 'not_collected';
+}
+export interface CloudDriveShareListDto {
+  items: CloudDriveShareItemDto[]; count?: number; itemSchemaStatus: 'available' | 'not_collected';
+}
+
+export interface CloudDriveVipInfoDto { levelName?: string; expire?: string; userLimit?: unknown; limitList?: unknown[]; }
+export interface CloudDriveBalanceDto { balance?: number; displayText?: string; canWithdraw?: string; cantWithdraw?: string; detail?: number; feedbackActMoney?: number; money?: string; }
+export interface SpaceUsageDto { size: number; sizeFormat?: string; }
+export interface TypeSummaryDto { count: number; pecent: number; size: number; sizeFormat?: string; }
+export interface CloudDriveSpaceInfoDto {
+  schemaStatus: 'available' | 'not_collected'; allTotal?: SpaceUsageDto; allUse?: SpaceUsageDto; allRemain?: SpaceUsageDto;
+  typeCounts: Record<string, number>; typeSummaries: Record<string, TypeSummaryDto>;
 }
 
 export interface CloudDriveVideoTranscodeDto {

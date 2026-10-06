@@ -13,6 +13,7 @@ export const useUIStore = defineStore('ui', () => {
   const activeModal = ref<'imageViewer' | 'videoPlayer' | 'docViewer' | null>(null);
   const mobileActionMenuVisible = ref(false);
   const keyboardSuspended = ref(false);
+  const theme = ref<'dark' | 'light'>('dark');
 
   const isMobile = computed(() => breakpoint.value === 'mobile');
   const isTablet = computed(() => breakpoint.value === 'tablet');
@@ -61,6 +62,11 @@ export const useUIStore = defineStore('ui', () => {
     keyboardSuspended.value = false;
   }
 
+  function toggleTheme(): void {
+    theme.value = theme.value === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = theme.value;
+  }
+
   // 初始化断点和网络事件监听
   function initListeners() {
     updateBreakpoint();
@@ -84,6 +90,7 @@ export const useUIStore = defineStore('ui', () => {
     activeModal,
     mobileActionMenuVisible,
     keyboardSuspended,
+    theme,
     isMobile,
     isTablet,
     isDesktop,
@@ -96,6 +103,7 @@ export const useUIStore = defineStore('ui', () => {
     toggleMobileActionMenu,
     suspendKeyboard,
     resumeKeyboard,
+    toggleTheme,
     initListeners,
     destroyListeners,
   };

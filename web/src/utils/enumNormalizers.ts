@@ -83,7 +83,7 @@ export function denormalizeJobStatus(value: CloudDriveJobStatus): number {
 
 // ===== 视频状态归一化 =====
 
-type VideoPlayStatus = 'Ready' | 'Transcoding';
+type VideoPlayStatus = 'Ready' | 'Transcoding' | 'Idle' | 'SchemaNotCollected';
 
 const videoStatusToString: Record<number, VideoPlayStatus> = {
   0: 'Ready',

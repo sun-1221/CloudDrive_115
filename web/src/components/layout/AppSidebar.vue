@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { NButton } from 'naive-ui';
-import { FolderOpen, Trash2, ChevronLeft, ChevronRight } from 'lucide-vue-next';
+import { FolderOpen, Trash2, ChevronLeft, ChevronRight, Sun, Moon, Download, Share2, UserRound } from 'lucide-vue-next';
 import { useUIStore } from '@/stores/uiStore';
 
 const router = useRouter();
@@ -12,6 +12,9 @@ const uiStore = useUIStore();
 const navItems = [
   { label: '文件浏览', icon: FolderOpen, path: '/cloud-drive/files' },
   { label: '回收站', icon: Trash2, path: '/cloud-drive/recycle-bin' },
+  { label: '云下载', icon: Download, path: '/cloud-drive/offline' },
+  { label: '我的分享', icon: Share2, path: '/cloud-drive/share' },
+  { label: '用户中心', icon: UserRound, path: '/cloud-drive/user' },
 ];
 
 const isCollapsed = computed(() => !uiStore.sidebarExpanded);
@@ -57,5 +60,16 @@ function navigateTo(path: string): void {
         <span v-if="!isCollapsed" class="text-sm truncate">{{ item.label }}</span>
       </button>
     </nav>
+    <div class="border-t border-white/10 p-2">
+      <button
+        type="button"
+        class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-white/60 hover:bg-white/5 hover:text-white/90"
+        :aria-label="uiStore.theme === 'dark' ? '切换浅色主题' : '切换深色主题'"
+        @click="uiStore.toggleTheme()"
+      >
+        <component :is="uiStore.theme === 'dark' ? Sun : Moon" :size="18" />
+        <span v-if="!isCollapsed" class="text-sm">{{ uiStore.theme === 'dark' ? '浅色主题' : '深色主题' }}</span>
+      </button>
+    </div>
   </aside>
 </template>

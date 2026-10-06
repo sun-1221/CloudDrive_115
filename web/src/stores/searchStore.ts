@@ -1,9 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import * as searchApi from '@/api/searchApi';
 import type { CloudDriveSearchResultDto } from '@/types';
-
-const PAGE_SIZE = 50;
 
 export const useSearchStore = defineStore('search', () => {
   const keyword = ref('');
@@ -26,29 +23,16 @@ export const useSearchStore = defineStore('search', () => {
     offset.value = 0;
 
     try {
-      const { useAuthStore } = await import('@/stores/authStore');
-      const authStore = useAuthStore();
-
-      if (!authStore.currentAccountUid) return;
-
       // 保存当前目录 ID 用于返回浏览
       const { useFileStore } = await import('@/stores/fileStore');
       const fileStore = useFileStore();
       previousDirectoryId.value = fileStore.currentDirectoryId;
 
-      const result = await searchApi.searchFiles({
-        cloudAccountUid: authStore.currentAccountUid,
-        keyword: trimmed,
-        offset: 0,
-        limit: PAGE_SIZE,
-      });
-
-      results.value = result.items;
-      totalCount.value = result.totalCount;
-      offset.value = result.items.length;
-      hasMore.value = result.items.length < result.totalCount;
-      breadcrumbLabel.value = `"${trimmed}" 的搜索结果`;
-      emptyStateVisible.value = result.items.length === 0;
+      results.value = [];
+      totalCount.value = 0;
+      hasMore.value = false;
+      breadcrumbLabel.value = '搜索暂不可用';
+      emptyStateVisible.value = true;
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') return;
       emptyStateVisible.value = true;
@@ -60,25 +44,7 @@ export const useSearchStore = defineStore('search', () => {
   async function fetchMore(): Promise<void> {
     if (!hasMore.value || loading.value) return;
 
-    try {
-      const { useAuthStore } = await import('@/stores/authStore');
-      const authStore = useAuthStore();
-
-      if (!authStore.currentAccountUid) return;
-
-      const result = await searchApi.searchFiles({
-        cloudAccountUid: authStore.currentAccountUid,
-        keyword: keyword.value,
-        offset: offset.value,
-        limit: PAGE_SIZE,
-      });
-
-      results.value = [...results.value, ...result.items];
-      offset.value += result.items.length;
-      hasMore.value = offset.value < result.totalCount;
-    } catch {
-      // 静默失败
-    }
+    // 搜索能力 disabled：不发起请求，也不把本地过滤冒充为服务端搜索。
   }
 
   async function restorePreviousDirectory(): Promise<void> {

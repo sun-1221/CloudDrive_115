@@ -2,13 +2,12 @@ import { onMounted, onUnmounted } from 'vue';
 import * as keyboardService from '@/services/keyboardService';
 import { useFileStore } from '@/stores/fileStore';
 import { useUIStore } from '@/stores/uiStore';
+import { isCapabilityEnabled } from '@/capabilities/registry';
 
 export function useFileBrowserKeyboard(callbacks: {
-  onDelete: () => void;
   onRename: () => void;
   onOpen: () => void;
   onGoUp: () => void;
-  onFocusSearch: () => void;
 }) {
   const fileStore = useFileStore();
   const uiStore = useUIStore();
@@ -25,17 +24,6 @@ export function useFileBrowserKeyboard(callbacks: {
       },
     });
 
-    // Delete 删除
-    keyboardService.register({
-      key: 'Delete',
-      scope: 'fileBrowser',
-      handler: () => {
-        if (fileStore.selectedFileIds.length > 0) {
-          callbacks.onDelete();
-        }
-      },
-    });
-
     // F2 重命名
     keyboardService.register({
       key: 'F2',
@@ -48,48 +36,23 @@ export function useFileBrowserKeyboard(callbacks: {
     });
 
     // Ctrl+C 复制
-    keyboardService.register({
-      key: 'c',
-      ctrl: true,
-      scope: 'fileBrowser',
-      handler: () => {
-        if (fileStore.selectedFileIds.length > 0) {
-          uiStore.setClipboard({
-            fileIds: [...fileStore.selectedFileIds],
-            sourceDirectoryId: fileStore.currentDirectoryId,
-            operation: 'copy',
-          });
-        }
-      },
-    });
-
-    // Ctrl+X 剪切
-    keyboardService.register({
-      key: 'x',
-      ctrl: true,
-      scope: 'fileBrowser',
-      handler: () => {
-        if (fileStore.selectedFileIds.length > 0) {
-          uiStore.setClipboard({
-            fileIds: [...fileStore.selectedFileIds],
-            sourceDirectoryId: fileStore.currentDirectoryId,
-            operation: 'cut',
-          });
-        }
-      },
-    });
-
-    // Ctrl+V 粘贴
-    keyboardService.register({
-      key: 'v',
-      ctrl: true,
-      scope: 'fileBrowser',
-      handler: () => {
-        if (uiStore.clipboard) {
-          // 由 FileBrowserPage 处理粘贴逻辑
-        }
-      },
-    });
+    // 单项复制快捷键仅在能力启用且确实只选中一项时注册。
+    if (isCapabilityEnabled('copySingle')) {
+      keyboardService.register({
+        key: 'c',
+        ctrl: true,
+        scope: 'fileBrowser',
+        handler: () => {
+          if (fileStore.selectedFileIds.length === 1) {
+            uiStore.setClipboard({
+              fileIds: [...fileStore.selectedFileIds],
+              sourceDirectoryId: fileStore.currentDirectoryId,
+              operation: 'copy',
+            });
+          }
+        },
+      });
+    }
 
     // Enter 打开
     keyboardService.register({
@@ -106,17 +69,6 @@ export function useFileBrowserKeyboard(callbacks: {
       scope: 'fileBrowser',
       handler: () => {
         callbacks.onGoUp();
-      },
-    });
-
-    // Ctrl+F 聚焦搜索
-    keyboardService.register({
-      key: 'f',
-      ctrl: true,
-      scope: 'fileBrowser',
-      handler: (e) => {
-        e.preventDefault();
-        callbacks.onFocusSearch();
       },
     });
 

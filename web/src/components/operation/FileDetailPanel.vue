@@ -4,7 +4,6 @@ import { NDrawer, NDrawerContent, NDescriptions, NDescriptionsItem } from 'naive
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue';
 import { formatFileSize, formatDate } from '@/utils/formatters';
 import * as fileApi from '@/api/fileApi';
-import { useAuthStore } from '@/stores/authStore';
 import type { CloudDriveFileDetailDto } from '@/types';
 
 const props = defineProps<{
@@ -16,7 +15,6 @@ const emit = defineEmits<{
   'update:show': [value: boolean];
 }>();
 
-const authStore = useAuthStore();
 const detail = ref<CloudDriveFileDetailDto | null>(null);
 const loading = ref(false);
 
@@ -27,9 +25,7 @@ watch(() => props.fileId, async (id) => {
   }
   loading.value = true;
   try {
-    const uid = authStore.currentAccountUid;
-    if (!uid) return;
-    detail.value = await fileApi.getFileDetail(uid, id);
+    detail.value = await fileApi.getFileDetail(id);
   } catch {
     detail.value = null;
   } finally {

@@ -1,28 +1,27 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { NButton, NButtonGroup, NDropdown } from 'naive-ui';
+import { NButton, NButtonGroup, NDropdown, useMessage } from 'naive-ui';
 import {
   List,
   LayoutGrid,
   FolderPlus,
-  Upload,
   RefreshCw,
   ArrowUpDown,
   Filter,
   Download,
-  Move,
   Copy,
-  Trash2,
 } from 'lucide-vue-next';
 import { useFileStore } from '@/stores/fileStore';
-import { useUploadStore } from '@/stores/uploadStore';
-import SearchBar from '@/components/common/SearchBar.vue';
+import { isCapabilityEnabled } from '@/capabilities/registry';
+import * as fileOperations from '@/services/fileOperationService';
+import { validateFileName } from '@/utils/fileNameValidator';
 
 const fileStore = useFileStore();
-const uploadStore = useUploadStore();
+const message = useMessage();
 
 const hasSelection = computed(() => fileStore.selectedFileIds.length > 0);
 const selectionCount = computed(() => fileStore.selectedFileIds.length);
+const canCopy = computed(() => selectionCount.value === 1 && isCapabilityEnabled('copySingle'));
 const allSelectedAreFiles = computed(() =>
   fileStore.selectedFiles.every((f) => !f.isDirectory),
 );
@@ -60,34 +59,41 @@ function handleRefresh() {
 }
 
 function handleCreateFolder() {
-  // 由父组件或模态框处理
+  if (!isCapabilityEnabled('createFolder')) return;
+  const name = window.prompt('新建文件夹名称');
+  if (!name) return;
+  const validation = validateFileName(name);
+  if (!validation.valid) { message.error(validation.reason ?? '文件名无效'); return; }
+  void fileOperations.createFolder(fileStore.currentDirectoryId, name)
+    .then((result) => { if (!result.accepted) { message.success('文件夹已创建'); return fileStore.refreshDirectory(); } })
+    .catch((error: unknown) => message.error(error instanceof Error ? error.message : '新建文件夹失败'));
 }
 
-function handleUploadClick() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.multiple = true;
-  input.onchange = () => {
-    if (input.files && input.files.length > 0) {
-      uploadStore.enqueue(Array.from(input.files), fileStore.currentDirectoryId);
-    }
-  };
-  input.click();
+async function handleCopy() {
+  if (!canCopy.value) return;
+  const file = fileStore.selectedFiles[0];
+  if (!file) return;
+  try {
+    const result = await fileOperations.copySingle(file.fileId, fileStore.currentDirectoryId);
+    if (!result.accepted) { message.success('文件已复制'); await fileStore.refreshDirectory(); }
+  } catch (error) { message.error(error instanceof Error ? error.message : '复制失败'); }
 }
 
-function handleSearch(keyword: string) {
-  const { useSearchStore } = require('@/stores/searchStore');
-  const searchStore = useSearchStore();
-  searchStore.search(keyword);
+async function handleDownload() {
+  if (!allSelectedAreFiles.value || !isCapabilityEnabled('download')) return;
+  for (const file of fileStore.selectedFiles) {
+    if (!file.pickCode) continue;
+    try {
+      const result = await fileOperations.download(file.pickCode);
+      const anchor = document.createElement('a');
+      anchor.href = result.downloadUrl;
+      anchor.download = result.fileName;
+      anchor.rel = 'noopener';
+      anchor.click();
+    } catch (error) { message.error(error instanceof Error ? error.message : '下载失败'); }
+  }
 }
 
-const emit = defineEmits<{
-  createFolder: [];
-  move: [fileIds: string[]];
-  copy: [fileIds: string[]];
-  delete: [fileIds: string[]];
-  download: [fileIds: string[]];
-}>();
 </script>
 
 <template>
@@ -124,33 +130,20 @@ const emit = defineEmits<{
       </NButton>
     </NDropdown>
 
-    <!-- 搜索栏 -->
-    <div class="flex-1 max-w-xs">
-      <SearchBar @search="handleSearch" />
-    </div>
-
     <div class="flex-1" />
 
     <!-- 批量操作 -->
     <template v-if="hasSelection">
       <span class="text-xs text-white/50">已选 {{ selectionCount }} 项</span>
-      <NButton size="small" quaternary @click="emit('move', fileStore.selectedFileIds)">
-        <template #icon><Move :size="16" /></template>
-        移动
-      </NButton>
-      <NButton size="small" quaternary @click="emit('copy', fileStore.selectedFileIds)">
+      <NButton v-if="canCopy" size="small" quaternary @click="handleCopy">
         <template #icon><Copy :size="16" /></template>
         复制
-      </NButton>
-      <NButton size="small" quaternary type="error" @click="emit('delete', fileStore.selectedFileIds)">
-        <template #icon><Trash2 :size="16" /></template>
-        删除
       </NButton>
       <NButton
         v-if="allSelectedAreFiles"
         size="small"
         quaternary
-        @click="emit('download', fileStore.selectedFileIds)"
+        @click="handleDownload"
       >
         <template #icon><Download :size="16" /></template>
         下载
@@ -160,9 +153,6 @@ const emit = defineEmits<{
     <!-- 操作按钮 -->
     <NButton size="small" quaternary @click="handleCreateFolder">
       <template #icon><FolderPlus :size="16" /></template>
-    </NButton>
-    <NButton size="small" quaternary @click="handleUploadClick">
-      <template #icon><Upload :size="16" /></template>
     </NButton>
     <NButton size="small" quaternary @click="handleRefresh">
       <template #icon><RefreshCw :size="16" /></template>

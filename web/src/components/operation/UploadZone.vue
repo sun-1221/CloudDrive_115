@@ -1,11 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { Upload } from 'lucide-vue-next';
-import { useUploadStore } from '@/stores/uploadStore';
-import { useFileStore } from '@/stores/fileStore';
 
-const uploadStore = useUploadStore();
-const fileStore = useFileStore();
 const isDragging = ref(false);
 let dragCounter = 0;
 
@@ -39,7 +35,8 @@ function handleDrop(event: DragEvent) {
 
   const files = event.dataTransfer?.files;
   if (files && files.length > 0) {
-    uploadStore.enqueue(Array.from(files), fileStore.currentDirectoryId);
+    // 上传能力当前 disabled；拖放区域不触发任何 API 或队列动作。
+    return;
   }
 }
 </script>

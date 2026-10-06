@@ -8,7 +8,8 @@ import { type Page, type Route } from '@playwright/test';
  * 因为 glob 的 `?` 匹配单字符而非 query string 分隔符。
  */
 
-const BASE = '/api/cloud-drive';
+// Cloud Drive 前端 API 通过统一 `/api` baseURL 访问，资源路径从 `/files` 等开始。
+const BASE = '/api';
 
 /** 判断 URL pathname 是否匹配指定路径（忽略 query string） */
 function matchPath(url: string, path: string): boolean {
@@ -41,20 +42,11 @@ function json(route: Route, data: unknown, status = 200) {
 /** 模拟已授权状态：账号列表 + 用户信息 */
 export async function mockAuthorizedState(page: Page) {
   await page.route(
-    (url) => matchPath(url.toString(), '/auth/accounts'),
-    (route) => json(route, [
-      { cloudAccountUid: 'test-uid-001', nickname: '测试账号', isActive: true, creationTime: '2024-01-01T00:00:00Z' },
-    ]),
-  );
-
-  await page.route(
-    (url) => matchPath(url.toString(), '/auth/user-info'),
+    (url) => matchPath(url.toString(), '/auth/check'),
     (route) => json(route, {
-      cloudAccountUid: 'test-uid-001',
-      nickname: '测试账号',
-      avatar: '',
-      totalSpace: 2199023255552,
-      usedSpace: 107374182400,
+      isAuthenticated: true,
+      isLoggedIn: true,
+      lastCheckedAt: '2024-06-10T10:00:00Z',
     }),
   );
 }
@@ -62,15 +54,19 @@ export async function mockAuthorizedState(page: Page) {
 /** 模拟未授权状态 */
 export async function mockUnauthorizedState(page: Page) {
   await page.route(
-    (url) => matchPath(url.toString(), '/auth/accounts'),
-    (route) => json(route, []),
+    (url) => matchPath(url.toString(), '/auth/check'),
+    (route) => json(route, {
+      isAuthenticated: false,
+      isLoggedIn: false,
+      lastCheckedAt: '2024-06-10T10:00:00Z',
+    }),
   );
 }
 
 /** 模拟功能不可用（503） */
 export async function mockFeatureDisabled(page: Page) {
   await page.route(
-    (url) => matchPath(url.toString(), '/auth/accounts'),
+    (url) => matchPath(url.toString(), '/auth/check'),
     (route) => json(route, {
       status: 503,
       title: 'Service Unavailable',
@@ -100,7 +96,7 @@ export async function mockFileList(page: Page, files?: unknown[]) {
     (route) => json(route, {
       items,
       totalCount: items.length,
-      queryCapabilities: { serverSort: true, serverFilter: false },
+      queryCapabilities: { serverSort: false, serverFilter: false },
     }),
   );
 }
@@ -165,12 +161,12 @@ export async function mockEmptySearch(page: Page) {
 /** 模拟回收站列表 */
 export async function mockRecycleBinList(page: Page, items?: unknown[]) {
   const defaultItems = [
-    { fileId: 'rb-1', name: '已删文件.txt', size: 100, fileType: 'txt', isDirectory: false, modifiedTime: '2024-01-01T00:00:00Z', deletedTime: '2024-06-01T10:00:00Z', originalPath: '/文档', thumbnailUrl: '' },
-    { fileId: 'rb-2', name: '已删照片.jpg', size: 5000, fileType: 'jpg', isDirectory: false, modifiedTime: '2024-02-01T00:00:00Z', deletedTime: '2024-06-02T10:00:00Z', originalPath: '/照片', thumbnailUrl: '' },
+    { id: 'rb-1', fileName: '已删文件.txt', fileSize: '100 B', type: 'txt', dtime: '2024-06-01', parentName: '/文档', status: 'deleted' },
+    { id: 'rb-2', fileName: '已删照片.jpg', fileSize: '5 KB', type: 'jpg', dtime: '2024-06-02', parentName: '/照片', status: 'deleted' },
   ];
 
   await page.route(
-    (url) => matchPath(url.toString(), '/recycle-bin') && !url.toString().includes('/restore') && !url.toString().includes('/permanent-delete') && !url.toString().includes('/clear'),
+    (url) => matchPath(url.toString(), '/recycle') && !url.toString().includes('/restore') && !url.toString().includes('/permanent-delete') && !url.toString().includes('/clear'),
     (route) => {
       if (route.request().method() === 'GET') {
         return json(route, { items: items ?? defaultItems, totalCount: (items ?? defaultItems).length });
@@ -265,7 +261,7 @@ export async function mockFileDetail(page: Page) {
     (url) => {
       const u = new URL(url.toString());
       // 匹配 /files/{fileId} 但不匹配 /files/search, /files/folder 等
-      return /^\/api\/cloud-drive\/files\/[^/]+$/.test(u.pathname) &&
+      return /^\/api\/files\/[^/]+$/.test(u.pathname) &&
         !u.pathname.endsWith('/search') &&
         !u.pathname.endsWith('/folder') &&
         !u.pathname.endsWith('/rename') &&

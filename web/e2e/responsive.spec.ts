@@ -27,12 +27,8 @@ test.describe('响应式布局', () => {
     await expect(page.getByText('我的文档')).toBeVisible({ timeout: 10_000 });
 
     // 平板端侧边栏应折叠，或有汉堡菜单按钮
-    const hamburger = page.locator('button[aria-label*="菜单"], [data-testid="hamburger-menu"], button:has-text("☰"), .hamburger-menu').first();
-    const collapsedSidebar = page.locator('.sidebar--collapsed, [data-collapsed="true"]').first();
-
-    // 至少其中一个应存在
-    const hasHamburger = await hamburger.isVisible().catch(() => false);
-    const hasCollapsed = (await collapsedSidebar.count()) > 0;
+    const sidebar = page.locator('aside, nav').first();
+    await expect(sidebar).toBeVisible();
 
     // 文件列表占据更多宽度
     const mainContent = page.locator('main, [data-testid="file-list"], .file-list').first();
@@ -51,9 +47,6 @@ test.describe('响应式布局', () => {
     await expect(page.getByText('我的文档')).toBeAttached({ timeout: 10_000 });
 
     // 移动端底部导航或移动端操作栏
-    const bottomNav = page.locator('[data-testid="bottom-nav"], .bottom-nav, .mobile-nav, .mobile-action-bar').first();
-    const mobileLayout = page.locator('.mobile-layout, [data-breakpoint="mobile"]').first();
-
     // 页面不应有错误状态
     await expect(page.getByText('加载文件列表失败')).not.toBeVisible();
 

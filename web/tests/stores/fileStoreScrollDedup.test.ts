@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useFileStore } from '@/stores/fileStore';
+import type { CloudDriveFileDto } from '@/types';
 
 // Mock fileApi
 const mockGetFileList = vi.fn().mockResolvedValue({
@@ -35,7 +36,7 @@ describe('Property 25: 无限滚动请求去重', () => {
   it('连续多次 fetchMore 调用防抖合并为一次请求', async () => {
     const store = useFileStore();
 
-    store.files = [{ fileId: '1', name: 'a.txt', size: 100, fileType: 'txt', isDirectory: false, modifiedTime: '2024-01-01' } as any];
+    store.files = [{ fileId: '1', name: 'a.txt', size: 100, fileType: 'txt', isDirectory: false, modifiedTime: '2024-01-01' } as CloudDriveFileDto];
     store.hasMore = true;
     store.offset = 1;
 

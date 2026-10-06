@@ -5,18 +5,16 @@ import {
   Eye,
   Play,
   Pencil,
-  Move,
   Copy,
-  Trash2,
   Download,
   Info,
+  Star,
   FolderPlus,
-  Upload,
   RefreshCw,
-  ClipboardPaste,
 } from 'lucide-vue-next';
 import type { CloudDriveFileDto } from '@/types';
 import { getFileExtension, extensionCategoryMap } from '@/utils/fileTypeMapping';
+import { isCapabilityEnabled } from '@/capabilities/registry';
 
 const props = defineProps<{
   x: number;
@@ -61,10 +59,8 @@ interface MenuItem {
 const menuItems = computed<MenuItem[]>(() => {
   if (isEmpty.value) {
     return [
-      { label: '新建文件夹', action: 'createFolder', icon: FolderPlus, show: true },
-      { label: '上传文件', action: 'upload', icon: Upload, show: true },
+      { label: '新建文件夹', action: 'createFolder', icon: FolderPlus, show: isCapabilityEnabled('createFolder') },
       { label: '刷新', action: 'refresh', icon: RefreshCw, show: true },
-      { label: '粘贴', action: 'paste', icon: ClipboardPaste, show: props.hasClipboard },
     ];
   }
 
@@ -72,12 +68,11 @@ const menuItems = computed<MenuItem[]>(() => {
     { label: '打开', action: 'open', icon: FolderOpen, show: isSingle.value && isFolder.value },
     { label: '预览', action: 'preview', icon: Eye, show: isSingle.value && isPreviewable.value },
     { label: '播放', action: 'play', icon: Play, show: isSingle.value && isPlayable.value },
-    { label: '重命名', action: 'rename', icon: Pencil, show: isSingle.value },
-    { label: '移动', action: 'move', icon: Move, show: true },
-    { label: '复制', action: 'copy', icon: Copy, show: true },
-    { label: '删除', action: 'delete', icon: Trash2, danger: true, show: true },
-    { label: '下载', action: 'download', icon: Download, show: isSingle.value && !isFolder.value },
-    { label: '逐个下载', action: 'downloadMulti', icon: Download, show: isMulti.value && allAreFiles.value },
+    { label: '重命名', action: 'rename', icon: Pencil, show: isSingle.value && isCapabilityEnabled('rename') },
+    { label: singleFile.value?.isStar ? '取消星标' : '加星标', action: 'star', icon: Star, show: isSingle.value && isCapabilityEnabled('star') },
+    { label: '复制', action: 'copy', icon: Copy, show: isSingle.value && isCapabilityEnabled('copySingle') },
+    { label: '下载', action: 'download', icon: Download, show: isSingle.value && !isFolder.value && isCapabilityEnabled('download') },
+    { label: '逐个下载', action: 'downloadMulti', icon: Download, show: isMulti.value && allAreFiles.value && isCapabilityEnabled('download') },
     { label: '详情', action: 'detail', icon: Info, show: isSingle.value },
   ];
 });

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onUnmounted, ref, watch } from 'vue';
 import { NButton, NDropdown } from 'naive-ui';
-import { X, Download, Loader2, RefreshCw, ListTodo } from 'lucide-vue-next';
+import { X, Download, Loader2, RefreshCw } from 'lucide-vue-next';
 import { useVideoPlayer } from '@/composables/useVideoPlayer';
 import { formatDuration } from '@/utils/formatters';
 
@@ -35,10 +35,7 @@ watch(() => player.state.value.qualityOptions, (opts) => {
 
 const subtitleDropdownOptions = ref<{ label: string; key: string }[]>([]);
 watch(() => player.state.value.subtitles, (subs) => {
-  subtitleDropdownOptions.value = [
-    { label: '关闭字幕', key: '__off__' },
-    ...subs.map((s) => ({ label: s.language, key: s.subtitleUrl })),
-  ];
+  subtitleDropdownOptions.value = subs.length ? [{ label: '关闭字幕', key: '__off__' }, ...subs.map((s) => ({ label: s.language, key: s.subtitleUrl }))] : [];
 }, { immediate: true });
 
 const activeSubtitleUrl = ref('');
@@ -100,6 +97,8 @@ onUnmounted(() => {
             >
               <NButton size="small" quaternary>字幕</NButton>
             </NDropdown>
+            <span v-else-if="player.state.value.subtitleSchemaStatus === 'not_collected'" class="text-xs text-white/40 px-2">字幕明细暂不可用</span>
+            <span v-else class="text-xs text-white/40 px-2">无字幕</span>
 
             <NButton size="small" quaternary>
               <template #icon><Download :size="16" class="text-white/70" /></template>
@@ -124,7 +123,7 @@ onUnmounted(() => {
             <NButton size="small" type="primary" @click="player.retry()">重试</NButton>
           </div>
 
-          <!-- 转码中 -->
+          <!-- 后端状态仅作展示；不提供主动转码或任务入口 -->
           <div
             v-else-if="player.state.value.status === 'Transcoding'"
             class="flex flex-col items-center gap-4 text-center"
@@ -134,16 +133,7 @@ onUnmounted(() => {
             <p class="text-sm text-white/40">
               预计时长：{{ formatDuration(player.state.value.duration) }}
             </p>
-            <div class="flex gap-2">
-              <NButton size="small" @click="player.refreshStatus()">
-                <template #icon><RefreshCw :size="14" /></template>
-                刷新状态
-              </NButton>
-              <NButton size="small" quaternary>
-                <template #icon><ListTodo :size="14" /></template>
-                查看任务
-              </NButton>
-            </div>
+            <NButton size="small" @click="player.refreshStatus()"><template #icon><RefreshCw :size="14" /></template>刷新状态</NButton>
           </div>
 
           <!-- 播放器 -->

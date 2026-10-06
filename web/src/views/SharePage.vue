@@ -1,0 +1,5 @@
+<script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue'; import { NButton } from 'naive-ui'; import { useShareStore } from '@/stores/shareStore';
+const store = useShareStore(); onMounted(() => store.load()); onUnmounted(() => store.clear());
+</script>
+<template><div class="p-4 md:p-6 space-y-4 text-white/85"><div class="flex items-center justify-between"><h1 class="text-lg font-semibold">我的分享</h1><NButton size="small" :loading="store.loading" @click="store.load">刷新</NButton></div><p v-if="store.error" class="text-red-300">{{ store.error }}</p><p v-else-if="store.result?.itemSchemaStatus === 'not_collected'" class="text-white/50">分享明细暂不可用</p><p v-else-if="!store.result?.items.length" class="text-white/50">暂无分享</p><div v-else class="space-y-2"><article v-for="item in store.result.items" :key="item.shareCode" class="glass-card p-4"><div class="font-medium">{{ item.shareTitle || item.fileName }}</div><div class="text-sm text-white/50 mt-1">{{ item.fileName }}</div></article></div><p class="text-xs text-white/40">发送和接收分享暂未启用。</p></div></template>

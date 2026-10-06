@@ -41,8 +41,8 @@ describe('http 拦截器', () => {
     expect(isNetworkError(new Error('random'))).toBe(false);
   });
 
-  it('extractProblemDetails 对非 axios 错误返回 null', () => {
-    expect(extractProblemDetails(new Error('random'))).toBeNull();
+  it('extractProblemDetails 对普通对象仅返回可识别字段', () => {
+    expect(extractProblemDetails(new Error('random'))).toEqual({});
   });
 
   it('extractProblemDetails 对有 isAxiosError+response.data 的对象提取 ProblemDetails', () => {

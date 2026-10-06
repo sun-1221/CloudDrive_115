@@ -6,7 +6,7 @@ const REDUCED_INTERVAL = 30000;
 let timerId: ReturnType<typeof setInterval> | null = null;
 let currentInterval = NORMAL_INTERVAL;
 let visibilityListenerAttached = false;
-let previousStatusMap = new Map<string, CloudDriveJobStatus>();
+const previousStatusMap = new Map<string, CloudDriveJobStatus>();
 
 type PollCallback = () => Promise<void>;
 type StatusChangeCallback = (jobId: string, description: string, newStatus: CloudDriveJobStatus) => void;

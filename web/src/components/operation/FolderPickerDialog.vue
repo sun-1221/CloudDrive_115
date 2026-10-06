@@ -3,7 +3,6 @@ import { ref, onMounted } from 'vue';
 import { NModal, NButton, NEmpty } from 'naive-ui';
 import { Folder, ChevronRight, ArrowUp } from 'lucide-vue-next';
 import * as fileApi from '@/api/fileApi';
-import { useAuthStore } from '@/stores/authStore';
 import type { CloudDriveFileDto } from '@/types';
 
 const props = defineProps<{
@@ -17,7 +16,6 @@ const emit = defineEmits<{
   confirm: [directoryId: string];
 }>();
 
-const authStore = useAuthStore();
 const currentDirId = ref('0');
 const currentDirName = ref('根目录');
 const folders = ref<CloudDriveFileDto[]>([]);
@@ -27,10 +25,7 @@ const parentStack = ref<{ id: string; name: string }[]>([]);
 async function loadFolders(dirId: string, dirName: string) {
   loading.value = true;
   try {
-    const uid = authStore.currentAccountUid;
-    if (!uid) return;
     const result = await fileApi.getFileList({
-      cloudAccountUid: uid,
       directoryId: dirId,
       offset: 0,
       limit: 200,

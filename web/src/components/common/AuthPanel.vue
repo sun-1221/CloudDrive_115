@@ -1,35 +1,24 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { NButton, NAvatar, useDialog } from 'naive-ui';
-import { Link, Unlink, ChevronDown } from 'lucide-vue-next';
+import { useRouter } from 'vue-router';
+import { NButton } from 'naive-ui';
+import { Link } from 'lucide-vue-next';
 import { useAuthStore } from '@/stores/authStore';
 import FeatureUnavailableState from './FeatureUnavailableState.vue';
 
 const authStore = useAuthStore();
-const dialog = useDialog();
+const router = useRouter();
 
 const isAuthorized = computed(() => authStore.authStatus === 'authorized');
 const isDisabled = computed(() => authStore.authStatus === 'disabled');
-const hasMultipleAccounts = computed(() => authStore.hasMultipleAccounts);
+const hasAccount = computed(() => (authStore.currentUser?.accounts.length ?? 0) > 0);
 
-function handleConnect() {
-  authStore.redirectToAuth();
+function handleRetryCheck() {
+  authStore.bootstrapAuthState();
 }
 
-function handleDisconnect() {
-  dialog.warning({
-    title: '断开连接',
-    content: '确定要断开与 115 网盘的连接吗？断开后需要重新授权才能访问文件。',
-    positiveText: '断开',
-    negativeText: '取消',
-    onPositiveClick: () => {
-      authStore.disconnect();
-    },
-  });
-}
-
-function handleSwitchAccount(uid: string) {
-  authStore.switchAccount(uid);
+function openUserCenter() {
+  void router.push({ name: 'UserCenter' });
 }
 </script>
 
@@ -47,74 +36,36 @@ function handleSwitchAccount(uid: string) {
       </div>
       <h2 class="text-xl font-semibold text-white">连接 115 网盘</h2>
       <p class="text-sm text-white/60">
-        授权连接您的 115 网盘账号，即可在此管理和浏览您的云端文件。
+        当前账号尚未绑定 115 账号，请登录后在用户中心绑定。
       </p>
       <NButton
         type="primary"
         size="large"
         block
         :loading="authStore.loading"
-        @click="handleConnect"
+        @click="handleRetryCheck"
       >
-        连接 115 网盘
+        重新检查连接状态
       </NButton>
     </div>
 
-    <!-- 已授权态 -->
-    <div v-else class="glass-card p-6 max-w-md w-full space-y-4">
+    <!-- 已授权态（简化：仅显示已连接状态） -->
+    <div v-else-if="hasAccount" class="glass-card p-6 max-w-md w-full space-y-4">
       <div class="flex items-center gap-4">
-        <NAvatar
-          v-if="authStore.currentAccount?.avatarUrl"
-          :src="authStore.currentAccount.avatarUrl"
-          :size="48"
-          round
-        />
-        <div v-else class="w-12 h-12 rounded-full bg-indigo-500/20 flex items-center justify-center shrink-0">
-          <span class="text-indigo-400 font-medium">{{ authStore.currentAccount?.nickname?.charAt(0) ?? '?' }}</span>
+        <div class="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
+          <Link :size="20" class="text-green-400" />
         </div>
         <div class="flex-1 min-w-0">
-          <p class="text-white font-medium truncate">
-            {{ authStore.currentAccount?.nickname ?? '未知用户' }}
-          </p>
-          <p class="text-xs text-white/50 truncate">
-            UID: {{ authStore.currentAccountUid }}
-          </p>
+          <p class="text-white font-medium">115 网盘已连接</p>
+          <p class="text-xs text-white/50">Cookie 会话有效</p>
         </div>
-        <NButton
-          quaternary
-          size="small"
-          type="error"
-          @click="handleDisconnect"
-        >
-          <template #icon>
-            <Unlink :size="16" />
-          </template>
-          断开
-        </NButton>
       </div>
+    </div>
 
-      <!-- 多账号切换 -->
-      <div v-if="hasMultipleAccounts" class="border-t border-white/10 pt-4">
-        <p class="text-xs text-white/50 mb-2">切换账号</p>
-        <div class="space-y-1">
-          <button
-            v-for="account in authStore.accounts"
-            :key="account.cloudAccountUid"
-            class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors duration-200"
-            :class="account.cloudAccountUid === authStore.currentAccountUid
-              ? 'bg-indigo-500/20 text-indigo-300'
-              : 'hover:bg-white/5 text-white/70'"
-            @click="handleSwitchAccount(account.cloudAccountUid)"
-          >
-            <span class="text-sm truncate flex-1">{{ account.nickname }}</span>
-            <ChevronDown
-              v-if="account.cloudAccountUid === authStore.currentAccountUid"
-              :size="14"
-              class="text-indigo-400 rotate-0"
-            />
-          </button>
-        </div>
-      </div>
+    <div v-else class="glass-card p-6 max-w-md w-full space-y-4 text-center">
+      <p class="text-white font-medium">尚未绑定 115 账号</p>
+      <p class="text-xs text-white/50">请在用户中心绑定账号后再访问文件。</p>
+      <NButton type="primary" block @click="openUserCenter">打开用户中心</NButton>
     </div>
   </div>
 </template>

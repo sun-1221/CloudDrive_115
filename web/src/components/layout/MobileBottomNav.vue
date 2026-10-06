@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { useRouter, useRoute } from 'vue-router';
-import { FolderOpen, Trash2, Search, ListTodo } from 'lucide-vue-next';
-import { useJobStore } from '@/stores/jobStore';
+import { FolderOpen, Trash2, Sun, Moon, Download, Share2, UserRound } from 'lucide-vue-next';
+import { useUIStore } from '@/stores/uiStore';
 
 const router = useRouter();
 const route = useRoute();
-const jobStore = useJobStore();
+const uiStore = useUIStore();
 
 const navItems = [
   { label: '文件', icon: FolderOpen, path: '/cloud-drive/files' },
-  { label: '搜索', icon: Search, path: '/cloud-drive/search' },
   { label: '回收站', icon: Trash2, path: '/cloud-drive/recycle-bin' },
+  { label: '云下载', icon: Download, path: '/cloud-drive/offline' },
+  { label: '分享', icon: Share2, path: '/cloud-drive/share' },
+  { label: '我的', icon: UserRound, path: '/cloud-drive/user' },
 ];
 
 function isActive(path: string): boolean {
@@ -36,20 +38,12 @@ function navigateTo(path: string): void {
     </button>
 
     <button
-      class="flex flex-col items-center gap-0.5 py-1 px-3 transition-colors duration-200"
-      :class="jobStore.panelVisible ? 'text-indigo-400' : 'text-white/50'"
-      @click="jobStore.togglePanel()"
+      class="flex flex-col items-center gap-0.5 py-1 px-3 text-white/50"
+      :aria-label="uiStore.theme === 'dark' ? '切换浅色主题' : '切换深色主题'"
+      @click="uiStore.toggleTheme()"
     >
-      <div class="relative">
-        <ListTodo :size="20" />
-        <span
-          v-if="jobStore.runningJobCount > 0"
-          class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-indigo-500 text-[8px] text-white flex items-center justify-center"
-        >
-          {{ jobStore.runningJobCount }}
-        </span>
-      </div>
-      <span class="text-[10px]">任务</span>
+      <component :is="uiStore.theme === 'dark' ? Sun : Moon" :size="20" />
+      <span class="text-[10px]">主题</span>
     </button>
   </nav>
 </template>

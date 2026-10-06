@@ -14,18 +14,19 @@ vi.mock('@/api/previewApi', () => ({
   getDocPreview: (...args: unknown[]) => mockGetDocPreview(...args),
 }));
 
-// Mock temporaryResourceService
 vi.mock('@/services/temporaryResourceService', () => ({
-  fetchWithRetry: vi.fn(async ({ fetchUrl, extractUrl }: any) => {
+  createTemporaryResourceScope: () => ({ set: vi.fn(), get: () => '', clear: vi.fn() }),
+  fetchWithRetry: vi.fn(async ({ fetchUrl, extractUrl }: { fetchUrl: () => Promise<unknown>; extractUrl: (data: unknown) => string }) => {
     try {
       const data = await fetchUrl();
       return { success: true, url: extractUrl(data), data };
-    } catch (e: any) {
+    } catch (firstError) {
       try {
-        const data2 = await fetchUrl();
-        return { success: true, url: extractUrl(data2), data: data2 };
-      } catch (e2: any) {
-        return { success: false, error: e2.message };
+        const data = await fetchUrl();
+        return { success: true, url: extractUrl(data), data };
+      } catch (secondError: unknown) {
+        const message = secondError instanceof Error ? secondError.message : String(firstError);
+        return { success: false, error: message };
       }
     }
   }),

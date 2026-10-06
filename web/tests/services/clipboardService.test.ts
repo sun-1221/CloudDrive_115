@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
+import type { ClipboardItem } from '@/types';
 
 // 必须在 import clipboardService 之前 mock uiStore
-const mockClipboard = { value: null as any };
-const mockSetClipboard = vi.fn((item: any) => { mockClipboard.value = item; });
+const mockClipboard = { value: null as ClipboardItem | null };
+const mockSetClipboard = vi.fn((item: ClipboardItem | null) => { mockClipboard.value = item; });
 
 vi.mock('@/stores/uiStore', () => ({
   useUIStore: () => ({

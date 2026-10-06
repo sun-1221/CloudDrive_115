@@ -65,13 +65,7 @@ export const useJobStore = defineStore('job', () => {
   }
 
   async function fetchJobs(): Promise<void> {
-    const { useAuthStore } = await import('@/stores/authStore');
-    const authStore = useAuthStore();
-
     const input = {
-      cloudAccountUid: accountScope.value === 'currentAccount'
-        ? (authStore.currentAccountUid ?? undefined)
-        : undefined,
       status: statusFilter.value ?? undefined,
       offset: 0,
       limit: 50,

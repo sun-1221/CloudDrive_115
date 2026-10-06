@@ -11,23 +11,27 @@ vi.mock('@/stores/authStore', () => ({
 // Mock videoApi
 const mockGetPlayUrl = vi.fn();
 const mockGetSubtitles = vi.fn();
+const mockGetHistory = vi.fn();
+const mockSubmitTranscode = vi.fn();
 vi.mock('@/api/videoApi', () => ({
   getPlayUrl: (...args: unknown[]) => mockGetPlayUrl(...args),
   getSubtitles: (...args: unknown[]) => mockGetSubtitles(...args),
+  getHistory: (...args: unknown[]) => mockGetHistory(...args),
+  submitTranscode: (...args: unknown[]) => mockSubmitTranscode(...args),
 }));
 
 // Mock temporaryResourceService
 vi.mock('@/services/temporaryResourceService', () => ({
-  fetchWithRetry: vi.fn(async ({ fetchUrl, extractUrl }: any) => {
+  fetchWithRetry: vi.fn(async ({ fetchUrl, extractUrl }: { fetchUrl: () => Promise<unknown>; extractUrl: (data: unknown) => string }) => {
     try {
       const data = await fetchUrl();
       return { success: true, url: extractUrl(data), data };
-    } catch (e: any) {
+    } catch {
       try {
         const data2 = await fetchUrl();
         return { success: true, url: extractUrl(data2), data: data2 };
-      } catch (e2: any) {
-        return { success: false, error: e2.message };
+      } catch (e2: unknown) {
+        return { success: false, error: e2 instanceof Error ? e2.message : '资源加载失败' };
       }
     }
   }),
@@ -38,6 +42,7 @@ import { useVideoPlayer } from '@/composables/useVideoPlayer';
 beforeEach(() => {
   setActivePinia(createPinia());
   vi.clearAllMocks();
+  mockGetHistory.mockResolvedValue(null);
 });
 
 describe('需求 8.1: 视频播放器打开', () => {
@@ -156,10 +161,9 @@ describe('需求 8.6-8.7: 字幕', () => {
 });
 
 describe('需求 8.8: 转码状态', () => {
-  it('Transcoding 状态设置 jobId', async () => {
+  it('Transcoding 状态仅展示状态且不创建转码任务', async () => {
     mockGetPlayUrl.mockResolvedValue({
       status: 'Transcoding',
-      jobId: 'transcode-job-1',
       qualityOptions: [],
       duration: 0,
       isTemporary: false,
@@ -170,8 +174,8 @@ describe('需求 8.8: 转码状态', () => {
     await initPlayer('file-1', '视频.mp4');
 
     expect(state.value.status).toBe('Transcoding');
-    expect(state.value.jobId).toBe('transcode-job-1');
     expect(state.value.playUrl).toBe('');
+    expect(mockSubmitTranscode).not.toHaveBeenCalled();
   });
 });
 

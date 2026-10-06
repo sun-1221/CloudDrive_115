@@ -1,54 +1,33 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
-// Mock fileApi.upload — 同步完成模式
-const mockUpload = vi.fn().mockResolvedValue({ accepted: false, jobId: null });
-
+const mockUpload = vi.fn();
 vi.mock('@/api/fileApi', () => ({
   upload: (...args: unknown[]) => mockUpload(...args),
-  refreshDirectory: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@/stores/jobStore', () => ({
-  useJobStore: () => ({ addJob: vi.fn() }),
-}));
-
-vi.mock('@/stores/fileStore', () => ({
-  useFileStore: () => ({ currentDirectoryId: '0', refreshDirectory: vi.fn() }),
-}));
-
-beforeEach(() => {
-  mockUpload.mockClear();
-  vi.useFakeTimers();
-});
-
-afterEach(() => {
-  vi.useRealTimers();
-});
-
-describe('Property 19: 多文件上传逐文件建模', () => {
+describe('上传能力 disabled 契约', () => {
   it.each([1, 3, 5, 8])(
-    '上传 %i 个文件时，每个文件独立调用 upload',
+    '上传 %i 个文件时不调用上传 API，并将每个文件标记为不可用',
     async (fileCount) => {
-      const { enqueue } = await import('@/services/uploadService');
+      const { enqueue, getQueue, clearFinished } = await import('@/services/uploadService');
+      clearFinished();
 
       const files: File[] = [];
       for (let i = 0; i < fileCount; i++) {
         files.push(new File(['x'], `batch-${Date.now()}-${i}.txt`, { type: 'text/plain' }));
       }
 
-      // enqueue 内部对每个文件独立调用 processUpload
-      await enqueue(files, 'uid-test', 'dir-0');
+      await enqueue(files, 'dir-0');
 
-      // 等待所有异步上传微任务完成
-      await vi.advanceTimersByTimeAsync(100);
-
-      // 每个文件独立一次 upload 调用
-      expect(mockUpload).toHaveBeenCalledTimes(fileCount);
-
-      // 每次调用的第一个参数是不同的 File 对象
-      const uploadedFiles = mockUpload.mock.calls.map((c: unknown[]) => (c[0] as File).name);
-      const uniqueNames = new Set(uploadedFiles);
-      expect(uniqueNames.size).toBe(fileCount);
+      expect(mockUpload).not.toHaveBeenCalled();
+      expect(getQueue().slice(-fileCount)).toEqual(
+        expect.arrayContaining(files.map((file) => expect.objectContaining({
+          fileName: file.name,
+          directoryId: 'dir-0',
+          status: 'failed',
+          errorMessage: '上传功能暂未采集，当前不可用',
+        }))),
+      );
     },
   );
 });

@@ -2,23 +2,18 @@
 import { NDrawer, NDrawerContent } from 'naive-ui';
 import {
   FolderPlus,
-  Upload,
   ArrowUpDown,
   Filter,
   RefreshCw,
-  ListTodo,
 } from 'lucide-vue-next';
 import { useUIStore } from '@/stores/uiStore';
 import { useFileStore } from '@/stores/fileStore';
-import { useJobStore } from '@/stores/jobStore';
 
 const uiStore = useUIStore();
 const fileStore = useFileStore();
-const jobStore = useJobStore();
 
 const emit = defineEmits<{
   createFolder: [];
-  upload: [];
 }>();
 
 function handleAction(action: string) {
@@ -27,25 +22,17 @@ function handleAction(action: string) {
     case 'createFolder':
       emit('createFolder');
       break;
-    case 'upload':
-      emit('upload');
-      break;
     case 'refresh':
       fileStore.refreshDirectory();
-      break;
-    case 'tasks':
-      jobStore.togglePanel();
       break;
   }
 }
 
 const actions = [
   { label: '新建文件夹', icon: FolderPlus, action: 'createFolder' },
-  { label: '上传文件', icon: Upload, action: 'upload' },
   { label: '排序', icon: ArrowUpDown, action: 'sort' },
   { label: '筛选', icon: Filter, action: 'filter' },
   { label: '刷新', icon: RefreshCw, action: 'refresh' },
-  { label: '任务面板', icon: ListTodo, action: 'tasks' },
 ];
 </script>
 

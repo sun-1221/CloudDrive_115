@@ -9,8 +9,8 @@ test.describe('授权流程', () => {
 
     await page.goto('/cloud-drive/files');
 
-    // 未授权状态应显示授权引导（AuthPanel 显示 "连接 115 网盘"）
-    await expect(page.getByText('连接 115 网盘').first()).toBeVisible({ timeout: 10_000 });
+    // 未授权状态由独立登录页承载 Cookie 会话引导。
+    await expect(page.getByRole('heading', { name: '115 网盘会话未连接' })).toBeVisible({ timeout: 10_000 });
   });
 
   test('已授权时直接进入文件浏览器', async ({ page }) => {
@@ -29,9 +29,10 @@ test.describe('授权流程', () => {
     await mockFeatureDisabled(page);
     await mockJobList(page);
 
-    await page.goto('/cloud-drive/files');
+    // 路由守卫会阻止进入受保护页面；登录页仍应展示功能不可用态。
+    await page.goto('/login');
 
-    // 应显示功能不可用提示（FeatureUnavailableState 显示 "功能暂不可用"）
+    // 应显示功能不可用提示（FeatureUnavailableState）。
     await expect(page.getByText('功能暂不可用')).toBeVisible({ timeout: 10_000 });
   });
 });

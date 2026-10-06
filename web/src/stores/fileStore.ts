@@ -5,6 +5,7 @@ import { sortFiles, filterFilesByType } from '@/utils/fileSorter';
 import type {
   CloudDriveFileDto,
   BreadcrumbItem,
+  CloudDrivePathDto,
   FileQueryCapabilities,
 } from '@/types';
 
@@ -14,6 +15,7 @@ const PAGE_SIZE = 50;
 export const useFileStore = defineStore('file', () => {
   const currentDirectoryId = ref(ROOT_DIRECTORY_ID);
   const breadcrumbs = ref<BreadcrumbItem[]>([{ id: ROOT_DIRECTORY_ID, name: '根目录' }]);
+  const paths = ref<CloudDrivePathDto[]>([]);
   const files = ref<CloudDriveFileDto[]>([]);
   const totalCount = ref(0);
   const queryCapabilities = ref<FileQueryCapabilities>({
@@ -38,6 +40,7 @@ export const useFileStore = defineStore('file', () => {
   // 请求去重
   let fetchAbortController: AbortController | null = null;
   let fetchMoreDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let requestToken = 0;
 
   const selectedFiles = computed(() =>
     files.value.filter((f) => selectedFileIds.value.includes(f.fileId)),
@@ -76,6 +79,7 @@ export const useFileStore = defineStore('file', () => {
       fetchAbortController.abort();
     }
     fetchAbortController = new AbortController();
+    const token = ++requestToken;
 
     const targetDirId = directoryId ?? currentDirectoryId.value ?? ROOT_DIRECTORY_ID;
     currentDirectoryId.value = targetDirId;
@@ -85,33 +89,31 @@ export const useFileStore = defineStore('file', () => {
     offset.value = 0;
 
     try {
-      const { useAuthStore } = await import('@/stores/authStore');
-      const authStore = useAuthStore();
-
-      if (!authStore.currentAccountUid) {
-        error.value = '未选择账号';
-        return;
-      }
-
       const result = await fileApi.getFileList({
-        cloudAccountUid: authStore.currentAccountUid,
-        directoryId: targetDirId === ROOT_DIRECTORY_ID ? undefined : targetDirId,
+        directoryId: targetDirId,
         offset: 0,
         limit: PAGE_SIZE,
-      });
+      }, fetchAbortController.signal);
+
+      // AbortController 不能阻止所有 mock/缓存实现返回；令牌是第二道竞态保护。
+      if (token !== requestToken) return;
 
       files.value = result.items;
       totalCount.value = result.totalCount;
       offset.value = result.items.length;
       hasMore.value = result.items.length < result.totalCount;
+      paths.value = result.paths ?? [];
+      if (result.paths && result.paths.length > 0) {
+        breadcrumbs.value = result.paths.map((path) => ({ id: path.fileId, name: path.fileName }));
+      }
       selectedFileIds.value = [];
       selectionScopeNotice.value = null;
       focusedFileId.value = null;
     } catch (e) {
-      if (e instanceof DOMException && e.name === 'AbortError') return;
+      if (token !== requestToken || (e instanceof DOMException && e.name === 'AbortError')) return;
       error.value = e instanceof Error ? e.message : '加载文件列表失败';
     } finally {
-      loading.value = false;
+      if (token === requestToken) loading.value = false;
     }
   }
 
@@ -129,19 +131,14 @@ export const useFileStore = defineStore('file', () => {
         loadingMore.value = true;
 
         try {
-          const { useAuthStore } = await import('@/stores/authStore');
-          const authStore = useAuthStore();
-
-          if (!authStore.currentAccountUid) return;
-
+          const token = requestToken;
           const result = await fileApi.getFileList({
-            cloudAccountUid: authStore.currentAccountUid,
-            directoryId: currentDirectoryId.value === ROOT_DIRECTORY_ID
-              ? undefined
-              : currentDirectoryId.value,
+            directoryId: currentDirectoryId.value,
             offset: offset.value,
             limit: PAGE_SIZE,
           });
+
+          if (token !== requestToken) return;
 
           files.value = [...files.value, ...result.items];
           offset.value += result.items.length;
@@ -159,16 +156,8 @@ export const useFileStore = defineStore('file', () => {
   }
 
   async function refreshDirectory(): Promise<void> {
-    const { useAuthStore } = await import('@/stores/authStore');
-    const authStore = useAuthStore();
-
-    if (!authStore.currentAccountUid) return;
-
-    // 先调用后端刷新接口
-    await fileApi.refreshDirectory(authStore.currentAccountUid, currentDirectoryId.value);
-
-    // 再重新拉取
-    await fetchFiles(currentDirectoryId.value);
+    const directoryId = currentDirectoryId.value;
+    await fetchFiles(directoryId);
   }
 
   async function navigateTo(directoryId: string, breadcrumbName?: string): Promise<void> {
@@ -296,6 +285,7 @@ export const useFileStore = defineStore('file', () => {
   return {
     currentDirectoryId,
     breadcrumbs,
+    paths,
     files,
     totalCount,
     queryCapabilities,

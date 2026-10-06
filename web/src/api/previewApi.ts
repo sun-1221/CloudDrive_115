@@ -2,13 +2,9 @@ import httpClient from './http';
 import type { CloudDriveImagePreviewDto, CloudDriveDocPreviewDto } from '@/types';
 import { normalizeDocRenderMode } from '@/utils/enumNormalizers';
 
-export async function getImagePreview(
-  cloudAccountUid: string,
-  fileId: string,
-): Promise<CloudDriveImagePreviewDto> {
+export async function getImagePreview(pickCode: string): Promise<CloudDriveImagePreviewDto> {
   const response = await httpClient.get<CloudDriveImagePreviewDto>(
-    `/files/${fileId}/preview/image`,
-    { params: { cloudAccountUid } },
+    `/files/${pickCode}/preview`,
   );
   return response.data;
 }
@@ -22,13 +18,9 @@ interface RawDocPreviewResponse {
   isTemporary: boolean;
 }
 
-export async function getDocPreview(
-  cloudAccountUid: string,
-  fileId: string,
-): Promise<CloudDriveDocPreviewDto> {
+export async function getDocPreview(pickCode: string): Promise<CloudDriveDocPreviewDto> {
   const response = await httpClient.get<RawDocPreviewResponse>(
-    `/files/${fileId}/preview/document`,
-    { params: { cloudAccountUid } },
+    `/documents/${pickCode}/preview`,
   );
   const raw = response.data;
   return {

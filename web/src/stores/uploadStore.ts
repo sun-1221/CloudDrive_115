@@ -8,16 +8,6 @@ export const useUploadStore = defineStore('upload', () => {
   const dragActive = ref(false);
   const overlayVisible = ref(false);
 
-  async function enqueue(files: File[], directoryId: string): Promise<void> {
-    const { useAuthStore } = await import('@/stores/authStore');
-    const authStore = useAuthStore();
-
-    if (!authStore.currentAccountUid) return;
-
-    await uploadService.enqueue(files, authStore.currentAccountUid, directoryId);
-    syncFromService();
-  }
-
   function updateProgress(localId: string, progress: number): void {
     const item = items.value.find((i) => i.localId === localId);
     if (item) {
@@ -67,7 +57,6 @@ export const useUploadStore = defineStore('upload', () => {
     items,
     dragActive,
     overlayVisible,
-    enqueue,
     updateProgress,
     markAccepted,
     markCompleted,

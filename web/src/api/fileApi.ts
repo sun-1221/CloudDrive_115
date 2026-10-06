@@ -4,128 +4,76 @@ import type {
   GetFileListInput,
   CreateFolderInput,
   RenameFileInput,
-  MoveFilesInput,
-  CopyFilesInput,
-  DeleteFilesInput,
   CloudDriveOperationResultDto,
-  CloudDriveUploadExecutionDto,
   CloudDriveFileDetailDto,
   CloudDriveDownloadDto,
-  CloudDriveFolderDto,
-  PagedResult,
-  UploadProgressEvent,
+  CopyFilesInput,
 } from '@/types';
 
-export async function getFileList(input: GetFileListInput): Promise<FileListResult> {
+export async function getFileList(input: GetFileListInput, signal?: AbortSignal): Promise<FileListResult> {
   const response = await httpClient.get<FileListResult>('/files', {
     params: {
-      cloudAccountUid: input.cloudAccountUid,
-      directoryId: input.directoryId,
+      cid: input.directoryId,
       offset: input.offset,
       limit: input.limit,
-      sortField: input.sortField,
-      sortOrder: input.sortOrder,
-      fileTypeFilter: input.fileTypeFilter,
+      type: input.type,
+      suffix: input.suffix,
+      asc: input.asc,
+      o: input.orderBy,
+      custom_order: input.customOrder,
+      stdir: input.stdir,
+      star: input.star,
+      showDir: input.showDir,
+      natsort: input.natSort,
+      snap: input.snap,
+      count_folders: input.countFolders,
+      record_open_time: input.recordOpenTime,
+      code: input.code,
+      scid: input.scid,
+      source: input.source,
     },
+    signal,
   });
   return response.data;
 }
 
-export async function getFileDetail(
-  cloudAccountUid: string,
-  fileId: string,
-): Promise<CloudDriveFileDetailDto> {
-  const response = await httpClient.get<CloudDriveFileDetailDto>(`/files/${fileId}`, {
-    params: { cloudAccountUid },
-  });
+export async function getFileDetail(fileId: string): Promise<CloudDriveFileDetailDto> {
+  const response = await httpClient.get<CloudDriveFileDetailDto>(`/files/${fileId}`);
   return response.data;
 }
 
 export async function createFolder(input: CreateFolderInput): Promise<CloudDriveOperationResultDto> {
-  const response = await httpClient.post<CloudDriveOperationResultDto>('/files/folder', input);
+  const response = await httpClient.post<CloudDriveOperationResultDto>('/files/folders', input);
   return response.data;
 }
 
 export async function renameFile(input: RenameFileInput): Promise<CloudDriveOperationResultDto> {
-  const response = await httpClient.put<CloudDriveOperationResultDto>(
-    `/files/${input.fileId}/rename`,
-    input,
+  const response = await httpClient.patch<CloudDriveOperationResultDto>(
+    `/files/${input.fileId}`,
+    { newFileName: input.newFileName },
   );
   return response.data;
 }
 
-export async function moveFiles(input: MoveFilesInput): Promise<CloudDriveOperationResultDto> {
-  const response = await httpClient.post<CloudDriveOperationResultDto>('/files/move', input);
+export async function getDownloadUrl(pickCode: string): Promise<CloudDriveDownloadDto> {
+  const response = await httpClient.get<CloudDriveDownloadDto>(`/files/${pickCode}/download`);
   return response.data;
 }
 
-export async function copyFiles(input: CopyFilesInput): Promise<CloudDriveOperationResultDto> {
-  const response = await httpClient.post<CloudDriveOperationResultDto>('/files/copy', input);
-  return response.data;
-}
-
-export async function deleteFiles(input: DeleteFilesInput): Promise<CloudDriveOperationResultDto> {
-  const response = await httpClient.post<CloudDriveOperationResultDto>('/files/delete', input);
-  return response.data;
-}
-
-export async function getDownloadUrl(
-  cloudAccountUid: string,
-  fileId: string,
-): Promise<CloudDriveDownloadDto> {
-  const response = await httpClient.get<CloudDriveDownloadDto>(`/files/${fileId}/download`, {
-    params: { cloudAccountUid },
+export async function copySingle(input: CopyFilesInput): Promise<CloudDriveOperationResultDto> {
+  if (input.fileIds.length !== 1) throw new Error('单项复制仅支持一个文件');
+  const response = await httpClient.post<CloudDriveOperationResultDto>('/files/copy', {
+    fileId: input.fileIds[0],
+    targetDirectoryId: input.targetDirectoryId,
   });
   return response.data;
 }
 
-export async function upload(
-  file: File,
-  cloudAccountUid: string,
-  directoryId: string,
-  forceAsync: boolean = false,
-  onProgress?: (event: UploadProgressEvent) => void,
-  signal?: AbortSignal,
-): Promise<CloudDriveUploadExecutionDto> {
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('cloudAccountUid', cloudAccountUid);
-  formData.append('directoryId', directoryId);
-  formData.append('forceAsync', String(forceAsync));
 
-  const response = await httpClient.post<CloudDriveUploadExecutionDto>(
-    '/files/upload',
-    formData,
-    {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      onUploadProgress: (progressEvent) => {
-        if (onProgress && progressEvent.total) {
-          onProgress({
-            loaded: progressEvent.loaded,
-            total: progressEvent.total,
-            percentage: Math.round((progressEvent.loaded * 100) / progressEvent.total),
-          });
-        }
-      },
-      signal,
-    },
+export async function toggleStar(fileId: string, starred: boolean): Promise<CloudDriveOperationResultDto> {
+  const response = await httpClient.post<CloudDriveOperationResultDto>(
+    `/files/${fileId}/star`,
+    { starred },
   );
-  return response.data;
-}
-
-export async function refreshDirectory(
-  cloudAccountUid: string,
-  directoryId: string,
-): Promise<void> {
-  await httpClient.post('/files/refresh', { cloudAccountUid, directoryId });
-}
-
-export async function getFolderTree(
-  cloudAccountUid: string,
-  parentId?: string,
-): Promise<PagedResult<CloudDriveFolderDto>> {
-  const response = await httpClient.get<PagedResult<CloudDriveFolderDto>>('/files/folders', {
-    params: { cloudAccountUid, parentId },
-  });
   return response.data;
 }

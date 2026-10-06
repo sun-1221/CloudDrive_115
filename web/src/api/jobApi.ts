@@ -25,7 +25,6 @@ function normalizeJobDto(raw: RawJobDto): CloudDriveJobDto {
 export async function getJobList(input: GetJobListInput): Promise<PagedResult<CloudDriveJobDto>> {
   const response = await httpClient.get<PagedResult<RawJobDto>>('/jobs', {
     params: {
-      cloudAccountUid: input.cloudAccountUid,
       status: input.status,
       offset: input.offset,
       limit: input.limit,
