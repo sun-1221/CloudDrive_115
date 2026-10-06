@@ -31,7 +31,7 @@ export const useAuthStore = defineStore('auth', () => {
   const currentUser = ref<CurrentUserDto | null>(null);
 
   const isAuthorized = computed(() => authStatus.value === 'authorized');
-  const isAuthenticated = computed(() => loginCheckResult.value?.isAuthenticated === true);
+  const isAuthenticated = computed(() => authStatus.value === 'authorized');
   const failureReason = computed(() => loginCheckResult.value?.failureReason ?? null);
   const cooldownUntil = computed(() => loginCheckResult.value?.cooldownUntil ?? null);
 

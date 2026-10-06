@@ -4,6 +4,13 @@ import { useAuthStore } from '@/stores/authStore';
 
 const mockCheckLoginStatus = vi.fn();
 const mockGetCurrentUser = vi.fn();
+const storage = new Map<string, string>();
+const localStorageMock = {
+  getItem: (key: string) => storage.get(key) ?? null,
+  setItem: (key: string, value: string) => storage.set(key, value),
+  removeItem: (key: string) => storage.delete(key),
+  clear: () => storage.clear(),
+};
 vi.mock('@/api/authApi', () => ({
   checkLoginStatus: (...args: unknown[]) => mockCheckLoginStatus(...args),
   getCurrentUser: (...args: unknown[]) => mockGetCurrentUser(...args),
@@ -12,7 +19,8 @@ vi.mock('@/api/authApi', () => ({
 beforeEach(() => {
   setActivePinia(createPinia());
   vi.clearAllMocks();
-  localStorage?.clear();
+  vi.stubGlobal('localStorage', localStorageMock);
+  localStorage.clear();
 });
 
 const checked = (isAuthenticated: boolean, isLoggedIn: boolean | null) => ({
@@ -22,13 +30,15 @@ const checked = (isAuthenticated: boolean, isLoggedIn: boolean | null) => ({
 });
 
 describe('登录态只读检查', () => {
-  it('已认证且上游已登录时进入 authorized', async () => {
-    mockCheckLoginStatus.mockResolvedValue(checked(true, true));
+  it('本地 JWT 有效时读取当前用户并进入 authorized', async () => {
+    localStorage.setItem('115web.accessToken', 'header.payload.signature');
+    mockGetCurrentUser.mockResolvedValue({ userId: 'user-1', userName: 'tester', currentCloudAccountUid: null, accounts: [] });
     const store = useAuthStore();
 
     await store.bootstrapAuthState();
 
-    expect(mockCheckLoginStatus).toHaveBeenCalledOnce();
+    expect(mockCheckLoginStatus).not.toHaveBeenCalled();
+    expect(mockGetCurrentUser).toHaveBeenCalledOnce();
     expect(store.authStatus).toBe('authorized');
     expect(store.isAuthenticated).toBe(true);
     expect(store.loading).toBe(false);

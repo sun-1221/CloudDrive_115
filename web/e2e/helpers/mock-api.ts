@@ -41,18 +41,30 @@ function json(route: Route, data: unknown, status = 200) {
 
 /** 模拟已授权状态：账号列表 + 用户信息 */
 export async function mockAuthorizedState(page: Page) {
+  await page.addInitScript(() => {
+    localStorage.setItem('115web.accessToken', 'header.payload.signature');
+  });
   await page.route(
-    (url) => matchPath(url.toString(), '/auth/check'),
+    (url) => matchPath(url.toString(), '/auth/me'),
     (route) => json(route, {
-      isAuthenticated: true,
-      isLoggedIn: true,
-      lastCheckedAt: '2024-06-10T10:00:00Z',
+      userId: 'user-e2e',
+      userName: 'e2e-user',
+      currentCloudAccountUid: 'e2e-account',
+      accounts: [{
+        cloudAccountUid: 'e2e-account',
+        status: 0,
+        creationTime: '2024-06-01T10:00:00Z',
+        lastModificationTime: '2024-06-01T10:00:00Z',
+      }],
     }),
   );
 }
 
 /** 模拟未授权状态 */
 export async function mockUnauthorizedState(page: Page) {
+  await page.addInitScript(() => {
+    localStorage.removeItem('115web.accessToken');
+  });
   await page.route(
     (url) => matchPath(url.toString(), '/auth/check'),
     (route) => json(route, {
@@ -65,6 +77,9 @@ export async function mockUnauthorizedState(page: Page) {
 
 /** 模拟功能不可用（503） */
 export async function mockFeatureDisabled(page: Page) {
+  await page.addInitScript(() => {
+    localStorage.removeItem('115web.accessToken');
+  });
   await page.route(
     (url) => matchPath(url.toString(), '/auth/check'),
     (route) => json(route, {

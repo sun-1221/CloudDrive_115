@@ -9,8 +9,8 @@ test.describe('授权流程', () => {
 
     await page.goto('/cloud-drive/files');
 
-    // 未授权状态由独立登录页承载 Cookie 会话引导。
-    await expect(page.getByRole('heading', { name: '115 网盘会话未连接' })).toBeVisible({ timeout: 10_000 });
+    // 未授权状态由本地账号登录页承载。
+    await expect(page.getByRole('heading', { name: '登录 115 Web' })).toBeVisible({ timeout: 10_000 });
   });
 
   test('已授权时直接进入文件浏览器', async ({ page }) => {
