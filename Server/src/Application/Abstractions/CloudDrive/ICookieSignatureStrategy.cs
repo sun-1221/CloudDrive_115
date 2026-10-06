@@ -1,7 +1,7 @@
-namespace Application.Abstractions.CloudDrive;
+﻿namespace Application.Abstractions.CloudDrive;
 
 /// <summary>
-/// 云下载签名策略抽象。为 115 网页端云下载接口（115.com/web/lixian/）
+/// 云下载签名策略抽象。为 115 网页端云下载接口（clouddownload.115.com/web/）
 /// 生成 sign + time + uid 签名三元组。
 /// </summary>
 /// <remarks>
@@ -17,6 +17,7 @@ public interface ICookieSignatureStrategy
     /// <param name="userId">系统用户 ID。</param>
     /// <param name="cloudAccountUid">115 账号唯一标识。</param>
     /// <param name="requestBody">请求体内容。</param>
+    /// <returns>返回当前操作的处理结果。</returns>
     CookieSignature Generate(Guid userId, string cloudAccountUid, string requestBody);
 }
 

@@ -5,7 +5,6 @@ using Application.CloudDrive;
 using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
 using Application.CloudDrive.Files;
-using Application.Queries;
 using Application.Tests.Support;
 
 using Domain.Enums;
@@ -16,11 +15,17 @@ using Microsoft.Extensions.Options;
 
 namespace Application.Tests.CloudDrive.Files;
 
+/// <summary>
+/// 115 网盘文件命令与查询处理器测试。
+/// </summary>
 public sealed class FileCommandQueryHandlerTests
 {
     private static readonly Guid TestUserId = Guid.Parse("77777777-7777-7777-7777-777777777777");
     private const string TestCloudAccountUid = "115001";
 
+    /// <summary>
+    /// 验证目录缺省时文件列表查询使用根目录并缓存结果。
+    /// </summary>
     [Fact]
     public async Task GetFileListQueryHandler_WhenDirectoryMissing_UsesRootAndCachesResult()
     {
@@ -37,6 +42,7 @@ public sealed class FileCommandQueryHandlerTests
                     Size = 42,
                     PickCode = "pick-1",
                 }
+
             ],
             TotalCount = 1,
             SkipCount = 0,
@@ -66,11 +72,80 @@ public sealed class FileCommandQueryHandlerTests
         Assert.Equal("json", request.Context.QueryParameters["format"]);
     }
 
+    /// <summary>
+    /// 验证文件列表仅发送已采集的查询键，并保留 fc_mix 与 nf 控制值。
+    /// </summary>
     [Fact]
-    public async Task GetFileDetailQueryHandler_ReturnsApiNotCollected()
+    public void CreateFileListContext_WhenObservedControlsProvided_UsesCollectedQuerySet()
+    {
+        CloudDriveApiContext context = CloudDriveFileHandlerSupport.CreateFileListContext(
+            new GetFileListInput
+            {
+                DirectoryId = "dir-1",
+                Offset = 4,
+                Limit = 20,
+                Type = 0,
+                Asc = 0,
+                OrderBy = "user_ptime",
+                CustomOrder = 1,
+                FcMix = 0,
+                Nf = 1,
+                Stdir = 1,
+                ShowDir = 1,
+                NatSort = 1,
+                CountFolders = 1,
+                Suffix = "mp4",
+                Star = 1,
+                Cur = 1,
+                Snap = 1,
+                RecordOpenTime = 1,
+                Code = "ignored",
+                Scid = "ignored",
+                Source = "ignored",
+            });
+
+        Assert.Equal(
+            ["aid", "asc", "cid", "count_folders", "custom_order", "fc_mix", "format", "limit", "natsort", "nf", "o", "offset", "show_dir", "stdir", "type"],
+            context.QueryParameters!.Keys.OrderBy(key => key, StringComparer.Ordinal).ToArray());
+        Assert.DoesNotContain("suffix", context.QueryParameters.Keys);
+        Assert.Equal("0", context.QueryParameters["fc_mix"]);
+        Assert.Equal("1", context.QueryParameters["nf"]);
+    }
+
+    /// <summary>
+    /// 验证文件详情由已采集文件列表条目派生，且不会调用独立详情端点。
+    /// </summary>
+    [Fact]
+    public async Task GetFileDetailQueryHandler_WhenListContainsFile_DerivesDetailFromList()
     {
         // Arrange
-        var handler = new GetFileDetailQueryHandler(CreateEnabledConfig());
+        TestContext context = CreateContext();
+        context.Gateway.WebApiResponse = new PagedResultDto<CloudDriveFileDto>
+        {
+            Items =
+            [
+                new CloudDriveFileDto
+                {
+                    FileId = "file-1",
+                    Name = "clip.mp4",
+                    Size = 42,
+                    PickCode = "pick-1",
+                    ParentId = "parent-1",
+                    IsVideo = true,
+                }
+            ],
+            TotalCount = 1,
+            SkipCount = 0,
+            MaxResultCount = 200,
+            Paths =
+            [
+                new CloudDrivePathNodeDto { FileId = "parent-1", FileName = "Videos" }
+            ],
+        };
+        var handler = new GetFileDetailQueryHandler(
+            context.FileManager,
+            context.Accessor,
+            CreateEnabledConfig());
 
         // Act
         Result<CloudDriveFileDetailDto> result = await handler.Handle(
@@ -83,65 +158,50 @@ public sealed class FileCommandQueryHandlerTests
             CancellationToken.None);
 
         // Assert
-        Assert.True(result.IsFailure);
-        Assert.Equal("cloud_drive_api_not_collected", result.Error.Code);
+        Assert.True(result.IsSuccess);
+        Assert.Equal("file-1", result.Value.FileId);
+        Assert.Equal("clip.mp4", result.Value.Name);
+        Assert.Equal("parent-1", result.Value.ParentId);
+        Assert.Equal("file_list_derived", result.Value.SchemaSource);
+        Assert.Single(result.Value.Paths!);
+        CloudDriveGatewayRequest request = Assert.Single(context.Gateway.WebApiRequests);
+        Assert.Equal("files", request.Endpoint);
+        Assert.Equal("0", request.Context.QueryParameters!["cid"]);
     }
 
+    /// <summary>
+    /// 验证列表未包含指定文件时返回文件不存在错误。
+    /// </summary>
     [Fact]
-    public async Task SearchFilesQueryHandler_WhenKeywordProvided_SendsSearchRequestWithoutMetadataCache()
+    public async Task GetFileDetailQueryHandler_WhenListDoesNotContainFile_ReturnsFileNotFound()
     {
-        // Arrange
         TestContext context = CreateContext();
-        context.Gateway.WebApiResponse = new CloudDriveSearchListDto
-        {
-            Items =
-            [
-                new CloudDriveSearchResultDto
-                {
-                    FileId = "file-1",
-                    FileName = "demo.txt",
-                    ParentId = "dir-1",
-                }
-            ],
-        };
-        var handler = new SearchFilesQueryHandler(context.Gateway, context.RateLimiter, context.Accessor, CreateEnabledConfig());
+        context.Gateway.WebApiResponse = new PagedResultDto<CloudDriveFileDto>();
+        var handler = new GetFileDetailQueryHandler(
+            context.FileManager,
+            context.Accessor,
+            CreateEnabledConfig());
 
-        // Act
-        Result<CloudDriveSearchListDto> result = await handler.Handle(
-            new SearchFilesQuery(
+        Result<CloudDriveFileDetailDto> result = await handler.Handle(
+            new GetFileDetailQuery(
                 TestUserId,
-                new SearchFileInput
-                {
-                    Keyword = "demo",
-                    DirectoryId = "dir-1",
-                    Date = "2026-01-01",
-                    Type = 1,
-                    PickCode = "pick-1",
-                    CountFolders = 1,
-                    Source = "desktop",
-                    Limit = 50,
-                }),
+                new GetFileInput { FileId = "missing" }),
             CancellationToken.None);
 
-        // Assert
-        Assert.True(result.IsSuccess);
-        Assert.Empty(context.Cache.GetOrSetKeys);
-        Assert.Equal("file-search", context.RateLimiter.Acquisitions.Single().Category);
-        CloudDriveGatewayRequest request = Assert.Single(context.Gateway.WebApiRequests);
-        Assert.Equal("files/search", request.Endpoint);
-        Assert.Equal("demo", request.Context.QueryParameters!["search_value"]);
-        Assert.Equal("2026-01-01", request.Context.QueryParameters["date"]);
-        Assert.Equal("pick-1", request.Context.QueryParameters["pick_code"]);
-        Assert.False(request.Context.QueryParameters.ContainsKey("gte_day"));
-        Assert.False(request.Context.QueryParameters.ContainsKey("fc"));
+        Assert.True(result.IsFailure);
+        Assert.Equal("cloud_drive_file_not_found", result.Error.Code);
     }
 
+    /// <summary>
+    /// 验证创建文件夹名称非法时抛出无效名称异常。
+    /// </summary>
     [Fact]
     public async Task CreateFolderCommandHandler_WhenFolderNameInvalid_ThrowsInvalidName()
     {
         // Arrange
         TestContext context = CreateContext();
-        var handler = new CreateFolderCommandHandler(CreateEnabledConfig());
+        var handler = new CreateFolderCommandHandler(
+            context.Gateway, context.Accessor, context.Cache, CreateEnabledConfig());
 
         // Act & Assert
         await Assert.ThrowsAsync<CloudDriveInvalidNameException>(() => handler.Handle(
@@ -155,12 +215,17 @@ public sealed class FileCommandQueryHandlerTests
             CancellationToken.None));
     }
 
+    /// <summary>
+    /// 验证创建文件夹成功 envelope 映射结果并失效父目录缓存。
+    /// </summary>
     [Fact]
-    public async Task CreateFolderCommandHandler_WhenApiNotCollected_ReturnsFailureWithoutGatewayRequest()
+    public async Task CreateFolderCommandHandler_WhenSuccessEnvelopeReturned_MapsFolderAndInvalidatesCache()
     {
         // Arrange
         TestContext context = CreateContext();
-        var handler = new CreateFolderCommandHandler(CreateEnabledConfig());
+        context.Gateway.WebApiResponse = "{\"state\":true,\"errno\":\"\",\"file_id\":\"folder-1\",\"file_name\":\"Photos\"}";
+        var handler = new CreateFolderCommandHandler(
+            context.Gateway, context.Accessor, context.Cache, CreateEnabledConfig());
 
         // Act
         Result<CloudDriveFolderDto> result = await handler.Handle(
@@ -174,18 +239,148 @@ public sealed class FileCommandQueryHandlerTests
             CancellationToken.None);
 
         // Assert
-        Assert.True(result.IsFailure);
-        Assert.Equal("cloud_drive_api_not_collected", result.Error.Code);
-        Assert.Empty(context.Cache.InvalidatedDirectories);
-        Assert.Empty(context.Gateway.WebApiRequests);
+        Assert.True(result.IsSuccess);
+        Assert.Equal("folder-1", result.Value.FolderId);
+        Assert.Equal("Photos", result.Value.Name);
+        Assert.Equal([(TestUserId, TestCloudAccountUid, "parent-1")], context.Cache.InvalidatedDirectories);
+        CloudDriveGatewayRequest request = Assert.Single(context.Gateway.WebApiRequests);
+        Assert.Equal("files/add", request.Endpoint);
+        Assert.Equal("Photos", request.Context.FormFields!["cname"]);
+        Assert.Equal("parent-1", request.Context.FormFields["pid"]);
+        Assert.Equal(2, request.Context.FormFields.Count);
     }
 
+    /// <summary>
+    /// 验证下载地址只发送已采集 query，并标记返回地址为临时资源。
+    /// </summary>
+    [Fact]
+    public async Task GetDownloadUrlQueryHandler_WhenSuccessEnvelopeReturned_UsesCollectedQuery()
+    {
+        TestContext context = CreateContext();
+        context.Gateway.WebApiResponse = """
+            {
+              "state": true,
+              "file_id": "file-1",
+              "file_name": "demo.txt",
+              "file_size": "42",
+              "file_url_302": "https://download.example/temporary"
+            }
+            """;
+        var handler = new GetDownloadUrlQueryHandler(
+            context.Gateway,
+            context.Accessor,
+            CreateEnabledConfig());
+
+        Result<CloudDriveDownloadDto> result = await handler.Handle(
+            new GetDownloadUrlQuery(
+                TestUserId,
+                new GetDownloadUrlInput { PickCode = "pick-1" }),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value.IsTemporary);
+        Assert.Equal("42", result.Value.FileSize.ToString());
+        CloudDriveGatewayRequest request = Assert.Single(context.Gateway.WebApiRequests);
+        Assert.Equal("files/download", request.Endpoint);
+        Assert.Equal(
+            ["_", "dl", "pickcode"],
+            request.Context.QueryParameters!.Keys.OrderBy(key => key, StringComparer.Ordinal).ToArray());
+    }
+
+    /// <summary>
+    /// 验证单项复制仅在精确成功 envelope 后完成并失效目标目录缓存。
+    /// </summary>
+    [Fact]
+    public async Task CopyFilesCommandHandler_WhenSuccessEnvelopeReturned_CompletesSingleCopy()
+    {
+        TestContext context = CreateContext();
+        context.Gateway.WebApiResponse = "{\"state\":true,\"errno\":\"\",\"error\":\"\"}";
+        var handler = new CopyFilesCommandHandler(
+            context.Gateway,
+            context.Accessor,
+            context.Cache,
+            CreateEnabledConfig());
+
+        Result<CloudDriveOperationResultDto> result = await handler.Handle(
+            new CopyFilesCommand(
+                TestUserId,
+                new CopyFilesInput
+                {
+                    FileIds = ["file-1"],
+                    TargetDirectoryId = "target-1",
+                }),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Contains((TestUserId, TestCloudAccountUid, "target-1"), context.Cache.InvalidatedDirectories);
+        CloudDriveGatewayRequest request = Assert.Single(context.Gateway.WebApiRequests);
+        Assert.Equal("files/copy", request.Endpoint);
+        Assert.Equal("file-1", request.Context.FormFields!["fid[0]"]);
+        Assert.Equal("json", request.Context.FormFields["format"]);
+        Assert.Equal("target-1", request.Context.FormFields["pid"]);
+    }
+
+    /// <summary>
+    /// 验证精确成功码类型不匹配时重命名 fail-closed。
+    /// </summary>
+    [Fact]
+    public async Task RenameFileCommandHandler_WhenErrnoTypeIsWrong_FailsClosed()
+    {
+        TestContext context = CreateContext();
+        context.Gateway.WebApiResponse = "{\"state\":true,\"errno\":\"0\",\"data\":{}}";
+        var handler = new RenameFileCommandHandler(
+            context.Gateway,
+            context.Accessor,
+            context.Cache,
+            CreateEnabledConfig());
+
+        await Assert.ThrowsAsync<CloudDriveApiException>(() => handler.Handle(
+            new RenameFileCommand(
+                TestUserId,
+                new RenameFileInput { FileId = "file-1", NewFileName = "renamed.txt" }),
+            CancellationToken.None));
+
+        Assert.Empty(context.Cache.InvalidatedFiles);
+    }
+
+    /// <summary>
+    /// 验证星标请求仅发送已采集 form 字段并在成功后失效文件缓存。
+    /// </summary>
+    [Fact]
+    public async Task ToggleStarCommandHandler_WhenSuccessEnvelopeReturned_UsesCollectedForm()
+    {
+        TestContext context = CreateContext();
+        context.Gateway.WebApiResponse = "{\"state\":true,\"error\":\"\"}";
+        var handler = new ToggleStarCommandHandler(
+            context.Gateway,
+            context.Accessor,
+            context.Cache,
+            CreateEnabledConfig());
+
+        Result<CloudDriveOperationResultDto> result = await handler.Handle(
+            new ToggleStarCommand(
+                TestUserId,
+                new ToggleStarInput { FileId = "file-1", Star = true }),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Contains((TestUserId, TestCloudAccountUid, "file-1"), context.Cache.InvalidatedFiles);
+        CloudDriveGatewayRequest request = Assert.Single(context.Gateway.WebApiRequests);
+        Assert.Equal("1", request.Context.FormFields!["star"]);
+        Assert.Equal("file-1", request.Context.FormFields["file_id"]);
+        Assert.Equal("json", request.Context.FormFields["format"]);
+    }
+
+    /// <summary>
+    /// 验证重命名文件名 UTF-8 长度超限时抛出无效名称异常。
+    /// </summary>
     [Fact]
     public async Task RenameFileCommandHandler_WhenUtf8NameTooLong_ThrowsInvalidName()
     {
         // Arrange
         TestContext context = CreateContext();
-        var handler = new RenameFileCommandHandler(CreateEnabledConfig());
+        var handler = new RenameFileCommandHandler(
+            context.Gateway, context.Accessor, context.Cache, CreateEnabledConfig());
         string tooLong = new('中', 86);
 
         // Act & Assert
@@ -201,28 +396,15 @@ public sealed class FileCommandQueryHandlerTests
             CancellationToken.None));
     }
 
+    /// <summary>
+    /// 验证上传能力禁用时在 Gateway、临时文件和后台任务之前 fail-closed。
+    /// </summary>
     [Fact]
-    public async Task UploadFileCommandHandler_WhenInstantUpload_ReturnsFileAndInvalidatesTargetDirectory()
+    public async Task UploadFileCommandHandler_WhenCapabilityDisabled_ReturnsNotCollectedWithoutSideEffects()
     {
         // Arrange
         TestContext context = CreateContext();
-        context.Gateway.UploadInitResponse = new CloudDriveUploadSessionDto
-        {
-            Status = 2,
-            PickCode = "pick-1",
-            File = new CloudDriveUploadedFileDto
-            {
-                FileId = "file-1",
-                Name = "demo.txt",
-                Path = "dir-1",
-            },
-        };
-        var handler = new UploadFileCommandHandler(
-            context.Gateway,
-            context.JobOrchestrator,
-            context.Cache,
-            context.Accessor,
-            CreateEnabledConfig());
+        var handler = new UploadFileCommandHandler();
 
         // Act
         await using var stream = new MemoryStream(Encoding.UTF8.GetBytes("demo"));
@@ -231,96 +413,21 @@ public sealed class FileCommandQueryHandlerTests
             CancellationToken.None);
 
         // Assert
-        Assert.True(result.IsSuccess);
-        Assert.False(result.Value.Accepted);
-        Assert.Equal("file-1", result.Value.File!.FileId);
-        Assert.Equal([(TestUserId, TestCloudAccountUid, "dir-1")], context.Cache.InvalidatedDirectories);
+        Assert.True(result.IsFailure);
+        Assert.Equal("cloud_drive_api_not_collected", result.Error.Code);
         Assert.Empty(context.Gateway.UploadRequests);
+        Assert.Empty(context.JobOrchestrator.Uploads);
     }
 
-    [Fact]
-    public async Task UploadFileCommandHandler_WhenOssUploadRequired_UploadsStream()
-    {
-        // Arrange
-        TestContext context = CreateContext();
-        context.Gateway.UploadInitResponse = new CloudDriveUploadSessionDto
-        {
-            Status = 1,
-            UploadEndpoint = "https://oss.example.com/",
-            FormFields = new Dictionary<string, string>
-            {
-                ["key"] = "object-key",
-                ["policy"] = "policy",
-                ["OSSAccessKeyId"] = "access-id",
-                ["signature"] = "signature",
-                ["callback"] = "callback",
-            },
-        };
-        context.Gateway.UploadFileResponse = new CloudDriveUploadedFileDto
-        {
-            FileId = "file-oss",
-            Name = "demo.txt",
-            Path = "dir-1",
-        };
-        var handler = new UploadFileCommandHandler(
-            context.Gateway,
-            context.JobOrchestrator,
-            context.Cache,
-            context.Accessor,
-            CreateEnabledConfig());
-
-        // Act
-        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes("payload"));
-        Result<CloudDriveUploadExecutionDto> result = await handler.Handle(
-            new UploadFileCommand(TestUserId, CreateUploadInput(), stream),
-            CancellationToken.None);
-
-        // Assert
-        Assert.True(result.IsSuccess);
-        Assert.Equal("file-oss", result.Value.File!.FileId);
-        CloudDriveUploadRequest upload = Assert.Single(context.Gateway.UploadRequests);
-        Assert.Equal("https://oss.example.com/", upload.UploadUrl);
-        Assert.Equal("payload", upload.Content);
-        Assert.Equal("object-key", upload.FormFields["key"]);
-    }
-
-    [Fact]
-    public async Task UploadFileCommandHandler_WhenForceAsync_EnqueuesUploadJob()
-    {
-        // Arrange
-        TestContext context = CreateContext();
-        var handler = new UploadFileCommandHandler(
-            context.Gateway,
-            context.JobOrchestrator,
-            context.Cache,
-            context.Accessor,
-            CreateEnabledConfig());
-        UploadFileInput input = CreateUploadInput();
-        input.ForceAsync = true;
-        input.TempFilePath = "C:\\temp\\upload.tmp";
-
-        // Act
-        Result<CloudDriveUploadExecutionDto> result = await handler.Handle(
-            new UploadFileCommand(TestUserId, input, FileStream: null),
-            CancellationToken.None);
-
-        // Assert
-        Assert.True(result.IsSuccess);
-        Assert.True(result.Value.Accepted);
-        Assert.Equal(context.JobOrchestrator.NextJobId, result.Value.JobId);
-        Assert.Single(context.JobOrchestrator.Uploads);
-        Assert.Empty(context.Gateway.UploadInitContexts);
-    }
-
+    /// <summary>
+    /// 验证小批量移动接口未采集时返回失败且不发送网关请求。
+    /// </summary>
     [Fact]
     public async Task MoveFilesCommandHandler_WhenSmallBatchApiNotCollected_ReturnsFailureWithoutGatewayRequest()
     {
         // Arrange
         TestContext context = CreateContext();
-        var handler = new MoveFilesCommandHandler(
-            context.JobOrchestrator,
-            context.Accessor,
-            CreateEnabledConfig());
+        var handler = new MoveFilesCommandHandler();
         var input = new MoveFilesInput
         {
             FileIds = ["file-1", "file-2"],
@@ -339,14 +446,18 @@ public sealed class FileCommandQueryHandlerTests
         Assert.Empty(context.Gateway.WebApiRequests);
     }
 
+    /// <summary>
+    /// 验证复制能力保持单项 disabled，不创建批量后台任务。
+    /// </summary>
     [Fact]
-    public async Task CopyFilesCommandHandler_WhenLargeBatch_EnqueuesBatchJob()
+    public async Task CopyFilesCommandHandler_WhenBatchRequested_ReturnsNotCollectedWithoutJob()
     {
         // Arrange
         TestContext context = CreateContext();
         var handler = new CopyFilesCommandHandler(
-            context.JobOrchestrator,
+            context.Gateway,
             context.Accessor,
+            context.Cache,
             CreateEnabledConfig());
         var input = new CopyFilesInput
         {
@@ -362,12 +473,15 @@ public sealed class FileCommandQueryHandlerTests
             CancellationToken.None);
 
         // Assert
-        Assert.True(result.IsSuccess);
-        Assert.True(result.Value.Accepted);
-        Assert.Equal(CloudDriveJobType.BatchCopy, context.JobOrchestrator.BatchOperations.Single().JobType);
+        Assert.True(result.IsFailure);
+        Assert.Equal("cloud_drive_copy_single_file_required", result.Error.Code);
+        Assert.Empty(context.JobOrchestrator.BatchOperations);
         Assert.Empty(context.Gateway.WebApiRequests);
     }
 
+    /// <summary>
+    /// 验证回收站网关返回空页时处理器返回空列表。
+    /// </summary>
     [Fact]
     public async Task GetRecycleBinListQueryHandler_WhenGatewayReturnsEmptyPage_ReturnsEmptyItems()
     {
@@ -379,7 +493,7 @@ public sealed class FileCommandQueryHandlerTests
             Count = 0,
             Offset = 0,
             PageSize = 30,
-            ItemSchemaStatus = "not_collected",
+                    ItemSchemaStatus = "available",
         };
         var handler = new GetRecycleBinListQueryHandler(context.Gateway, context.Accessor, CreateEnabledConfig());
 
@@ -397,18 +511,25 @@ public sealed class FileCommandQueryHandlerTests
         // Assert
         Assert.True(result.IsSuccess);
         Assert.Empty(result.Value.Items);
-        Assert.Equal("not_collected", result.Value.ItemSchemaStatus);
+        Assert.Equal("available", result.Value.ItemSchemaStatus);
         CloudDriveGatewayRequest request = Assert.Single(context.Gateway.WebApiRequests);
         Assert.Equal("rb", request.Endpoint);
-        Assert.Equal("7", request.Context.QueryParameters!["aid"]);
+        Assert.Equal(
+            ["asc", "format", "limit", "o", "offset"],
+            request.Context.QueryParameters!.Keys.OrderBy(key => key, StringComparer.Ordinal).ToArray());
+        Assert.Equal("0", request.Context.QueryParameters!["asc"]);
+        Assert.Equal("file_name", request.Context.QueryParameters["o"]);
     }
 
+    /// <summary>
+    /// 验证清空回收站保持 disabled，不创建后台任务。
+    /// </summary>
     [Fact]
-    public async Task ClearRecycleBinCommandHandler_AlwaysEnqueuesBackgroundJob()
+    public async Task ClearRecycleBinCommandHandler_WhenCalled_ReturnsNotCollectedWithoutJob()
     {
         // Arrange
         TestContext context = CreateContext();
-        var handler = new ClearRecycleBinCommandHandler(context.JobOrchestrator, context.Accessor, CreateEnabledConfig());
+        var handler = new ClearRecycleBinCommandHandler();
 
         // Act
         Result<CloudDriveOperationResultDto> result = await handler.Handle(
@@ -418,14 +539,16 @@ public sealed class FileCommandQueryHandlerTests
             CancellationToken.None);
 
         // Assert
-        Assert.True(result.IsSuccess);
-        Assert.True(result.Value.Accepted);
-        Assert.Equal(context.JobOrchestrator.NextJobId, result.Value.JobId);
-        Assert.Equal((TestUserId, TestCloudAccountUid), context.JobOrchestrator.ClearRecycleBins.Single());
+        Assert.True(result.IsFailure);
+        Assert.Equal("cloud_drive_api_not_collected", result.Error.Code);
+        Assert.Empty(context.JobOrchestrator.ClearRecycleBins);
     }
 
+    /// <summary>
+    /// 验证刷新目录命令失效目录缓存并重新拉取最新元数据。
+    /// </summary>
     [Fact]
-    public async Task RefreshDirectoryCommandHandler_InvalidatesAndFetchesFreshMetadata()
+    public async Task RefreshDirectoryCommandHandler_WhenCalled_InvalidatesAndFetchesFreshMetadata()
     {
         // Arrange
         TestContext context = CreateContext();
@@ -433,7 +556,6 @@ public sealed class FileCommandQueryHandlerTests
         var handler = new RefreshDirectoryCommandHandler(
             context.Gateway,
             context.Cache,
-            context.RateLimiter,
             context.Accessor,
             CreateEnabledConfig());
 
@@ -450,7 +572,6 @@ public sealed class FileCommandQueryHandlerTests
         // Assert
         Assert.True(result.IsSuccess);
         Assert.Equal([(TestUserId, TestCloudAccountUid, "dir-1")], context.Cache.InvalidatedDirectories);
-        Assert.Equal("file-list", context.RateLimiter.Acquisitions.Single().Category);
         Assert.Single(context.Gateway.WebApiRequests);
     }
 
@@ -463,7 +584,6 @@ public sealed class FileCommandQueryHandlerTests
         var fileManager = new CloudDriveFileManager(
             cache,
             gateway,
-            rateLimiter,
             CreateEnabledConfig(),
             logger);
         var accessor = new CloudDriveAccountContextAccessor();

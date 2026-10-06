@@ -1,11 +1,11 @@
-using Domain.Entities;
+﻿using Domain.Entities;
 
 namespace Domain.Repositories;
 
 /// <summary>
 /// 泛型仓储接口。封装聚合持久化的 CRUD 契约。
 /// </summary>
-/// <typeparam name="TEntity">聚合根类型，必须继承自 <see cref="Entity{TId}"/>。</typeparam>
+/// <typeparam name="TEntity">聚合根类型，必须继承自 <see cref="AggregateRoot{TId}"/>。</typeparam>
 /// <typeparam name="TId">聚合根标识类型。</typeparam>
 /// <remarks>
 /// <para>
@@ -18,7 +18,7 @@ namespace Domain.Repositories;
 /// </para>
 /// </remarks>
 public interface IRepository<TEntity, TId>
-    where TEntity : Entity<TId>
+    where TEntity : AggregateRoot<TId>
     where TId : notnull
 {
     /// <summary>

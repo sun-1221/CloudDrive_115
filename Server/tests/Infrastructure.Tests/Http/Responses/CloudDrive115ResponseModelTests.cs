@@ -1,34 +1,43 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 using Infrastructure.Http.Json;
 using Infrastructure.Http.Responses;
 
 namespace Infrastructure.Tests.Http.Responses;
 
+/// <summary>
+/// 115 开放平台响应模型反序列化测试。
+/// </summary>
 public sealed class CloudDrive115ResponseModelTests
 {
+    /// <summary>
+    /// 验证通用 Web 响应可反序列化混合类型 state 字段。
+    /// </summary>
     [Theory]
     [InlineData("""{"state":true,"code":0,"message":"ok"}""", true)]
     [InlineData("""{"state":1,"code":"0","msg":"ok"}""", true)]
     [InlineData("""{"state":0,"errNo":401,"error":"login required"}""", false)]
-    public void CloudDrive115WebResponse_DeserializesBoolAndNumberState(string json, bool expectedState)
+    public void CloudDrive115WebResponse_WhenStateHasMixedTypes_DeserializesBoolAndNumberState(string json, bool expectedState)
     {
-        // 准备
+        // Arrange（准备）
 
-        // 执行
+        // Act（执行）
         CloudDrive115WebResponse<JsonElement>? response = JsonSerializer.Deserialize<CloudDrive115WebResponse<JsonElement>>(
             json,
             CloudDrive115JsonSerializerOptions.Defaults);
 
-        // 断言
+        // Assert（断言）
         Assert.NotNull(response);
         Assert.Equal(expectedState, response.State);
     }
 
+    /// <summary>
+    /// 验证文件列表响应会规范化 Web 文件字段。
+    /// </summary>
     [Fact]
-    public void CloudDriveFileListResponse_NormalizesWebFileFields()
+    public void CloudDriveFileListResponse_WhenWebFieldsReturned_NormalizesWebFileFields()
     {
-        // 准备
+        // Arrange（准备）
         const string json = """
             {
               "count": "2",
@@ -45,12 +54,12 @@ public sealed class CloudDrive115ResponseModelTests
             }
             """;
 
-        // 执行
+        // Act（执行）
         CloudDriveFileListResponse? response = JsonSerializer.Deserialize<CloudDriveFileListResponse>(
             json,
             CloudDrive115JsonSerializerOptions.Defaults);
 
-        // 断言
+        // Assert（断言）
         Assert.NotNull(response);
         Assert.Equal(2, response.Count);
         Assert.Equal("0", response.Path.Single().DirectoryId);
@@ -69,10 +78,13 @@ public sealed class CloudDrive115ResponseModelTests
         Assert.Equal("ABC", file.Sha1);
     }
 
+    /// <summary>
+    /// 验证回收站响应会反序列化顶层字段与非空条目。
+    /// </summary>
     [Fact]
-    public void CloudDriveRecycleBinResponse_DeserializesTopLevelFieldsOnly()
+    public void CloudDriveRecycleBinResponse_WhenTopLevelFieldsReturned_DeserializesTopLevelFieldsOnly()
     {
-        // 准备
+        // Arrange（准备）
         const string json = """
             {
               "count": "1",
@@ -80,39 +92,45 @@ public sealed class CloudDrive115ResponseModelTests
               "offset": 0,
               "page_size": 30,
               "is_asc": 0,
-              "data": {
-                "recycled-1": {
+              "data": [
+                {
+                  "id": "recycled-1",
                   "file_name": "Deleted Folder",
-                  "type": 2,
+                  "type": "2",
                   "file_size": "64",
-                  "dtime": 1776518000,
+                  "dtime": "1776518000",
                   "cid": "0",
                   "parent_name": "root",
-                  "pick_code": "pick",
-                  "status": -1
+                  "status": "-1"
                 }
-              }
+              ]
             }
             """;
 
-        // 执行
+        // Act（执行）
         CloudDriveRecycleBinResponse? response = JsonSerializer.Deserialize<CloudDriveRecycleBinResponse>(
             json,
             CloudDrive115JsonSerializerOptions.Defaults);
 
-        // 断言
+        // Assert（断言）
         Assert.NotNull(response);
         Assert.Equal(1, response.Count);
 
         Assert.Equal(0, response.RecycleBinPasswordEnabled);
         Assert.Equal(30, response.PageSize);
         Assert.Equal(0, response.IsAscending);
+        CloudDriveRecycleBinItemResponse item = Assert.Single(response.Items);
+        Assert.Equal("recycled-1", item.Id);
+        Assert.Equal("Deleted Folder", item.FileName);
     }
 
+    /// <summary>
+    /// 验证上传初始化响应可区分秒传和 OSS 凭据。
+    /// </summary>
     [Fact]
-    public void CloudDriveUploadInitResponse_DistinguishesInstantUploadAndOssCredentials()
+    public void CloudDriveUploadInitResponse_WhenDifferentUploadModesReturned_DistinguishesInstantUploadAndOssCredentials()
     {
-        // 准备
+        // Arrange（准备）
         const string instantJson = """{"file_id":"3409","file_name":"a.txt","pick_code":"abc","sha1":"SHA","cid":"0"}""";
         const string ossJson = """
             {
@@ -126,7 +144,7 @@ public sealed class CloudDrive115ResponseModelTests
             }
             """;
 
-        // 执行
+        // Act（执行）
         CloudDriveUploadInitResponse? instant = JsonSerializer.Deserialize<CloudDriveUploadInitResponse>(
             instantJson,
             CloudDrive115JsonSerializerOptions.Defaults);
@@ -134,7 +152,7 @@ public sealed class CloudDrive115ResponseModelTests
             ossJson,
             CloudDrive115JsonSerializerOptions.Defaults);
 
-        // 断言
+        // Assert（断言）
         Assert.NotNull(instant);
         Assert.True(instant.IsInstantUpload);
         Assert.False(instant.HasOssCredential);
@@ -145,10 +163,13 @@ public sealed class CloudDrive115ResponseModelTests
         Assert.Equal(1776518659L, oss.Expire);
     }
 
+    /// <summary>
+    /// 验证 VIP 卡响应可映射数字开头的余额字段。
+    /// </summary>
     [Fact]
-    public void CloudDriveVipCardResponse_MapsNumericLeadingBalanceField()
+    public void CloudDriveVipCardResponse_WhenBalanceFieldStartsWithNumber_MapsNumericLeadingBalanceField()
     {
-        // 准备
+        // Arrange（准备）
         const string json = """
             {
               "num": 1,
@@ -161,22 +182,25 @@ public sealed class CloudDrive115ResponseModelTests
             }
             """;
 
-        // 执行
+        // Act（执行）
         CloudDriveVipCardResponse? response = JsonSerializer.Deserialize<CloudDriveVipCardResponse>(
             json,
             CloudDrive115JsonSerializerOptions.Defaults);
 
-        // 断言
+        // Assert（断言）
         Assert.NotNull(response);
         Assert.Equal(700, response.Balance);
         Assert.Equal(5, response.SqCodeCount);
         Assert.Equal(6, response.SqCodeCancelCount);
     }
 
+    /// <summary>
+    /// 验证离线任务列表响应会规范化任务对象字段。
+    /// </summary>
     [Fact]
-    public void CloudDriveOfflineTaskListResponse_NormalizesTaskObjectFields()
+    public void CloudDriveOfflineTaskListResponse_WhenTaskObjectsReturned_NormalizesTaskObjectFields()
     {
-        // 准备
+        // Arrange（准备）
         const string json = """
             {
               "page": 1,
@@ -205,12 +229,12 @@ public sealed class CloudDrive115ResponseModelTests
             }
             """;
 
-        // 执行
+        // Act（执行）
         CloudDriveOfflineTaskListResponse? response = JsonSerializer.Deserialize<CloudDriveOfflineTaskListResponse>(
             json,
             CloudDrive115JsonSerializerOptions.Defaults);
 
-        // 断言
+        // Assert（断言）
         Assert.NotNull(response);
         Assert.True(response.RealState);
 

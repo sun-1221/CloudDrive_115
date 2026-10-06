@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text.Json;
 
 using Application.Abstractions.CloudDrive;
@@ -7,10 +7,7 @@ using Domain.Exceptions;
 
 using FluentValidation;
 
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 
 namespace WebApi.Middleware;
 
@@ -46,6 +43,7 @@ public sealed class ExceptionHandlingMiddleware(
     /// <summary>
     /// 中间件入口。捕获后续管道异常并写入 ProblemDetails 响应。
     /// </summary>
+    /// <returns>表示异步中间件管道处理的 <see cref="Task"/>。</returns>
     public async Task InvokeAsync(HttpContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -54,7 +52,9 @@ public sealed class ExceptionHandlingMiddleware(
         {
             await _next(context);
         }
+#pragma warning disable CA1031 // 全局异常处理中间件必须兜底捕获所有未处理异常
         catch (Exception ex)
+#pragma warning restore CA1031
         {
             _logger.LogError(
                 ex,
@@ -117,6 +117,9 @@ public sealed class ExceptionHandlingMiddleware(
             case CloudDriveConfigurationException cloudDriveConfiguration:
                 return BuildDomainProblem(cloudDriveConfiguration, instance, (int)HttpStatusCode.ServiceUnavailable);
 
+            case CloudDriveApiNotCollectedException cloudDriveApiNotCollected:
+                return BuildDomainProblem(cloudDriveApiNotCollected, instance, 501);
+
             case CloudDriveNetworkException cloudDriveNetwork:
                 return BuildDomainProblem(cloudDriveNetwork, instance, (int)HttpStatusCode.BadGateway);
 
@@ -124,7 +127,16 @@ public sealed class ExceptionHandlingMiddleware(
                 return BuildDomainProblem(cloudDriveUpload, instance, (int)HttpStatusCode.InternalServerError);
 
             case CloudDriveApiException cloudDriveApi:
-                return BuildDomainProblem(cloudDriveApi, instance, (int)HttpStatusCode.BadGateway);
+                int cloudDriveApiStatusCode = string.Equals(
+                    cloudDriveApi.ErrorCode,
+                    "cloud_drive_api_not_collected",
+                    StringComparison.Ordinal)
+                    ? 501
+                    : (int)HttpStatusCode.BadGateway;
+                return BuildDomainProblem(
+                    cloudDriveApi,
+                    instance,
+                    cloudDriveApiStatusCode);
 
             case DomainException domain:
                 return BuildDomainProblem(domain, instance, domain.StatusCode);
@@ -185,6 +197,7 @@ public sealed class ExceptionHandlingMiddleware(
         404 => "Not Found",
         409 => "Conflict",
         429 => "Too Many Requests",
+        501 => "Not Implemented",
         502 => "Bad Gateway",
         503 => "Service Unavailable",
         _ => "Error",

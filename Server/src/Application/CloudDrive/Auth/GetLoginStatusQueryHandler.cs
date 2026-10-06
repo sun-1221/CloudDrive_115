@@ -16,7 +16,7 @@ namespace Application.CloudDrive.Auth;
 
 internal sealed class GetLoginStatusQueryHandler(
     ICookieSessionRepository cookieSessionRepository,
-    ICloudDriveOpenApiGateway openApiGateway,
+    ICloudDriveWebApiGateway openApiGateway,
     IOptions<CloudDriveAppConfig> configOptions)
     : IQueryHandler<GetLoginStatusQuery, CloudDriveAuthCheckDto>
 {
@@ -34,6 +34,8 @@ internal sealed class GetLoginStatusQueryHandler(
             return Result.Success(new CloudDriveAuthCheckDto
             {
                 IsAuthenticated = false,
+                IsLoggedIn = false,
+                LastCheckedAt = checkedAt,
                 FailureReason = "cookie_invalid",
             });
         }
@@ -43,18 +45,22 @@ internal sealed class GetLoginStatusQueryHandler(
             return Result.Success(new CloudDriveAuthCheckDto
             {
                 IsAuthenticated = false,
+                IsLoggedIn = false,
+                LastCheckedAt = checkedAt,
                 FailureReason = "cookie_invalid",
             });
         }
 
         CookieSession session = activeSessions[0];
-        if (session is { Status: CookieSessionStatus.Invalidated }
-            && session.IsInCooldown(checkedAt))
+        if (session.Status != CookieSessionStatus.Active || session.IsInCooldown(checkedAt))
         {
             return Result.Success(new CloudDriveAuthCheckDto
             {
                 IsAuthenticated = false,
-                FailureReason = "cookie_invalid",
+                IsLoggedIn = false,
+                LastCheckedAt = checkedAt,
+                CooldownUntil = session.CooldownUntil,
+                FailureReason = "cookie_not_active",
             });
         }
 
@@ -73,6 +79,8 @@ internal sealed class GetLoginStatusQueryHandler(
             return Result.Success(new CloudDriveAuthCheckDto
             {
                 IsAuthenticated = true,
+                IsLoggedIn = true,
+                LastCheckedAt = checkedAt,
             });
         }
         catch (CloudDriveCookieInvalidatedException ex)
@@ -83,16 +91,18 @@ internal sealed class GetLoginStatusQueryHandler(
             return Result.Success(new CloudDriveAuthCheckDto
             {
                 IsAuthenticated = false,
+                IsLoggedIn = false,
+                LastCheckedAt = checkedAt,
                 FailureReason = NormalizeFailureReason(ex.ErrorCode, "cookie_invalid"),
             });
         }
         catch (CloudDriveNetworkException ex)
         {
-            return Result.Success(CreateFailedStatus(ex.ErrorCode, "network"));
+            return Result.Success(CreateFailedStatus(checkedAt, ex.ErrorCode, "network"));
         }
         catch (CloudDriveApiException ex)
         {
-            return Result.Success(CreateFailedStatus(ex.ErrorCode, "network"));
+            return Result.Success(CreateFailedStatus(checkedAt, ex.ErrorCode, "network"));
         }
     }
 
@@ -105,7 +115,7 @@ internal sealed class GetLoginStatusQueryHandler(
             : await cookieSessionRepository.GetAvailableSessionsAsync(cancellationToken);
 
         return sessions
-            .Where(session => session.Status is CookieSessionStatus.Active or CookieSessionStatus.Invalidated)
+            .Where(session => session.Status is CookieSessionStatus.Active)
             .ToList();
     }
 
@@ -124,12 +134,15 @@ internal sealed class GetLoginStatusQueryHandler(
     }
 
     private static CloudDriveAuthCheckDto CreateFailedStatus(
+        DateTime checkedAt,
         string? failureReason,
         string fallback)
     {
         return new CloudDriveAuthCheckDto
         {
             IsAuthenticated = false,
+            IsLoggedIn = null,
+            LastCheckedAt = checkedAt,
             FailureReason = NormalizeFailureReason(failureReason, fallback),
         };
     }

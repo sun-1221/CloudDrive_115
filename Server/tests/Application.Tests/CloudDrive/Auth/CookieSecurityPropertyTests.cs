@@ -1,5 +1,4 @@
-using Application.Abstractions.CloudDrive;
-using Application.CloudDrive;
+﻿using Application.CloudDrive;
 using Application.CloudDrive.Auth;
 using Application.Tests.Support;
 
@@ -22,7 +21,9 @@ public sealed class CookieSecurityPropertyTests
         string uid, string cid, string ussid)
     {
         if (string.IsNullOrEmpty(uid) || string.IsNullOrEmpty(cid) || string.IsNullOrEmpty(ussid))
+        {
             return;
+        }
 
         // Arrange
         var repo = new FakeCookieSessionRepository();
@@ -44,6 +45,7 @@ public sealed class CookieSecurityPropertyTests
         string encrypted = session.EncryptedCookiePayload;
 
         Assert.StartsWith(FakeCloudDriveSecretProtector.Prefix, encrypted);
+
         // 原始明文 uid/cid/ussid 不应以未编码形式出现在加密字符串中
         // （FakeProtector 使用 Base64，因此直接字符串不会出现）
         Assert.DoesNotContain($"\"uid\":\"{uid}\"", encrypted);

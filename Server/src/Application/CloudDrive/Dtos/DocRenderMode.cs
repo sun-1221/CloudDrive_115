@@ -1,4 +1,4 @@
-namespace Application.CloudDrive.Dtos;
+﻿namespace Application.CloudDrive.Dtos;
 
 /// <summary>
 /// 文档渲染方式。
@@ -18,5 +18,5 @@ public enum DocRenderMode
     /// <summary>
     /// 当前不可预览。
     /// </summary>
-    NotAvailable
+    NotAvailable,
 }

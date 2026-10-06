@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 
 namespace WebApi.Tests.Support;
 
@@ -16,7 +16,9 @@ public sealed class FakeLogger<T> : ILogger<T>
     public IReadOnlyList<LogEntry> Entries => _entries;
 
     /// <inheritdoc />
-    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+    public IDisposable? BeginScope<TState>(TState state)
+        where TState : notnull
+        => null;
 
     /// <inheritdoc />
     public bool IsEnabled(LogLevel logLevel) => true;

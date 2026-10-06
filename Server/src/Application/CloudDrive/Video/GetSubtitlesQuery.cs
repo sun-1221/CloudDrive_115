@@ -1,3 +1,4 @@
+﻿using Application.Abstractions;
 using Application.Abstractions.CloudDrive;
 using Application.CloudDrive.Dtos;
 using Application.Queries;
@@ -5,4 +6,4 @@ using Application.Queries;
 namespace Application.CloudDrive.Video;
 
 public sealed record GetSubtitlesQuery(Guid UserId, GetSubtitlesInput Input)
-    : IQuery<CloudDriveSubtitleListDto>, ICloudDriveAccountScopedRequest;
+    : IQuery<CloudDriveSubtitleListDto>, ICloudDriveAccountScopedRequest, IHasInput<GetSubtitlesInput>;

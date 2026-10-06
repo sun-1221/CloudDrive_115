@@ -9,7 +9,6 @@ using Application.Queries;
 using Application.Tests.Support;
 
 using Domain.Exceptions;
-using Domain.Repositories;
 using Domain.Results;
 using Domain.ValueObjects;
 
@@ -26,6 +25,9 @@ namespace Application.Tests.CloudDrive.Auth;
 /// </summary>
 public sealed class ConfigurationCompletenessPropertyTests
 {
+    /// <summary>
+    /// 验证核心配置缺失时启动校验会禁用 115 网盘功能。
+    /// </summary>
     [Property]
     public void ApplyStartupValidation_WhenCoreConfigMissing_DisablesFeature(
         string? cookieEncryptionKeyName,
@@ -48,6 +50,9 @@ public sealed class ConfigurationCompletenessPropertyTests
         Assert.Equal(!missingRequiredConfig, config.CloudDriveFeatureEnabled);
     }
 
+    /// <summary>
+    /// 验证启用离线签名但签名密钥缺失时启动校验会禁用功能。
+    /// </summary>
     [Property]
     public void ApplyStartupValidation_WhenOfflineSignatureEnabledAndSignatureKeyMissing_DisablesFeature(
         string? signatureKeyName)
@@ -69,6 +74,9 @@ public sealed class ConfigurationCompletenessPropertyTests
         Assert.Equal(!string.IsNullOrWhiteSpace(config.SignatureKeyName), config.CloudDriveFeatureEnabled);
     }
 
+    /// <summary>
+    /// 验证功能禁用时认证处理器会抛出配置异常。
+    /// </summary>
     [Fact]
     public async Task AuthHandlers_WhenFeatureDisabled_ThrowConfigurationException()
     {
@@ -127,6 +135,9 @@ public sealed class ConfigurationCompletenessPropertyTests
         Assert.Empty(context.RateLimiter.ResetCalls);
     }
 
+    /// <summary>
+    /// 验证功能启用时认证处理器可正常运行且不抛出配置异常。
+    /// </summary>
     [Fact]
     public async Task AuthHandlers_WhenFeatureEnabled_RunWithoutConfigurationException()
     {
@@ -164,7 +175,8 @@ public sealed class ConfigurationCompletenessPropertyTests
         Assert.True(upsertResult.IsSuccess);
         Assert.True(boundAccountsResult.IsSuccess);
         Assert.True(loginStatusResult.IsSuccess);
-        Assert.True(userInfoResult.IsSuccess);
+        Assert.True(userInfoResult.IsFailure);
+        Assert.Equal("cloud_drive_api_not_collected", userInfoResult.Error.Code);
         Assert.True(revokeResult.IsSuccess);
     }
 
@@ -348,7 +360,7 @@ public sealed class ConfigurationCompletenessPropertyTests
         }
     }
 
-    private sealed class RecordingGateway : ICloudDriveOpenApiGateway
+    private sealed class RecordingGateway : ICloudDriveWebApiGateway
     {
         private readonly Dictionary<string, JsonElement> _webResponses = new(StringComparer.Ordinal);
         private readonly Dictionary<string, JsonElement> _userCenterResponses = new(StringComparer.Ordinal);

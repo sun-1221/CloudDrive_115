@@ -1,7 +1,7 @@
-using Domain.Results;
-
-using Application.CloudDrive.Dtos;
+﻿using Application.CloudDrive.Dtos;
 using Application.CloudDrive.Share;
+
+using Domain.Results;
 
 using MediatR;
 
@@ -17,6 +17,14 @@ namespace WebApi.Controllers;
 [Route("api/shares")]
 public sealed class SharesController(ISender sender) : ControllerBase
 {
+    /// <summary>
+    /// 获取分享列表（按 tab 区分：slist/send/receive）。
+    /// </summary>
+    /// <param name="tab">离线任务分类页签。</param>
+    /// <param name="offset">分页偏移量。</param>
+    /// <param name="limit">分页返回数量上限。</param>
+    /// <param name="cancellationToken">用于取消当前异步操作的令牌。</param>
+    /// <returns>表示异步操作结果的 <see cref="Task{TResult}"/>。</returns>
     [HttpGet]
     public async Task<IResult> GetAsync(
         [FromQuery] string tab,

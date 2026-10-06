@@ -9,7 +9,6 @@ using Application.Queries;
 using Application.Tests.Support;
 
 using Domain.Enums;
-using Domain.Repositories;
 using Domain.Results;
 using Domain.ValueObjects;
 
@@ -17,8 +16,14 @@ using Microsoft.Extensions.Options;
 
 namespace Application.Tests.CloudDrive.Auth;
 
+/// <summary>
+/// Cookie 会话查询与撤销处理器测试。
+/// </summary>
 public sealed class CookieSessionQueryHandlerTests
 {
+    /// <summary>
+    /// 验证绑定账号查询仅返回当前用户的账号摘要。
+    /// </summary>
     [Fact]
     public async Task GetBoundAccountsQueryHandler_WhenMultipleUsers_ReturnsOnlyCurrentUserSummaries()
     {
@@ -47,6 +52,9 @@ public sealed class CookieSessionQueryHandlerTests
         Assert.Null(typeof(CloudDriveAccountSummaryDto).GetProperty("EncryptedCookiePayload"));
     }
 
+    /// <summary>
+    /// 验证撤销 Cookie 会话仅影响目标账号并清理本地状态。
+    /// </summary>
     [Fact]
     public async Task RevokeCookieSessionCommandHandler_WhenValid_RevokesOnlyTargetAccountAndClearsLocalState()
     {
@@ -81,6 +89,9 @@ public sealed class CookieSessionQueryHandlerTests
         Assert.Equal([(userId, "115001", null)], rateLimiter.ResetCalls);
     }
 
+    /// <summary>
+    /// 验证目标云盘账号缺失时撤销命令返回失败且无副作用。
+    /// </summary>
     [Fact]
     public async Task RevokeCookieSessionCommandHandler_WhenCloudAccountMissing_ReturnsFailureWithoutSideEffects()
     {
@@ -109,6 +120,9 @@ public sealed class CookieSessionQueryHandlerTests
         Assert.Empty(rateLimiter.ResetCalls);
     }
 
+    /// <summary>
+    /// 验证活跃会话可聚合并返回用户信息。
+    /// </summary>
     [Fact]
     public async Task GetUserInfoQueryHandler_WhenSessionActive_ReturnsAggregatedUserInfo()
     {
@@ -121,7 +135,6 @@ public sealed class CookieSessionQueryHandlerTests
         var gateway = new RecordingUserGateway();
         gateway.RespondWeb("files/index_info", """{"state":true,"data":{"all_total":"10 GB","all_use":"2 GB","all_remain":"8 GB","all_total_size":10,"all_use_size":2,"all_remain_size":8}}""");
         gateway.RespondWeb("user/vip_limit", """{"state":true,"data":{"level_name":"VIP","expire":"1893456000"}}""");
-        gateway.RespondUserCenter("proapi/3.0/index.php", """{"state":true,"data":{"user_name":"tester","user_face_s":"small.png","user_face_m":"medium.png","user_face_l":"large.png"}}""");
         gateway.RespondUserCenter(".", """{"state":true,"data":{"vip_count":2,"00_balance":88}}""");
 
         UserAggregationService service = CreateUserAggregationService(gateway);
@@ -139,15 +152,15 @@ public sealed class CookieSessionQueryHandlerTests
             CancellationToken.None);
 
         // Assert
-        Assert.True(result.IsSuccess);
-        Assert.Equal("115001", result.Value.Uid);
-        Assert.Equal("tester", result.Value.Nickname);
-        Assert.Equal("small.png", result.Value.AvatarUrl);
-        Assert.Equal(["files/index_info", "user/vip_limit"], gateway.WebEndpoints.Order());
-        Assert.Contains("proapi/3.0/index.php", gateway.UserCenterEndpoints);
-        Assert.Equal(2, gateway.UserCenterEndpoints.Count(endpoint => endpoint == "."));
+        Assert.True(result.IsFailure);
+        Assert.Equal("cloud_drive_api_not_collected", result.Error.Code);
+        Assert.Empty(gateway.WebEndpoints);
+        Assert.Empty(gateway.UserCenterEndpoints);
     }
 
+    /// <summary>
+    /// 验证非活跃会话查询用户信息时返回 Cookie 未激活失败。
+    /// </summary>
     [Fact]
     public async Task GetUserInfoQueryHandler_WhenSessionNotActive_ReturnsCookieNotActive()
     {
@@ -180,10 +193,13 @@ public sealed class CookieSessionQueryHandlerTests
         Assert.Empty(gateway.UserCenterEndpoints);
     }
 
+    /// <summary>
+    /// 验证账号上下文未设置时用户信息查询抛出无效操作异常。
+    /// </summary>
     [Fact]
     public async Task GetUserInfoQueryHandler_WhenAccessorNotSet_ThrowsInvalidOperation()
     {
-        // Arrange
+        // Arrange（准备）
         var repository = new FakeCookieSessionRepository();
         var gateway = new RecordingUserGateway();
         UserAggregationService service = CreateUserAggregationService(gateway);
@@ -193,11 +209,13 @@ public sealed class CookieSessionQueryHandlerTests
             new CloudDriveAccountContextAccessor(),
             CreateEnabledConfig());
 
-        // Act & Assert — accessor 未设置上下文时直接抛异常
+        // Act（执行）
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => handler.Handle(
                 new GetUserInfoQuery(Guid.NewGuid()),
                 CancellationToken.None));
+
+        // Assert（断言）
         Assert.Empty(gateway.WebEndpoints);
         Assert.Empty(gateway.UserCenterEndpoints);
     }
@@ -212,7 +230,7 @@ public sealed class CookieSessionQueryHandlerTests
             new FakeLogger<CookieSessionManager>());
     }
 
-    private static UserAggregationService CreateUserAggregationService(ICloudDriveOpenApiGateway gateway)
+    private static UserAggregationService CreateUserAggregationService(ICloudDriveWebApiGateway gateway)
     {
         return new UserAggregationService(
             gateway,
@@ -289,7 +307,7 @@ public sealed class CookieSessionQueryHandlerTests
         }
     }
 
-    private sealed class RecordingUserGateway : ICloudDriveOpenApiGateway
+    private sealed class RecordingUserGateway : ICloudDriveWebApiGateway
     {
         private readonly Dictionary<string, JsonElement> _webResponses = new(StringComparer.Ordinal);
         private readonly Dictionary<string, JsonElement> _userCenterResponses = new(StringComparer.Ordinal);

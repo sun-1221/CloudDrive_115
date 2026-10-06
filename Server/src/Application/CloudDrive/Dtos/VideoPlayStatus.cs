@@ -1,4 +1,4 @@
-namespace Application.CloudDrive.Dtos;
+﻿namespace Application.CloudDrive.Dtos;
 
 /// <summary>
 /// 视频播放状态。
@@ -18,5 +18,5 @@ public enum VideoPlayStatus
     /// <summary>
     /// 正在转码。
     /// </summary>
-    Transcoding
+    Transcoding,
 }

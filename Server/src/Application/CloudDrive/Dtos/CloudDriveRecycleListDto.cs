@@ -1,4 +1,4 @@
-namespace Application.CloudDrive.Dtos;
+﻿namespace Application.CloudDrive.Dtos;
 
 /// <summary>
 /// 115 回收站列表顶层信息。
@@ -6,7 +6,7 @@ namespace Application.CloudDrive.Dtos;
 public class CloudDriveRecycleListDto
 {
     /// <summary>
-    /// 获取或设置回收站条目占位列表。
+    /// 获取或设置回收站条目列表。
     /// </summary>
     public IReadOnlyList<CloudDriveRecycleBinItemDto> Items { get; set; } = [];
 

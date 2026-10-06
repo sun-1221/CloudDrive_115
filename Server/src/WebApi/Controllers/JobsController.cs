@@ -1,4 +1,4 @@
-using Application.CloudDrive.Dtos;
+﻿using Application.CloudDrive.Dtos;
 using Application.CloudDrive.Jobs;
 
 using Domain.Enums;
@@ -17,6 +17,12 @@ namespace WebApi.Controllers;
 [Route("api/jobs")]
 public sealed class JobsController(ISender sender) : ControllerBase
 {
+    /// <summary>
+    /// 获取指定后台任务的状态。
+    /// </summary>
+    /// <param name="jobId">后台任务唯一标识。</param>
+    /// <param name="cancellationToken">用于取消当前异步操作的令牌。</param>
+    /// <returns>表示异步操作结果的 <see cref="Task{TResult}"/>。</returns>
     [HttpGet("{jobId:guid}")]
     public async Task<IResult> GetAsync(Guid jobId, CancellationToken cancellationToken)
     {
@@ -29,6 +35,14 @@ public sealed class JobsController(ISender sender) : ControllerBase
         return result.ToHttpResult();
     }
 
+    /// <summary>
+    /// 获取后台任务列表。
+    /// </summary>
+    /// <param name="status">后台任务状态筛选条件。</param>
+    /// <param name="skipCount">分页跳过记录数。</param>
+    /// <param name="maxResultCount">分页返回记录数上限。</param>
+    /// <param name="cancellationToken">用于取消当前异步操作的令牌。</param>
+    /// <returns>表示异步操作结果的 <see cref="Task{TResult}"/>。</returns>
     [HttpGet]
     public async Task<IResult> GetListAsync(
         [FromQuery] CloudDriveJobStatus? status = null,

@@ -1,4 +1,4 @@
-using Application.CloudDrive;
+﻿using Application.CloudDrive;
 
 using Infrastructure.DependencyInjection;
 
@@ -12,6 +12,7 @@ builder.Services.AddCloudDrive(builder.Configuration);
 
 // JWT 认证：缺失配置时启动失败，避免受保护 API 退化为匿名访问
 builder.Services.AddJwtAuthentication(builder.Configuration);
+builder.Services.AddSingleton<IJwtTokenFactory, JwtTokenFactory>();
 
 // CORS：仅允许显式配置的前端域名访问
 CloudDriveAppConfig cloudDriveConfig = new();

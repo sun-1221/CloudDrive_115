@@ -1,4 +1,4 @@
-using Application.Abstractions.CloudDrive;
+﻿using Application.Abstractions.CloudDrive;
 using Application.CloudDrive;
 using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
@@ -19,21 +19,28 @@ public sealed class UpsertCookieSessionCommandHandlerTests
     [Fact]
     public async Task Handle_WhenFeatureDisabled_ThrowsConfigurationException()
     {
+        // Arrange（准备）
         TestContext context = CreateContext(featureEnabled: false);
         UpsertCookieSessionCommand command = CreateCommand();
 
+        // Act（执行）
         await Assert.ThrowsAsync<CloudDriveConfigurationException>(
             () => context.Handler.Handle(command, CancellationToken.None));
+
+        // Assert（断言）
     }
 
     [Fact]
     public async Task Handle_WhenValid_UpsertsSessionInvalidatesRootCacheAndResetsRateLimiter()
     {
+        // Arrange（准备）
         TestContext context = CreateContext(featureEnabled: true);
         UpsertCookieSessionCommand command = CreateCommand();
 
+        // Act（执行）
         var result = await context.Handler.Handle(command, CancellationToken.None);
 
+        // Assert（断言）
         Assert.True(result.IsSuccess);
         Assert.Equal("115001", result.Value.CloudAccountUid);
         Assert.Equal(CookieSessionStatus.Active, result.Value.Status);

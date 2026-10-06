@@ -1,4 +1,4 @@
-using Application.Abstractions;
+﻿using Application.Abstractions;
 
 using Domain.Entities;
 using Domain.Repositories;
@@ -14,21 +14,21 @@ namespace Infrastructure.Persistence;
 /// </summary>
 /// <typeparam name="TEntity">聚合根类型。</typeparam>
 /// <typeparam name="TId">聚合根标识类型。</typeparam>
-public class Repository<TEntity, TId>(
+internal sealed class Repository<TEntity, TId>(
     ISqlSugarClient db,
     IDomainEventSource domainEventSource) : IRepository<TEntity, TId>
-    where TEntity : Entity<TId>, new()
+    where TEntity : AggregateRoot<TId>, new()
     where TId : notnull
 {
     /// <summary>
-    /// 底层 SqlSugar 客户端，供派生仓储自定义复杂查询。
+    /// 底层 SqlSugar 客户端。
     /// </summary>
-    protected ISqlSugarClient Db { get; } = db;
+    private ISqlSugarClient Db { get; } = db;
 
     /// <summary>
     /// 领域事件源，供持久化后追踪聚合使用。
     /// </summary>
-    protected IDomainEventSource DomainEventSource { get; } = domainEventSource;
+    private IDomainEventSource DomainEventSource { get; } = domainEventSource;
 
     /// <inheritdoc />
     public async Task<TEntity?> GetByIdAsync(TId id, CancellationToken cancellationToken = default)

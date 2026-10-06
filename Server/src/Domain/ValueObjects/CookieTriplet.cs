@@ -1,4 +1,4 @@
-namespace Domain.ValueObjects;
+﻿namespace Domain.ValueObjects;
 
 /// <summary>
 /// 115 Cookie 三元组值对象（UID/CID/USSID）。

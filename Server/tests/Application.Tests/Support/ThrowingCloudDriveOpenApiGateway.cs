@@ -2,7 +2,7 @@ using Application.Abstractions.CloudDrive;
 
 namespace Application.Tests.Support;
 
-internal sealed class ThrowingCloudDriveOpenApiGateway(Exception exception) : ICloudDriveOpenApiGateway
+internal sealed class ThrowingCloudDriveOpenApiGateway(Exception exception) : ICloudDriveWebApiGateway
 {
     public Task<T> SendWebApiRequestAsync<T>(
         Guid userId,

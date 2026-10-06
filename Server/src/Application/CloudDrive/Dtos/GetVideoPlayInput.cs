@@ -1,4 +1,4 @@
-namespace Application.CloudDrive.Dtos;
+﻿namespace Application.CloudDrive.Dtos;
 
 /// <summary>
 /// 获取视频播放地址输入。

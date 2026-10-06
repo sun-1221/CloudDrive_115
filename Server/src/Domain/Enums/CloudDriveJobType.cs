@@ -1,4 +1,4 @@
-namespace Domain.Enums;
+﻿namespace Domain.Enums;
 
 /// <summary>
 /// 115 网盘后台任务类型。
@@ -26,6 +26,9 @@ public enum CloudDriveJobType
     /// <summary>清空回收站。</summary>
     ClearRecycleBin = 6,
 
+    /// <summary>清空云下载任务。</summary>
+    ClearOfflineTasks = 7,
+
     /// <summary>视频转码。</summary>
-    Transcode = 7
+    Transcode = 8,
 }

@@ -7,6 +7,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Infrastructure.Tests" />
+    <InternalsVisibleTo Include="Architecture.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Domain\Domain.csproj" />
     <ProjectReference Include="..\Application\Application.csproj" />
   </ItemGroup>
@@ -17,8 +22,6 @@
 
     <!-- Quartz.NET -->
     <PackageReference Include="Quartz" />
-    <PackageReference Include="Quartz.Extensions.DependencyInjection" />
-    <PackageReference Include="Quartz.Extensions.Hosting" />
 
     <!-- FluentValidation DI 集成 -->
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />

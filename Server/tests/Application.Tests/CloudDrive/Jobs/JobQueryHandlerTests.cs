@@ -1,5 +1,4 @@
-using Application.Abstractions.CloudDrive;
-using Application.CloudDrive;
+﻿using Application.CloudDrive;
 using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
 using Application.CloudDrive.Jobs;
@@ -14,12 +13,18 @@ using Microsoft.Extensions.Options;
 
 namespace Application.Tests.CloudDrive.Jobs;
 
+/// <summary>
+/// 115 网盘后台任务查询处理器测试。
+/// </summary>
 public sealed class JobQueryHandlerTests
 {
     private static readonly Guid TestUserId = Guid.Parse("88888888-8888-8888-8888-888888888888");
     private static readonly Guid OtherUserId = Guid.Parse("99999999-9999-9999-9999-999999999999");
     private const string TestCloudAccountUid = "115001";
 
+    /// <summary>
+    /// 验证任务属于当前用户和账号时返回任务 DTO。
+    /// </summary>
     [Fact]
     public async Task GetJobStatusQueryHandler_WhenJobBelongsToUserAndAccount_ReturnsJobDto()
     {
@@ -53,6 +58,9 @@ public sealed class JobQueryHandlerTests
         Assert.Equal("dir-001", result.Value.ResourceId);
     }
 
+    /// <summary>
+    /// 验证任务账号不匹配时返回任务未找到失败。
+    /// </summary>
     [Fact]
     public async Task GetJobStatusQueryHandler_WhenAccountDoesNotMatch_ReturnsJobNotFound()
     {
@@ -78,6 +86,9 @@ public sealed class JobQueryHandlerTests
         Assert.Equal("cloud_drive_job_not_found", result.Error.Code);
     }
 
+    /// <summary>
+    /// 验证任务列表查询在未显式传账号时仅返回当前账号任务。
+    /// </summary>
     [Fact]
     public async Task GetJobListQueryHandler_WhenCloudAccountMissing_ReturnsAllCurrentUserAccounts()
     {
@@ -105,6 +116,9 @@ public sealed class JobQueryHandlerTests
         Assert.DoesNotContain(result.Value.Items, item => item.Id == second.Id);
     }
 
+    /// <summary>
+    /// 验证任务列表查询会按账号、状态和分页过滤。
+    /// </summary>
     [Fact]
     public async Task GetJobListQueryHandler_WhenAccountAndStatusProvided_FiltersAndPages()
     {

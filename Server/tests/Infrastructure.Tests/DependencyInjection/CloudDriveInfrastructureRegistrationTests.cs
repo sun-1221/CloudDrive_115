@@ -15,18 +15,24 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 using Quartz;
+
 using SqlSugar;
 
 namespace Infrastructure.Tests.DependencyInjection;
 
+/// <summary>
+/// 115 网盘基础设施依赖注入注册测试。
+/// </summary>
 public sealed class CloudDriveInfrastructureRegistrationTests
 {
+    /// <summary>
+    /// 验证基础设施注册会添加核心服务。
+    /// </summary>
     [Fact]
-    public void AddCloudDriveInfrastructure_RegistersCoreServices()
+    public void AddCloudDriveInfrastructure_WhenCalled_RegistersCoreServices()
     {
         // Arrange
         ServiceCollection serviceCollection = CreateCloudDriveServices();
@@ -42,7 +48,8 @@ public sealed class CloudDriveInfrastructureRegistrationTests
         using IServiceScope scope = provider.CreateScope();
         IServiceProvider services = scope.ServiceProvider;
 
-        Assert.NotNull(services.GetRequiredService<ICloudDriveOpenApiGateway>());
+        Assert.NotNull(services.GetRequiredService<ICloudDriveWebApiGateway>());
+        Assert.NotNull(services.GetRequiredService<ICloudDriveAccountContextAccessor>());
         Assert.NotNull(services.GetRequiredService<ICloudDriveSecretProtector>());
         Assert.NotNull(services.GetRequiredService<ICookieInvalidationNotifier>());
         Assert.NotNull(services.GetRequiredService<ICookieSignatureStrategy>());
@@ -57,8 +64,11 @@ public sealed class CloudDriveInfrastructureRegistrationTests
         Assert.NotNull(services.GetRequiredService<UserAggregationService>());
     }
 
+    /// <summary>
+    /// 验证基础设施注册会绑定 115 网盘配置。
+    /// </summary>
     [Fact]
-    public void AddCloudDriveInfrastructure_BindsCloudDriveConfig()
+    public void AddCloudDriveInfrastructure_WhenConfigured_BindsCloudDriveConfig()
     {
         // Arrange
         ServiceProvider provider = BuildProvider();
@@ -72,8 +82,11 @@ public sealed class CloudDriveInfrastructureRegistrationTests
         Assert.Equal(9, config.DefaultRateLimit);
     }
 
+    /// <summary>
+    /// 验证默认签名策略返回不可用签名。
+    /// </summary>
     [Fact]
-    public void AddCloudDriveInfrastructure_DefaultSignatureStrategyReturnsUnavailableSignature()
+    public void AddCloudDriveInfrastructure_WhenUsingDefaultSignatureStrategy_ReturnsUnavailableSignature()
     {
         // Arrange
         ServiceProvider provider = BuildProvider();
@@ -86,8 +99,11 @@ public sealed class CloudDriveInfrastructureRegistrationTests
         Assert.Equal(default, signature);
     }
 
+    /// <summary>
+    /// 验证模块入口注册和 Quartz 任务注册。
+    /// </summary>
     [Fact]
-    public void AddCloudDrive_RegistersModuleEntryPointAndQuartzJobs()
+    public async Task AddCloudDrive_WhenCalled_RegistersModuleEntryPointAndQuartzJobs()
     {
         // Arrange
         IConfiguration configuration = CreateConfiguration();
@@ -104,24 +120,26 @@ public sealed class CloudDriveInfrastructureRegistrationTests
             // Assert
             using IServiceScope scope = provider.CreateScope();
             IServiceProvider scopedServices = scope.ServiceProvider;
-            Assert.NotNull(scopedServices.GetRequiredService<ICloudDriveOpenApiGateway>());
+            Assert.NotNull(scopedServices.GetRequiredService<ICloudDriveWebApiGateway>());
             Assert.NotNull(scopedServices.GetRequiredService<ICloudDriveJobScheduler>());
             Assert.NotNull(scopedServices.GetRequiredService<CookieSessionManager>());
 
             ISchedulerFactory schedulerFactory = provider.GetRequiredService<ISchedulerFactory>();
-            IScheduler scheduler = schedulerFactory.GetScheduler().GetAwaiter().GetResult();
-            Assert.True(scheduler.CheckExists(new JobKey("CloudDriveUploadJob", "cloud-drive")).GetAwaiter().GetResult());
-            Assert.True(scheduler.CheckExists(new JobKey("CloudDriveBatchOperationJob", "cloud-drive")).GetAwaiter().GetResult());
-            Assert.True(scheduler.CheckExists(new JobKey("CloudDriveClearRecycleBinJob", "cloud-drive")).GetAwaiter().GetResult());
-            Assert.True(scheduler.CheckExists(new JobKey("CloudDriveTranscodeJob", "cloud-drive")).GetAwaiter().GetResult());
+            IScheduler scheduler = await schedulerFactory.GetScheduler();
+            Assert.NotNull(await scheduler.GetJobDetail(new JobKey("CloudDriveUploadJob", "cloud-drive")));
+            Assert.NotNull(await scheduler.GetJobDetail(new JobKey("CloudDriveBatchOperationJob", "cloud-drive")));
+            Assert.NotNull(await scheduler.GetJobDetail(new JobKey("CloudDriveClearRecycleBinJob", "cloud-drive")));
+            Assert.NotNull(await scheduler.GetJobDetail(new JobKey("CloudDriveTranscodeJob", "cloud-drive")));
         }
         finally
         {
-            Quartz.Logging.LogContext.SetCurrentLogProvider(NullLoggerFactory.Instance);
             provider?.Dispose();
         }
     }
 
+    /// <summary>
+    /// 验证必需配置缺失时禁用功能并记录错误日志。
+    /// </summary>
     [Theory]
     [InlineData("CloudDrive:CookieEncryptionKeyName")]
     [InlineData("CloudDrive:WebApiBaseUrl")]
@@ -161,14 +179,19 @@ public sealed class CloudDriveInfrastructureRegistrationTests
             && entry.Message.Contains(missingKey["CloudDrive:".Length..], StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// 验证基础设施注册会添加命名 HTTP 客户端和基础设施实现。
+    /// </summary>
     [Fact]
-    public void AddCloudDriveInfrastructure_RegistersNamedHttpClientsAndInfrastructureImplementations()
+    public void AddCloudDriveInfrastructure_WhenCalled_RegistersNamedHttpClientsAndInfrastructureImplementations()
     {
-        // Arrange
+        // Arrange（准备）
         using ServiceProvider provider = BuildProvider();
         IHttpClientFactory factory = provider.GetRequiredService<IHttpClientFactory>();
 
-        // Act & Assert
+        // Act（执行）
+
+        // Assert（断言）
         Assert.Equal(new Uri("https://webapi.test/"), factory.CreateClient(CloudDriveHttpClientNames.Web).BaseAddress);
         Assert.Equal(new Uri("https://my.test/"), factory.CreateClient(CloudDriveHttpClientNames.My).BaseAddress);
         Assert.Equal(new Uri("https://vip.test/"), factory.CreateClient(CloudDriveHttpClientNames.Vip).BaseAddress);
@@ -227,7 +250,9 @@ public sealed class CloudDriveInfrastructureRegistrationTests
 
     private sealed class RecordingLogger(RecordingLoggerSink sink) : ILogger
     {
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull
+            => null;
 
         public bool IsEnabled(LogLevel logLevel) => true;
 

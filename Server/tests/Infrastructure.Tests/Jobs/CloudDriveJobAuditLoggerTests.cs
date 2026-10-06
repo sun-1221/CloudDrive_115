@@ -1,4 +1,4 @@
-using Application.CloudDrive;
+﻿using Application.CloudDrive;
 
 using Domain.Entities;
 using Domain.Enums;
@@ -56,7 +56,9 @@ public sealed class CloudDriveJobAuditLoggerTests
 
         public IReadOnlyList<FakeLogEntry> Entries => _entries;
 
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull
+            => null;
 
         public bool IsEnabled(LogLevel logLevel) => true;
 

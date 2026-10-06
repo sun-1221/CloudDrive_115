@@ -3,7 +3,6 @@ using System.Text.Json;
 using Application.Abstractions.CloudDrive;
 using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
-using Application.CloudDrive.Files;
 using Application.Queries;
 
 using Domain.Results;
@@ -13,7 +12,7 @@ using Microsoft.Extensions.Options;
 namespace Application.CloudDrive.Share;
 
 internal sealed class GetMySharesQueryHandler(
-    ICloudDriveOpenApiGateway openApiGateway,
+    ICloudDriveWebApiGateway openApiGateway,
     ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : IQueryHandler<GetMySharesQuery, CloudDriveShareListDto>

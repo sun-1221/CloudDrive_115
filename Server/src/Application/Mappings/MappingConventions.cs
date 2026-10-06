@@ -1,4 +1,4 @@
-namespace Application.Mappings;
+﻿namespace Application.Mappings;
 
 /// <summary>
 /// 手动对象映射约定锚点类型。<br/>

@@ -35,12 +35,12 @@ internal sealed class CloudDriveBatchOperationJob(
     private static readonly JsonSerializerOptions PayloadJsonOptions = new(JsonSerializerDefaults.Web);
 
     /// <inheritdoc />
-    public async Task Execute(IJobExecutionContext context)
+    public async ValueTask Execute(IJobExecutionContext context, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
 
         Guid jobId = ReadJobId(context);
-        CloudDriveJob? job = await jobRepository.GetByIdAsync(jobId, context.CancellationToken);
+        CloudDriveJob? job = await jobRepository.GetByIdAsync(jobId, cancellationToken);
         if (job is null)
         {
             logger.LogWarning("115 批量后台任务不存在 JobId={JobId}", jobId);
@@ -50,14 +50,14 @@ internal sealed class CloudDriveBatchOperationJob(
         BatchOperationPlan? plan = CreatePlan(job);
         if (plan is null)
         {
-            await MarkFailedAsync(job, "批量任务类型或 PayloadJson 无效。", context.CancellationToken);
+            await MarkFailedAsync(job, "批量任务类型或 PayloadJson 无效。", cancellationToken);
             return;
         }
 
         try
         {
-            await StartJobAsync(job, context.CancellationToken);
-            await MarkFailedAsync(job, $"{ApiNotCollectedCode}: {ApiNotCollectedMessage}", context.CancellationToken);
+            await StartJobAsync(job, cancellationToken);
+            await MarkFailedAsync(job, $"{ApiNotCollectedCode}: {ApiNotCollectedMessage}", cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -69,7 +69,7 @@ internal sealed class CloudDriveBatchOperationJob(
                 sensitiveFieldsFilter.Redact(job.CloudAccountUid),
                 job.JobType);
 
-            await MarkFailedAsync(job, CreateSafeErrorMessage(ex), context.CancellationToken);
+            await MarkFailedAsync(job, CreateSafeErrorMessage(ex), cancellationToken);
         }
     }
 

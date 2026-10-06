@@ -1,4 +1,4 @@
-using Application.Abstractions.CloudDrive;
+﻿using Application.Abstractions.CloudDrive;
 using Application.CloudDrive.Dtos;
 using Application.Queries;
 
@@ -37,11 +37,8 @@ internal sealed class GetUserInfoQueryHandler(
                 "Cookie 会话不可用，请由运维重新注入 Cookie。"));
         }
 
-        CloudDriveUserInfoDto dto = await userAggregationService.AggregateUserInfoAsync(
-            request.UserId,
-            cloudAccountUid,
-            cancellationToken);
-
-        return Result.Success(dto);
+        return Result.Failure<CloudDriveUserInfoDto>(new Error(
+            "cloud_drive_api_not_collected",
+            "用户基础资料接口尚未采集，当前能力保持禁用。"));
     }
 }

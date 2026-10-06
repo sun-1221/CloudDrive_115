@@ -1,4 +1,4 @@
-using Application.Abstractions.CloudDrive;
+﻿using Application.Abstractions.CloudDrive;
 using Application.CloudDrive;
 
 using Domain.Exceptions;
@@ -10,18 +10,25 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.CloudDrive;
 
+/// <summary>
+/// 115 网盘本地限流器测试。
+/// </summary>
 public sealed class CloudDriveRateLimiterTests
 {
+    /// <summary>
+    /// 验证拒绝策略下无可用令牌时抛出限流异常。
+    /// </summary>
     [Fact]
     public async Task AcquireAsync_WhenRejectStrategyAndNoToken_ThrowsRateLimitAsync()
     {
         // Arrange
         var logger = new RecordingRateLimiterLogger();
-        CloudDriveRateLimiter limiter = CreateLimiter(new CloudDriveAppConfig
-        {
-            DefaultRateLimit = 1,
-            RateLimitOverflowStrategy = RateLimitOverflowStrategy.Reject,
-        }, logger);
+        CloudDriveRateLimiter limiter = CreateLimiter(
+            new CloudDriveAppConfig
+            {
+                DefaultRateLimit = 1,
+                RateLimitOverflowStrategy = RateLimitOverflowStrategy.Reject,
+            }, logger);
         Guid userId = Guid.NewGuid();
 
         using IDisposable first = await limiter.AcquireAsync(userId, "115001", "files", CancellationToken.None);
@@ -37,6 +44,9 @@ public sealed class CloudDriveRateLimiterTests
             && entry.Message.Contains("115 本地限流拒绝请求", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// 验证不同分类使用不同限流桶。
+    /// </summary>
     [Fact]
     public async Task AcquireAsync_WhenDifferentCategory_UsesDifferentBucketAsync()
     {
@@ -57,6 +67,9 @@ public sealed class CloudDriveRateLimiterTests
         Assert.Equal(2, limiter.BucketCount);
     }
 
+    /// <summary>
+    /// 验证排队策略会等待令牌补充。
+    /// </summary>
     [Fact]
     public async Task AcquireAsync_WhenQueueStrategy_WaitsForRefillAsync()
     {
@@ -87,19 +100,23 @@ public sealed class CloudDriveRateLimiterTests
         }
     }
 
+    /// <summary>
+    /// 验证记录上游频控信号后会强制进入退避。
+    /// </summary>
     [Fact]
     public async Task RecordThrottleSignal_WhenCalled_ForcesBackoffAsync()
     {
         // Arrange
         var logger = new RecordingRateLimiterLogger();
-        CloudDriveRateLimiter limiter = CreateLimiter(new CloudDriveAppConfig
-        {
-            DefaultRateLimit = 10,
-            RateLimitOverflowStrategy = RateLimitOverflowStrategy.Queue,
-            RateLimitMaxQueueLength = 1,
-            ThrottleRetryBaseDelayMilliseconds = 100,
-            ThrottleRetryMaxDelayMilliseconds = 100,
-        }, logger);
+        CloudDriveRateLimiter limiter = CreateLimiter(
+            new CloudDriveAppConfig
+            {
+                DefaultRateLimit = 10,
+                RateLimitOverflowStrategy = RateLimitOverflowStrategy.Queue,
+                RateLimitMaxQueueLength = 1,
+                ThrottleRetryBaseDelayMilliseconds = 100,
+                ThrottleRetryMaxDelayMilliseconds = 100,
+            }, logger);
         Guid userId = Guid.NewGuid();
 
         limiter.RecordThrottleSignal(userId, "115001", "files");
@@ -116,17 +133,21 @@ public sealed class CloudDriveRateLimiterTests
             && entry.Message.Contains("115 上游频控信号已记录", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// 验证排队队列已满时抛出限流异常。
+    /// </summary>
     [Fact]
     public async Task AcquireAsync_WhenQueueIsFull_ThrowsRateLimitAsync()
     {
         // Arrange
         var logger = new RecordingRateLimiterLogger();
-        CloudDriveRateLimiter limiter = CreateLimiter(new CloudDriveAppConfig
-        {
-            DefaultRateLimit = 1,
-            RateLimitOverflowStrategy = RateLimitOverflowStrategy.Queue,
-            RateLimitMaxQueueLength = 0,
-        }, logger);
+        CloudDriveRateLimiter limiter = CreateLimiter(
+            new CloudDriveAppConfig
+            {
+                DefaultRateLimit = 1,
+                RateLimitOverflowStrategy = RateLimitOverflowStrategy.Queue,
+                RateLimitMaxQueueLength = 0,
+            }, logger);
         Guid userId = Guid.NewGuid();
 
         using IDisposable first = await limiter.AcquireAsync(userId, "115001", "files", CancellationToken.None);
@@ -142,6 +163,9 @@ public sealed class CloudDriveRateLimiterTests
             && entry.Message.Contains("115 本地限流拒绝请求", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// 验证重置指定账号会移除对应限流桶。
+    /// </summary>
     [Fact]
     public async Task Reset_WhenAccountHasBuckets_RemovesMatchingBucketsAsync()
     {
@@ -173,7 +197,9 @@ public sealed class CloudDriveRateLimiterTests
     {
         public List<LogEntry> Entries { get; } = [];
 
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull
+            => null;
 
         public bool IsEnabled(LogLevel logLevel) => true;
 

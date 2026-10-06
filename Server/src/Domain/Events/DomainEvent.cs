@@ -1,4 +1,4 @@
-namespace Domain.Events;
+﻿namespace Domain.Events;
 
 /// <summary>
 /// 领域事件抽象基类。表达领域内已发生的事实，供应用层统一分发。

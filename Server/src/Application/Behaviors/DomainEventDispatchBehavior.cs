@@ -1,10 +1,11 @@
-using MediatR;
-
-using Application.Abstractions;
+﻿using Application.Abstractions;
 using Application.Commands;
 using Application.Events;
+
 using Domain.Entities;
 using Domain.Events;
+
+using MediatR;
 
 namespace Application.Behaviors;
 
@@ -17,7 +18,7 @@ namespace Application.Behaviors;
 /// <typeparam name="TResponse">响应类型。</typeparam>
 /// <remarks>
 /// <para>
-/// Pipeline 顺序：LoggingBehavior → ValidationBehavior → TransactionBehavior →
+/// Pipeline 顺序：LoggingBehavior → CloudDriveAccountContextBehavior → ValidationBehavior → TransactionBehavior →
 /// <b>DomainEventDispatchBehavior</b>。
 /// </para>
 /// <para>

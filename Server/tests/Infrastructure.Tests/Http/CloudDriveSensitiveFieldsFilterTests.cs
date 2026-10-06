@@ -1,4 +1,4 @@
-using Application.Abstractions.CloudDrive;
+﻿using Application.Abstractions.CloudDrive;
 using Application.CloudDrive;
 
 using Infrastructure.Http;
@@ -7,19 +7,25 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.Http;
 
+/// <summary>
+/// 115 网盘敏感字段脱敏过滤器测试。
+/// </summary>
 public sealed class CloudDriveSensitiveFieldsFilterTests
 {
+    /// <summary>
+    /// 验证文本中包含 Cookie 和签名时会移除敏感值。
+    /// </summary>
     [Fact]
     public void Redact_WhenTextContainsCookieAndSignature_RemovesSensitiveValues()
     {
-        // 准备
+        // Arrange（准备）
         ICloudDriveSensitiveFieldsFilter filter = CreateFilter();
         const string text = "Cookie: UID=123456; CID=abcdef; USSID=secret; sign=signature-value; path=/files";
 
-        // 执行
+        // Act（执行）
         string redacted = filter.Redact(text);
 
-        // 断言
+        // Assert（断言）
         Assert.Contains("UID=[REDACTED]", redacted);
         Assert.Contains("CID=[REDACTED]", redacted);
         Assert.Contains("USSID=[REDACTED]", redacted);
@@ -30,10 +36,13 @@ public sealed class CloudDriveSensitiveFieldsFilterTests
         Assert.DoesNotContain("signature-value", redacted);
     }
 
+    /// <summary>
+    /// 验证字段字典包含敏感键时会脱敏对应值。
+    /// </summary>
     [Fact]
     public void RedactFields_WhenDictionaryContainsSensitiveKeys_RedactsValues()
     {
-        // 准备
+        // Arrange（准备）
         ICloudDriveSensitiveFieldsFilter filter = CreateFilter();
         var fields = new Dictionary<string, string?>
         {
@@ -42,19 +51,22 @@ public sealed class CloudDriveSensitiveFieldsFilterTests
             ["endpoint"] = "/files",
         };
 
-        // 执行
+        // Act（执行）
         IReadOnlyDictionary<string, string?> redacted = filter.RedactFields(fields);
 
-        // 断言
+        // Assert（断言）
         Assert.Equal("[REDACTED]", redacted["uid"]);
         Assert.Equal("[REDACTED]", redacted["SignatureKey"]);
         Assert.Equal("/files", redacted["endpoint"]);
     }
 
+    /// <summary>
+    /// 验证用户资料隐私字段会全部脱敏。
+    /// </summary>
     [Fact]
     public void RedactFields_WhenUserProfileContainsPrivacyFields_RedactsAllBlacklistedValues()
     {
-        // 准备
+        // Arrange（准备）
         ICloudDriveSensitiveFieldsFilter filter = CreateFilter();
         var fields = new Dictionary<string, string?>
         {
@@ -69,10 +81,10 @@ public sealed class CloudDriveSensitiveFieldsFilterTests
             ["nickname"] = "public-name",
         };
 
-        // 执行
+        // Act（执行）
         IReadOnlyDictionary<string, string?> redacted = filter.RedactFields(fields);
 
-        // 断言
+        // Assert（断言）
         Assert.Equal("[REDACTED]", redacted["pub_mobile"]);
         Assert.Equal("[REDACTED]", redacted["pub_email"]);
         Assert.Equal("[REDACTED]", redacted["alipay"]);
@@ -84,17 +96,20 @@ public sealed class CloudDriveSensitiveFieldsFilterTests
         Assert.Equal("public-name", redacted["nickname"]);
     }
 
+    /// <summary>
+    /// 验证异常文本中嵌套的敏感字段会被脱敏。
+    /// </summary>
     [Fact]
     public void Redact_WhenExceptionTextContainsSensitiveFields_RedactsNestedValues()
     {
-        // 准备
+        // Arrange（准备）
         ICloudDriveSensitiveFieldsFilter filter = CreateFilter();
         const string text = "Problem sign=abc123 pub_mobile=13800000000 encryptedCookiePayload=payload SignatureKey=secret";
 
-        // 执行
+        // Act（执行）
         string redacted = filter.Redact(text);
 
-        // 断言
+        // Assert（断言）
         Assert.DoesNotContain("abc123", redacted);
         Assert.DoesNotContain("13800000000", redacted);
         Assert.DoesNotContain("payload", redacted);

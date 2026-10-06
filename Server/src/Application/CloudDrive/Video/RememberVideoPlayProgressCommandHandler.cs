@@ -14,41 +14,17 @@ namespace Application.CloudDrive.Video;
 
 internal sealed class RememberVideoPlayProgressCommandHandler(
     CloudDriveFileManager fileManager,
-    ICloudDriveOpenApiGateway openApiGateway,
+    ICloudDriveWebApiGateway openApiGateway,
     ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : ICommandHandler<RememberVideoPlayProgressCommand>
 {
-    public async Task<Result> Handle(
+    public Task<Result> Handle(
         RememberVideoPlayProgressCommand request,
         CancellationToken cancellationToken)
     {
-        CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
-
-        if (request.Input.Time < 0)
-        {
-            return Result.Failure(CloudDriveVideoSupport.TimeInvalid);
-        }
-
-        Result<string> pickCodeResult = await ResolvePickCodeAsync(
-            request.UserId,
-            request.Input,
-            cancellationToken);
-
-        if (pickCodeResult.IsFailure)
-        {
-            return Result.Failure(pickCodeResult.Error);
-        }
-
-        await openApiGateway.SendWebApiRequestAsync<JsonElement>(
-            request.UserId,
-            accountContextAccessor.CloudAccountUid,
-            HttpMethod.Post,
-            "files/history",
-            CloudDriveVideoSupport.CreateProgressWriteContext(request.Input, pickCodeResult.Value),
-            cancellationToken);
-
-        return Result.Success();
+        return Task.FromResult(Result.Failure(
+            CloudDriveFileHandlerSupport.ApiNotCollected("播放进度写入")));
     }
 
     private async Task<Result<string>> ResolvePickCodeAsync(

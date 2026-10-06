@@ -11,6 +11,11 @@ public class CloudDriveFileDto
     public string FileId { get; set; } = string.Empty;
 
     /// <summary>
+    /// 获取或设置条目所属父目录 ID。
+    /// </summary>
+    public string? ParentId { get; set; }
+
+    /// <summary>
     /// 获取或设置文件名。
     /// </summary>
     public string Name { get; set; } = string.Empty;

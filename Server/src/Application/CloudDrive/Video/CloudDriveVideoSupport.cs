@@ -1,9 +1,8 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.Json;
 
 using Application.Abstractions.CloudDrive;
 using Application.CloudDrive.Dtos;
-using Application.CloudDrive.Files;
 
 using Domain.Results;
 
@@ -133,14 +132,31 @@ internal static class CloudDriveVideoSupport
 
     public static CloudDriveVideoPlayDto MapVideoPlay(JsonElement response, int? selectedDefinition)
     {
+        JsonElement source = GetPayload(response);
+
         return new CloudDriveVideoPlayDto
         {
-            Status = VideoPlayStatus.SchemaNotCollected,
+            DownloadUrl = ReadString(source, "download_url"),
+            DvProfile = ReadString(source, "dv_profile"),
+            FileId = ReadString(source, "file_id"),
+            FileName = ReadString(source, "file_name"),
+            FileSize = ReadString(source, "file_size"),
+            FileStatusRaw = ReadInt32(source, "file_status"),
+            HdrType = ReadString(source, "hdr_type"),
+            InlayPower = ReadInt32(source, "inlay_power"),
+            IsDolbyVisionRaw = ReadInt32(source, "is_dolby_vision"),
+            IsHdrRaw = ReadInt32(source, "is_hdr"),
+            IsMarkRaw = ReadString(source, "is_mark"),
+            ParentId = ReadString(source, "parent_id"),
+            PickCode = ReadString(source, "pick_code"),
+            Sha1 = ReadString(source, "sha1"),
+            VideoPushState = ReadBoolean(source, "video_push_state"),
+            Status = VideoPlayStatus.Ready,
             QualityOptions = [],
             AudioTracks = [],
-            PlaybackSchemaStatus = "not_collected",
+            SelectedDefinition = selectedDefinition,
+            PlaybackSchemaStatus = "available",
             IsTemporary = true,
-            UsageRestrictionNotice = "视频播放成功响应 schema 尚未采集，暂不返回播放地址。",
         };
     }
 
@@ -215,6 +231,24 @@ internal static class CloudDriveVideoSupport
                 : null;
     }
 
+    private static bool? ReadBoolean(JsonElement source, string propertyName)
+    {
+        if (source.ValueKind != JsonValueKind.Object
+            || !source.TryGetProperty(propertyName, out JsonElement value))
+        {
+            return null;
+        }
+
+        if (value.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            return value.GetBoolean();
+        }
+
+        return value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int number)
+            ? number != 0
+            : null;
+    }
+
     private static JsonElement GetPayload(JsonElement response)
     {
         if (response.ValueKind == JsonValueKind.Object
@@ -226,5 +260,4 @@ internal static class CloudDriveVideoSupport
 
         return response;
     }
-
 }

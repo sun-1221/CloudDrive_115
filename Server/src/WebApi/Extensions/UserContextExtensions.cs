@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,6 +12,7 @@ public static class UserContextExtensions
     /// <summary>
     /// 从当前 Controller 用户声明中解析系统用户 ID。
     /// </summary>
+    /// <returns>返回当前操作的处理结果。</returns>
     public static Guid GetAuthenticatedUserId(this ControllerBase controller)
     {
         ArgumentNullException.ThrowIfNull(controller);
@@ -21,6 +22,7 @@ public static class UserContextExtensions
     /// <summary>
     /// 从声明集合中解析系统用户 ID。
     /// </summary>
+    /// <returns>返回当前操作的处理结果。</returns>
     public static Guid GetAuthenticatedUserId(this ClaimsPrincipal principal)
     {
         ArgumentNullException.ThrowIfNull(principal);
@@ -36,5 +38,23 @@ public static class UserContextExtensions
         }
 
         return userId;
+    }
+
+    public static Guid GetAuthenticatedSessionId(this ControllerBase controller)
+    {
+        ArgumentNullException.ThrowIfNull(controller);
+        return controller.User.GetAuthenticatedSessionId();
+    }
+
+    public static Guid GetAuthenticatedSessionId(this ClaimsPrincipal principal)
+    {
+        ArgumentNullException.ThrowIfNull(principal);
+        string? value = principal.FindFirstValue("sid");
+        if (principal.Identity?.IsAuthenticated != true || !Guid.TryParse(value, out Guid sessionId))
+        {
+            throw new UnauthorizedAccessException("当前请求缺少有效的会话 ID。");
+        }
+
+        return sessionId;
     }
 }

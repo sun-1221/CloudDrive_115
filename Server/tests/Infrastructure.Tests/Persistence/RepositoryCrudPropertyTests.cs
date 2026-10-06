@@ -1,4 +1,4 @@
-using Domain.Entities;
+﻿using Domain.Entities;
 
 using FsCheck.Xunit;
 
@@ -12,8 +12,8 @@ namespace Infrastructure.Tests.Persistence;
 /// <summary>
 /// 设计文档 Property 7：Repository CRUD 往返一致性。
 /// <para>
-/// *For any* 有效实体，通过 <see cref="Repository{TEntity,TId}"/> 执行 Insert 后再通过
-/// <see cref="IRepository{TEntity,TId}.GetByIdAsync"/> 查询，应返回与原始实体等价的对象。
+/// *For any* 有效聚合根，通过 <c>Repository</c> 执行 Insert 后再通过
+/// <c>GetByIdAsync</c> 查询，应返回与原始实体等价的对象。
 /// </para>
 /// <para>
 /// 基于内存 SQLite（按 integration-testing-standards.md:132 允许用于 CRUD 属性测试）。
@@ -56,7 +56,7 @@ public sealed class RepositoryCrudPropertyTests : IDisposable
     [Property(MaxTest = 30)]
     public async Task<bool> InsertThenGetById_ReturnsEquivalentEntity(int nameSeed)
     {
-        // 准备
+        // Arrange（准备）
         _eventSource.Clear();
         string name = $"name-{nameSeed}";
         var entity = new TestPersistedEntity
@@ -65,11 +65,11 @@ public sealed class RepositoryCrudPropertyTests : IDisposable
             Name = name,
         };
 
-        // 执行
+        // Act（执行）
         int rows = await _repository.InsertAsync(entity, CancellationToken.None);
         TestPersistedEntity? loaded = await _repository.GetByIdAsync(entity.Id, CancellationToken.None);
 
-        // 断言 - 插入 1 行、Get 非空、Id 与 Name 等价、实体被 Track
+        // Assert（断言） - 插入 1 行、Get 非空、Id 与 Name 等价、实体被 Track
         return rows == 1
             && loaded is not null
             && loaded.Id == entity.Id
@@ -81,7 +81,7 @@ public sealed class RepositoryCrudPropertyTests : IDisposable
     [Fact]
     public async Task UpdateAsync_WhenEntityExists_ModifiesFieldAndTracksEntity()
     {
-        // 准备
+        // Arrange（准备）
         _eventSource.Clear();
         var entity = new TestPersistedEntity { Id = Guid.NewGuid(), Name = "original" };
         _ = await _repository.InsertAsync(entity, CancellationToken.None);
@@ -89,11 +89,11 @@ public sealed class RepositoryCrudPropertyTests : IDisposable
 
         entity.Name = "updated";
 
-        // 执行
+        // Act（执行）
         int rows = await _repository.UpdateAsync(entity, CancellationToken.None);
         TestPersistedEntity? loaded = await _repository.GetByIdAsync(entity.Id, CancellationToken.None);
 
-        // 断言
+        // Assert（断言）
         Assert.Equal(1, rows);
         Assert.NotNull(loaded);
         Assert.Equal("updated", loaded.Name);
@@ -103,27 +103,27 @@ public sealed class RepositoryCrudPropertyTests : IDisposable
     [Fact]
     public async Task DeleteAsync_WhenEntityExists_RemovesRowAndTracksEntity()
     {
-        // 准备
+        // Arrange（准备）
         _eventSource.Clear();
         var entity = new TestPersistedEntity { Id = Guid.NewGuid(), Name = "to-delete" };
         _ = await _repository.InsertAsync(entity, CancellationToken.None);
         _eventSource.Clear();
 
-        // 执行
+        // Act（执行）
         int rows = await _repository.DeleteAsync(entity, CancellationToken.None);
         TestPersistedEntity? loaded = await _repository.GetByIdAsync(entity.Id, CancellationToken.None);
 
-        // 断言
+        // Assert（断言）
         Assert.Equal(1, rows);
         Assert.Null(loaded);
         Assert.Single(_eventSource.Tracked);
     }
 
     /// <summary>
-    /// 测试用持久化实体。使用 <see cref="Guid"/> 主键避免 property 测试间 ID 冲突。
+    /// 测试用持久化聚合根。使用 <see cref="Guid"/> 主键避免 property 测试间 ID 冲突。
     /// </summary>
     [SugarTable("test_persisted_entities")]
-    public sealed class TestPersistedEntity : Entity<Guid>
+    public sealed class TestPersistedEntity : AggregateRoot<Guid>
     {
         [SugarColumn(IsPrimaryKey = true)]
         public new Guid Id

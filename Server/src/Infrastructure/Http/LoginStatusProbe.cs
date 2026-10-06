@@ -1,7 +1,6 @@
 using System.Text.Json;
 
 using Application.Abstractions.CloudDrive;
-using Application.CloudDrive;
 
 using Domain.Exceptions;
 
@@ -10,7 +9,7 @@ namespace Infrastructure.Http;
 /// <summary>
 /// 115 Cookie 登录态探测器。
 /// </summary>
-internal sealed class LoginStatusProbe(ICloudDriveOpenApiGateway gateway)
+internal sealed class LoginStatusProbe(ICloudDriveWebApiGateway gateway)
 {
     /// <summary>
     /// 探测指定 115 账号的 Cookie 登录状态。

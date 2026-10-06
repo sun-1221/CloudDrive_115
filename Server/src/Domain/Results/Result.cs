@@ -1,4 +1,4 @@
-namespace Domain.Results;
+﻿namespace Domain.Results;
 
 /// <summary>
 /// 操作结果模式基类。区分成功/失败两种状态，失败时携带 <see cref="Error"/>。
@@ -12,6 +12,8 @@ public class Result
     /// <summary>
     /// 构造函数。仅允许 (成功,None) 或 (失败,非 None) 组合，防止状态不一致。
     /// </summary>
+    /// <param name="isSuccess">是否成功。</param>
+    /// <param name="error">关联错误。</param>
     protected Result(bool isSuccess, Error error)
     {
         if (isSuccess && error != Error.None)
@@ -46,21 +48,30 @@ public class Result
     /// <summary>
     /// 创建成功结果。
     /// </summary>
+    /// <returns>成功的 <see cref="Result"/>。</returns>
     public static Result Success() => new(true, Error.None);
 
     /// <summary>
     /// 创建失败结果。
     /// </summary>
+    /// <param name="error">失败原因。</param>
+    /// <returns>失败的 <see cref="Result"/>。</returns>
     public static Result Failure(Error error) => new(false, error);
 
     /// <summary>
     /// 创建带返回值的成功结果。
     /// </summary>
+    /// <typeparam name="T">返回值类型。</typeparam>
+    /// <param name="value">成功值。</param>
+    /// <returns>成功的 <see cref="Result{T}"/>。</returns>
     public static Result<T> Success<T>(T value) => Result<T>.Success(value);
 
     /// <summary>
     /// 创建带返回值类型的失败结果。
     /// </summary>
+    /// <typeparam name="T">返回值类型。</typeparam>
+    /// <param name="error">失败原因。</param>
+    /// <returns>失败的 <see cref="Result{T}"/>。</returns>
     public static Result<T> Failure<T>(Error error) => Result<T>.Failure(error);
 }
 
@@ -72,7 +83,14 @@ public sealed class Result<T> : Result
 {
     private readonly T? _value;
 
-    private Result(T? value, bool isSuccess, Error error) : base(isSuccess, error)
+    /// <summary>
+    /// 以返回值、成功标志和错误构造结果。
+    /// </summary>
+    /// <param name="value">成功值。</param>
+    /// <param name="isSuccess">是否成功。</param>
+    /// <param name="error">关联错误。</param>
+    private Result(T? value, bool isSuccess, Error error)
+        : base(isSuccess, error)
     {
         _value = value;
     }
@@ -88,10 +106,14 @@ public sealed class Result<T> : Result
     /// <summary>
     /// 创建成功结果并包装返回值。
     /// </summary>
+    /// <param name="value">成功值。</param>
+    /// <returns>成功的 <see cref="Result{T}"/>。</returns>
     public static Result<T> Success(T value) => new(value, true, Error.None);
 
     /// <summary>
     /// 创建失败结果。
     /// </summary>
+    /// <param name="error">失败原因。</param>
+    /// <returns>失败的 <see cref="Result{T}"/>。</returns>
     public static new Result<T> Failure(Error error) => new(default, false, error);
 }

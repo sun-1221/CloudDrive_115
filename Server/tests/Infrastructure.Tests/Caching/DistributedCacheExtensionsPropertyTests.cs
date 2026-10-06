@@ -1,4 +1,4 @@
-using FsCheck.Xunit;
+﻿using FsCheck.Xunit;
 
 using Infrastructure.Caching;
 
@@ -100,5 +100,78 @@ public sealed class DistributedCacheExtensionsPropertyTests
         Assert.Equal(original, loaded);
     }
 
+    /// <summary>
+    /// Property 17：调用方提供 TTL 时写入相对过期时间，未提供 TTL 时不隐式写入默认过期时间。
+    /// </summary>
+    [Fact]
+    public async Task SetAsync_WhenTtlIsOptional_AppliesOnlyExplicitTtl()
+    {
+        // Arrange
+        var cache = new RecordingDistributedCache();
+        var original = new TestEntry(1, "x", 10);
+        TimeSpan ttl = TimeSpan.FromMinutes(5);
+
+        // Act
+        await cache.SetAsync("with-ttl", original, ttl);
+        DistributedCacheEntryOptions? withTtlOptions = cache.LastOptions;
+
+        await cache.SetAsync("without-ttl", original);
+        DistributedCacheEntryOptions? withoutTtlOptions = cache.LastOptions;
+
+        // Assert
+        Assert.Equal(ttl, withTtlOptions?.AbsoluteExpirationRelativeToNow);
+        Assert.Null(withoutTtlOptions?.AbsoluteExpirationRelativeToNow);
+    }
+
     public sealed record TestEntry(int Id, string Name, int Age);
+
+    private sealed class RecordingDistributedCache : IDistributedCache
+    {
+        private readonly Dictionary<string, byte[]> _values = [];
+
+        public DistributedCacheEntryOptions? LastOptions { get; private set; }
+
+        public byte[]? Get(string key)
+        {
+            _values.TryGetValue(key, out byte[]? value);
+            return value;
+        }
+
+        public Task<byte[]?> GetAsync(string key, CancellationToken token = default) =>
+            Task.FromResult(Get(key));
+
+        public void Refresh(string key)
+        {
+        }
+
+        public Task RefreshAsync(string key, CancellationToken token = default) =>
+            Task.CompletedTask;
+
+        public void Remove(string key)
+        {
+            _values.Remove(key);
+        }
+
+        public Task RemoveAsync(string key, CancellationToken token = default)
+        {
+            Remove(key);
+            return Task.CompletedTask;
+        }
+
+        public void Set(string key, byte[] value, DistributedCacheEntryOptions options)
+        {
+            LastOptions = options;
+            _values[key] = value;
+        }
+
+        public Task SetAsync(
+            string key,
+            byte[] value,
+            DistributedCacheEntryOptions options,
+            CancellationToken token = default)
+        {
+            Set(key, value, options);
+            return Task.CompletedTask;
+        }
+    }
 }

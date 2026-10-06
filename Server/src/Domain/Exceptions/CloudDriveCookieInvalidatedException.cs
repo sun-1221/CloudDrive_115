@@ -1,4 +1,4 @@
-namespace Domain.Exceptions;
+﻿namespace Domain.Exceptions;
 
 /// <summary>
 /// 115 Cookie 已失效、登录态无效或被服务端拒绝时抛出。
@@ -28,6 +28,14 @@ public sealed class CloudDriveCookieInvalidatedException : DomainException
         Exception innerException,
         string? errorCode = "cloud_drive_cookie_invalidated")
         : base(401, message, innerException, errorCode)
+    {
+    }
+
+    private CloudDriveCookieInvalidatedException(int statusCode, string message, string? errorCode = null) : base(statusCode, message, errorCode)
+    {
+    }
+
+    private CloudDriveCookieInvalidatedException(int statusCode, string message, Exception innerException, string? errorCode = null) : base(statusCode, message, innerException, errorCode)
     {
     }
 }

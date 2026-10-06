@@ -1,4 +1,4 @@
-using Application.CloudDrive;
+﻿using Application.CloudDrive;
 using Application.CloudDrive.Auth;
 using Application.Tests.Support;
 
@@ -15,8 +15,11 @@ namespace Application.Tests.CloudDrive.Auth;
 /// </summary>
 public sealed class CookieInvalidationPropertyTests
 {
+    /// <summary>
+    /// 验证活跃会话标记失效后会设置状态与冷却期。
+    /// </summary>
     [Fact]
-    public async Task MarkInvalidated_SetsStatusAndCooldown()
+    public async Task MarkInvalidated_WhenSessionActive_SetsStatusAndCooldown()
     {
         // Arrange
         var (manager, repo, _, _) = CreateTestFixture();
@@ -35,6 +38,9 @@ public sealed class CookieInvalidationPropertyTests
         Assert.Equal("login_required", session.InvalidationReason);
     }
 
+    /// <summary>
+    /// 验证已失效会话获取有效 Cookie 时抛出 Cookie 失效异常。
+    /// </summary>
     [Fact]
     public async Task GetValidCookieHeader_WhenInvalidated_ThrowsCookieInvalidatedException()
     {
@@ -50,6 +56,9 @@ public sealed class CookieInvalidationPropertyTests
             () => manager.GetValidCookieHeaderAsync(userId, cloudAccountUid));
     }
 
+    /// <summary>
+    /// 验证会话不存在时获取有效 Cookie 会抛出 Cookie 失效异常。
+    /// </summary>
     [Fact]
     public async Task GetValidCookieHeader_WhenSessionNotFound_ThrowsCookieInvalidatedException()
     {
@@ -62,8 +71,11 @@ public sealed class CookieInvalidationPropertyTests
             () => manager.GetValidCookieHeaderAsync(userId, "nonexistent"));
     }
 
+    /// <summary>
+    /// 验证活跃会话标记失效时会通过通知器发送通知。
+    /// </summary>
     [Fact]
-    public async Task MarkInvalidated_NotifiesViaNotifier()
+    public async Task MarkInvalidated_WhenSessionActive_NotifiesViaNotifier()
     {
         // Arrange
         var (manager, _, notifier, _) = CreateTestFixture();
@@ -79,8 +91,11 @@ public sealed class CookieInvalidationPropertyTests
         Assert.Equal("http_401", notifier.Notifications[0].Reason);
     }
 
+    /// <summary>
+    /// 验证指定冷却秒数时会覆盖默认冷却时长。
+    /// </summary>
     [Fact]
-    public async Task EnterCooldown_OverridesDefaultCooldownSeconds()
+    public async Task EnterCooldown_WhenCooldownSecondsProvided_OverridesDefaultCooldownSeconds()
     {
         // Arrange
         var (manager, repo, _, _) = CreateTestFixture();
@@ -95,6 +110,7 @@ public sealed class CookieInvalidationPropertyTests
         var sessions = await repo.GetByUserAsync(userId);
         var session = sessions.Single();
         Assert.NotNull(session.CooldownUntil);
+
         // 冷却期应至少在当前时间 + 119 秒之后（考虑测试执行时间）
         Assert.True(session.CooldownUntil.Value > DateTime.UtcNow.AddSeconds(100));
     }

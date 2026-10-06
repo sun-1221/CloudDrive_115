@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 using Application.CloudDrive.Dtos;
 
@@ -8,11 +8,18 @@ using Infrastructure.Http.Responses;
 
 namespace Infrastructure.Tests.Http.Mappings;
 
+/// <summary>
+/// 115 网盘响应模型到应用 DTO 的映射测试。
+/// </summary>
 public sealed class CloudDriveResponseMappingTests
 {
+    /// <summary>
+    /// 验证文件列表映射会规范化文件和文件夹字段。
+    /// </summary>
     [Fact]
     public void FileList_ToDto_NormalizesFileAndFolderFields()
     {
+        // Arrange（准备）
         const string json = """
             {
               "count": "2",
@@ -21,9 +28,10 @@ public sealed class CloudDriveResponseMappingTests
               "page_size": 2,
               "cid": "0",
               "is_asc": 0,
+              "path": [{"aid":"1","cid":"0","isp":"1","name":"root","pid":"-1"}],
               "data": [
-                {"fid":"folder-1","n":"Photos","s":"0","fc":0,"pc":"folder-pick","m":1,"iv":0},
-                {"fid":"file-1","n":"clip.mp4","s":42,"fc":1,"pc":"file-pick","iv":1,"sha":"ABC","t":1776518000}
+                {"fid":"folder-1","n":"Photos","s":"0","fc":0,"pc":"folder-pick","m":1,"iv":0,"pid":"0"},
+                {"fid":"file-1","n":"clip.mp4","s":42,"fc":1,"pc":"file-pick","iv":1,"sha":"ABC","t":1776518000,"pid":"folder-1"}
               ]
             }
             """;
@@ -32,37 +40,47 @@ public sealed class CloudDriveResponseMappingTests
             json,
             CloudDrive115JsonSerializerOptions.Defaults)!;
 
+        // Act（执行）
         var dto = response.ToDto();
 
+        // Assert（断言）
         Assert.Equal(2, dto.TotalCount);
         Assert.Equal(10, dto.SkipCount);
         Assert.Null(dto.Items.First().IsDirectory);
         Assert.Null(dto.Items.Last().IsDirectory);
         Assert.True(dto.Items.Last().IsVideo);
         Assert.Equal("ABC", dto.Items.Last().Sha1);
+        Assert.Equal("folder-1", dto.Items.Last().ParentId);
+        Assert.Equal("1", dto.Paths![0].Aid);
+        Assert.Equal("1", dto.Paths[0].IsSelectedPath);
+        Assert.Equal("-1", dto.Paths[0].ParentId);
     }
 
+    /// <summary>
+    /// 验证回收站映射会保留顶层字段并映射非空条目。
+    /// </summary>
     [Fact]
     public void RecycleBin_ToDto_MapsTopLevelFieldsAndLeavesItemsNotCollected()
     {
+        // Arrange（准备）
         const string json = """
             {
               "count": "1",
               "offset": 0,
               "page_size": 30,
               "is_asc": 0,
-              "data": {
-                "recycled-1": {
+              "data": [
+                {
+                  "id": "recycled-1",
                   "file_name": "Deleted Folder",
-                  "type": 2,
+                  "type": "2",
                   "file_size": "64",
-                  "dtime": 1776518000,
+                  "dtime": "1776518000",
                   "cid": "0",
                   "parent_name": "root",
-                  "pick_code": "pick",
-                  "status": -1
+                  "status": "-1"
                 }
-              }
+              ]
             }
             """;
 
@@ -70,25 +88,38 @@ public sealed class CloudDriveResponseMappingTests
             json,
             CloudDrive115JsonSerializerOptions.Defaults)!;
 
+        // Act（执行）
         var dto = response.ToDto();
 
-        Assert.Empty(dto.Items);
+        // Assert（断言）
+        CloudDriveRecycleBinItemDto item = Assert.Single(dto.Items);
+        Assert.Equal("recycled-1", item.Id);
+        Assert.Equal("Deleted Folder", item.FileName);
+        Assert.Equal("64", item.FileSize);
+        Assert.Equal("root", item.ParentName);
+        Assert.Equal("available", item.SchemaStatus);
         Assert.Equal(1, dto.Count);
         Assert.Equal(30, dto.PageSize);
-        Assert.Equal("not_collected", dto.ItemSchemaStatus);
+        Assert.Equal("available", dto.ItemSchemaStatus);
     }
 
+    /// <summary>
+    /// 验证离线配额映射会规范化配额字段。
+    /// </summary>
     [Fact]
     public void OfflineQuota_ToDto_NormalizesQuotaFields()
     {
+        // Arrange（准备）
         const string quotaJson = """{"package":{"vip":true},"count":10,"surplus":8,"max_size":"1024","used":"2"}""";
 
         CloudDriveOfflineQuotaResponse quota = JsonSerializer.Deserialize<CloudDriveOfflineQuotaResponse>(
             quotaJson,
             CloudDrive115JsonSerializerOptions.Defaults)!;
 
+        // Act（执行）
         var dto = quota.ToDto();
 
+        // Assert（断言）
         Assert.NotNull(dto.Package);
         Assert.Equal(10, dto.Count);
         Assert.Equal(8, dto.Surplus);
@@ -96,9 +127,13 @@ public sealed class CloudDriveResponseMappingTests
         Assert.Equal(2L, dto.Used);
     }
 
+    /// <summary>
+    /// 验证离线统计映射会规范化统计字段。
+    /// </summary>
     [Fact]
     public void OfflineStats_ToDto_NormalizesStatsFields()
     {
+        // Arrange（准备）
         const string statsJson = """
             {
               "total_count": 9,
@@ -112,17 +147,23 @@ public sealed class CloudDriveResponseMappingTests
             statsJson,
             CloudDrive115JsonSerializerOptions.Defaults)!;
 
+        // Act（执行）
         var dto = stats.ToDto();
 
+        // Assert（断言）
         Assert.Equal(9, dto.Total);
         Assert.Equal(1, dto.Failed);
         Assert.Equal(6, dto.Completed);
         Assert.Equal(2, dto.Active);
     }
 
+    /// <summary>
+    /// 验证搜索结构已采集时映射可用状态与搜索结果项。
+    /// </summary>
     [Fact]
     public void FileSearch_ToDto_WhenSchemaCollected_MapsItemsWithAvailableStatus()
     {
+        // Arrange（准备）
         const string json = """
             {
               "count": "1",
@@ -146,8 +187,10 @@ public sealed class CloudDriveResponseMappingTests
             json,
             CloudDrive115JsonSerializerOptions.Defaults)!;
 
+        // Act（执行）
         var dto = response.ToDto();
 
+        // Assert（断言）
         Assert.Equal("available", dto.ItemSchemaStatus);
         Assert.Single(dto.Items);
         Assert.Equal("file-1", dto.Items[0].FileId);
@@ -159,9 +202,13 @@ public sealed class CloudDriveResponseMappingTests
         Assert.True(dto.State);
     }
 
+    /// <summary>
+    /// 验证搜索结构未采集时返回空结果项并标记未采集。
+    /// </summary>
     [Fact]
-    public void FileSearch_ToNotCollectedDto_WhenSchemaUncollected_ReturnsEmptyItemsWithNotCollectedStatus()
+    public void FileSearch_ToDto_WhenSchemaUncollected_ReturnsEmptyItemsWithNotCollectedStatus()
     {
+        // Arrange（准备）
         const string json = """
             {
               "count": "5",
@@ -181,8 +228,10 @@ public sealed class CloudDriveResponseMappingTests
             json,
             CloudDrive115JsonSerializerOptions.Defaults)!;
 
-        var dto = response.ToNotCollectedDto();
+        // Act（执行）
+        var dto = response.ToDto(includeItems: false);
 
+        // Assert（断言）
         Assert.Equal("not_collected", dto.ItemSchemaStatus);
         Assert.Empty(dto.Items);
         Assert.Equal(5, dto.Count);
@@ -191,9 +240,13 @@ public sealed class CloudDriveResponseMappingTests
         Assert.Equal("file_name", dto.Order);
     }
 
+    /// <summary>
+    /// 验证视频播放结构未采集时不暴露播放明细字段。
+    /// </summary>
     [Fact]
     public void VideoPlay_ToDto_WhenSchemaUncollected_DoesNotExposePlaybackFields()
     {
+        // Arrange（准备）
         const string json = """
             {
               "play_long": 120,
@@ -219,8 +272,10 @@ public sealed class CloudDriveResponseMappingTests
             json,
             CloudDrive115JsonSerializerOptions.Defaults)!;
 
+        // Act（执行）
         var dto = response.ToDto();
 
+        // Assert（断言）
         Assert.Equal(VideoPlayStatus.SchemaNotCollected, dto.Status);
         Assert.True(dto.IsTemporary);
         Assert.Equal("not_collected", dto.PlaybackSchemaStatus);

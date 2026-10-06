@@ -1,4 +1,4 @@
-namespace Application.CloudDrive.Dtos;
+﻿namespace Application.CloudDrive.Dtos;
 
 /// <summary>
 /// 115 视频播放进度。

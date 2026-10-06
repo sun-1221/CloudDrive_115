@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("Application.Tests")]
 [assembly: InternalsVisibleTo("Infrastructure")]

@@ -25,12 +25,14 @@ internal static class FileMapping
         };
     }
 
-    public static CloudDriveSearchListDto ToDto(this CloudDriveFileSearchResponse response)
+    public static CloudDriveSearchListDto ToDto(this CloudDriveFileSearchResponse response, bool includeItems = true)
     {
-        IReadOnlyList<CloudDriveSearchResultDto> items = response.Items
-            .Concat(response.Folders)
-            .Select(item => item.ToSearchDto())
-            .ToList();
+        IReadOnlyList<CloudDriveSearchResultDto> items = includeItems
+            ? response.Items
+                .Concat(response.Folders)
+                .Select(MapToSearchResult)
+                .ToList()
+            : [];
 
         return new CloudDriveSearchListDto
         {
@@ -47,28 +49,7 @@ internal static class FileMapping
             State = ReadBoolean(response.State),
             Error = response.Error,
             ErrCode = response.ErrCode,
-            ItemSchemaStatus = "available",
-        };
-    }
-
-    public static CloudDriveSearchListDto ToNotCollectedDto(this CloudDriveFileSearchResponse response)
-    {
-        return new CloudDriveSearchListDto
-        {
-            Items = [],
-            Count = response.Count,
-            PageSize = response.PageSize,
-            PageCount = response.PageCount ?? 0,
-            Offset = response.Offset,
-            IsAsc = response.IsAscending,
-            Order = response.Order,
-            Suffix = response.Suffix,
-            FcMix = response.FcMix,
-            Type = response.Type,
-            State = ReadBoolean(response.State),
-            Error = response.Error,
-            ErrCode = response.ErrCode,
-            ItemSchemaStatus = "not_collected",
+            ItemSchemaStatus = includeItems ? "available" : "not_collected",
         };
     }
 
@@ -106,6 +87,7 @@ internal static class FileMapping
             IsPrivate = item.IsPrivate,
             UploadStatusRaw = item.UploadStatus,
             UploadStatus = "unknown",
+            ParentId = ReadString(item.Raw, "pid") ?? ReadString(item.Raw, "cid"),
             ThumbnailUrl = item.ThumbnailUrl ?? item.VideoImageUrl,
             OriginalImageUrl = item.OriginalUrl,
             VideoImageUrl = item.VideoImageUrl,
@@ -145,11 +127,13 @@ internal static class FileMapping
             VideoImageUrl = file.VideoImageUrl,
             CreatedTime = CloudDriveTimeMapping.FromUnixSeconds(item.UploadTime),
             SizeBytes = item.Size,
+            ParentId = file.ParentId,
+            SchemaSource = "file_list_derived",
             Paths = paths,
         };
     }
 
-    public static CloudDriveSearchResultDto ToSearchDto(this CloudDrive115FileItem item)
+    private static CloudDriveSearchResultDto MapToSearchResult(CloudDrive115FileItem item)
     {
         return new CloudDriveSearchResultDto
         {
@@ -182,8 +166,11 @@ internal static class FileMapping
     {
         return new CloudDrivePathNodeDto
         {
+            Aid = item.Aid?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
             FileId = item.DirectoryId,
+            IsSelectedPath = item.IsSelectedPath,
             FileName = item.Name,
+            ParentId = item.ParentId ?? string.Empty,
         };
     }
 
@@ -193,7 +180,7 @@ internal static class FileMapping
         {
             DownloadUrl = response.Url ?? string.Empty,
             FileName = response.FileName ?? string.Empty,
-            FileSize = 0,
+            FileSize = response.FileSize,
             IsTemporary = true,
         };
     }
@@ -246,14 +233,27 @@ internal static class FileMapping
     {
         return new CloudDriveRecycleListDto
         {
-            Items = [],
+            Items = response.Items
+                .Select(item => new CloudDriveRecycleBinItemDto
+                {
+                    Cid = item.Cid,
+                    Dtime = item.DeleteTime,
+                    FileName = item.FileName,
+                    FileSize = item.FileSize,
+                    Id = item.Id,
+                    ParentName = item.ParentName,
+                    Status = item.Status,
+                    Type = item.Type,
+                    SchemaStatus = "available",
+                })
+                .ToList(),
             Count = response.Count,
             RbPass = response.RecycleBinPasswordEnabled ?? 0,
             Offset = response.Offset,
             PageSize = response.PageSize,
             Order = response.Order,
             IsAsc = response.IsAscending,
-            ItemSchemaStatus = "not_collected",
+            ItemSchemaStatus = "available",
         };
     }
 

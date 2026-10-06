@@ -1,4 +1,4 @@
-namespace Infrastructure.Caching;
+﻿namespace Infrastructure.Caching;
 
 /// <summary>
 /// 分布式缓存框架级选项。
@@ -11,7 +11,7 @@ public sealed class CachingOptions
     public const string SectionName = "Caching";
 
     /// <summary>
-    /// 缓存默认 TTL。调用方未显式指定过期时间时使用（R7.3）。
+    /// 业务缓存封装可选用的默认 TTL；基础 Cache_Extensions 不会隐式读取该值（R7.3）。
     /// </summary>
     public TimeSpan DefaultTtl { get; init; } = TimeSpan.FromMinutes(10);
 }

@@ -1,4 +1,4 @@
-namespace Domain.Events;
+﻿namespace Domain.Events;
 
 /// <summary>
 /// Cookie 会话已注入或更新领域事件。

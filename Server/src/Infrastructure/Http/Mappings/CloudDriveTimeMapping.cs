@@ -1,4 +1,4 @@
-namespace Infrastructure.Http.Mappings;
+﻿namespace Infrastructure.Http.Mappings;
 
 internal static class CloudDriveTimeMapping
 {

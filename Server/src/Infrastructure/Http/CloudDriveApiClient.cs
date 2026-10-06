@@ -29,7 +29,7 @@ internal sealed class CloudDriveApiClient(
     ICloudDriveRateLimiter rateLimiter,
     ICloudDriveSensitiveFieldsFilter sensitiveFieldsFilter,
     IOptions<CloudDriveAppConfig> configOptions,
-    ILogger<CloudDriveApiClient> logger) : ICloudDriveOpenApiGateway
+    ILogger<CloudDriveApiClient> logger) : ICloudDriveWebApiGateway
 {
     /// <summary>
     /// 获取 115 响应模型使用的 JSON 序列化选项。
@@ -125,6 +125,28 @@ internal sealed class CloudDriveApiClient(
 
         string action = ResolveOfflineAction(endpoint, context.QueryParameters);
 
+        IDictionary<string, string> queryParameters = MergeQueryParameters(context.QueryParameters);
+        queryParameters["ac"] = action;
+
+        if (action is "task_lists" or "task_count" or "get_quota_package_info")
+        {
+            var readContext = new CloudDriveApiContext
+            {
+                TargetDomain = context.TargetDomain,
+                QueryParameters = queryParameters,
+                Category = context.Category,
+            };
+
+            return SendAuthenticatedApiRequestAsync<T>(
+                userId,
+                cloudAccountUid,
+                method,
+                ".",
+                readContext,
+                CloudDriveHttpClientNames.Offline,
+                cancellationToken);
+        }
+
         // 签名输入必须来自最终表单字段副本，避免后续补 sign/time/uid 时污染调用方传入的上下文。
         IDictionary<string, string> formFields = MergeFormFields(context.FormFields);
         string signatureRequestBody = SerializeFormFields(formFields);
@@ -144,11 +166,7 @@ internal sealed class CloudDriveApiClient(
         formFields["time"] = signature.Time.ToString(System.Globalization.CultureInfo.InvariantCulture);
         formFields["uid"] = signature.Uid;
 
-        // 115 云下载统一使用 ct=lixian + ac=操作名；传入完整 URL 时也要收敛到这个查询结构。
-        IDictionary<string, string> queryParameters = MergeQueryParameters(context.QueryParameters);
-        queryParameters["ct"] = "lixian";
-        queryParameters["ac"] = action;
-
+        // 115 云下载统一使用 clouddownload.115.com/web/ + ac=操作名；传入完整 URL 时也要收敛到这个查询结构。
         var signedContext = new CloudDriveApiContext
         {
             TargetDomain = context.TargetDomain,
@@ -157,7 +175,7 @@ internal sealed class CloudDriveApiClient(
             Category = context.Category,
         };
 
-        // Offline 命名客户端的 BaseAddress 已指向 /web/lixian/，实际动作由 ct/ac 查询参数决定。
+        // Offline 命名客户端的 BaseAddress 已指向 clouddownload.115.com/web/，实际动作由 ac 查询参数决定。
         return SendAuthenticatedApiRequestAsync<T>(
             userId,
             cloudAccountUid,
@@ -269,7 +287,7 @@ internal sealed class CloudDriveApiClient(
         }
 
         using JsonDocument responseJson = ParseJsonDocument(responseContent, requestUri);
-        CloudDriveApiError? apiError = errorFieldAdapter.TryParse(requestUri, responseJson);
+        CloudDriveApiError? apiError = errorFieldAdapter.TryParse(request.Method, requestUri, responseJson);
         bool stateIndicatesFailure = IsStateFalse(responseJson);
 
         if (apiError is not null || stateIndicatesFailure)
@@ -393,7 +411,7 @@ internal sealed class CloudDriveApiClient(
         }
 
         using JsonDocument responseJson = ParseJsonDocument(responseContent, requestUri);
-        CloudDriveApiError? apiError = errorFieldAdapter.TryParse(requestUri, responseJson);
+        CloudDriveApiError? apiError = errorFieldAdapter.TryParse(request.Method, requestUri, responseJson);
         bool stateIndicatesFailure = IsStateFalse(responseJson);
 
         if (apiError is not null || stateIndicatesFailure)
@@ -818,7 +836,7 @@ internal sealed class CloudDriveApiClient(
             "115 文件搜索响应 item schema 未采集 Path={Path}",
             sensitiveFieldsFilter.Redact(requestUri.AbsolutePath));
 
-        return response.ToNotCollectedDto();
+        return response.ToDto(includeItems: false);
     }
 
     private static bool IsCollectedSearchItemShape(string responseContent)
@@ -1078,5 +1096,4 @@ internal sealed class CloudDriveApiClient(
 
         return normalized;
     }
-
 }

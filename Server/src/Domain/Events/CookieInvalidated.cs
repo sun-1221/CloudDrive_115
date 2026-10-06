@@ -1,4 +1,4 @@
-namespace Domain.Events;
+﻿namespace Domain.Events;
 
 /// <summary>
 /// Cookie 会话失效领域事件。当 115 Cookie 被探测到失效或主动进入冷却期时发布。

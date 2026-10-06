@@ -1,4 +1,4 @@
-using Application.Abstractions;
+﻿using Application.Abstractions;
 
 using SqlSugar;
 
@@ -11,10 +11,10 @@ namespace Infrastructure.Persistence;
 /// 按设计 §1. SqlSugar + §MediatR Pipeline Behaviors 要求：<br/>
 /// - 仅对 Command 请求开启事务（由 <c>TransactionBehavior</c> 保证）；<br/>
 /// - 使用同一个 Scoped <see cref="ISqlSugarClient"/> 实例，借助
-///   <see cref="IAdo.BeginTranAsync"/> / <see cref="IAdo.CommitTranAsync"/> /
-///   <see cref="IAdo.RollbackTranAsync"/> 保证事务语义（R3.4–R3.7）。
+///   <c>IAdo.BeginTranAsync</c> / <c>IAdo.CommitTranAsync</c> /
+///   <c>IAdo.RollbackTranAsync</c> 保证事务语义（R3.4–R3.7）。
 /// </remarks>
-public sealed class SqlSugarTransactionManager(ISqlSugarClient db) : ITransactionManager
+internal sealed class SqlSugarTransactionManager(ISqlSugarClient db) : ITransactionManager
 {
     private readonly ISqlSugarClient _db = db ?? throw new ArgumentNullException(nameof(db));
 

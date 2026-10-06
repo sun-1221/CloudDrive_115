@@ -1,4 +1,4 @@
-using Application.CloudDrive.Dtos;
+﻿using Application.CloudDrive.Dtos;
 
 namespace Application.CloudDrive.Mappings;
 
@@ -10,6 +10,7 @@ public static class FileMapping
     /// <summary>
     /// 将文件 DTO 映射为搜索结果 DTO，未提供的路径保持空值。
     /// </summary>
+    /// <returns>返回当前操作的处理结果。</returns>
     public static CloudDriveSearchResultDto ToDto(this CloudDriveFileDto file, string parentId)
     {
         return new CloudDriveSearchResultDto

@@ -1,4 +1,4 @@
-namespace WebApi.Models;
+﻿namespace WebApi.Models;
 
 public sealed class CreateFolderRequest
 {
@@ -15,6 +15,13 @@ public sealed class FileIdsRequest
 public sealed class MoveFilesRequest
 {
     public List<string> FileIds { get; set; } = [];
+
+    public string TargetDirectoryId { get; set; } = string.Empty;
+}
+
+public sealed class CopyFileRequest
+{
+    public string FileId { get; set; } = string.Empty;
 
     public string TargetDirectoryId { get; set; } = string.Empty;
 }

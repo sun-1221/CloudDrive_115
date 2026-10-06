@@ -1,3 +1,4 @@
+﻿using Application.Abstractions;
 using Application.CloudDrive.Dtos;
 using Application.Commands;
 
@@ -8,4 +9,4 @@ namespace Application.CloudDrive.Auth;
 /// </summary>
 /// <param name="UserId">系统用户 ID。</param>
 /// <param name="Input">撤销输入。</param>
-public sealed record RevokeCookieSessionCommand(Guid UserId, RevokeCookieSessionInput Input) : ICommand;
+public sealed record RevokeCookieSessionCommand(Guid UserId, RevokeCookieSessionInput Input) : ICommand, IHasInput<RevokeCookieSessionInput>;

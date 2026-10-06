@@ -1,4 +1,4 @@
-using Application.Abstractions.CloudDrive;
+﻿using Application.Abstractions.CloudDrive;
 
 using Domain.Enums;
 
@@ -33,7 +33,7 @@ internal sealed class QuartzCloudDriveJobScheduler(ISchedulerFactory schedulerFa
             .StartNow()
             .Build();
 
-        await scheduler.ScheduleJob(trigger, cancellationToken);
+        await scheduler.ScheduleJob(trigger, default, cancellationToken);
     }
 
     private static JobKey GetJobKey(CloudDriveJobType jobType)

@@ -1,6 +1,4 @@
-using Microsoft.AspNetCore.Builder;
-
-namespace WebApi.Middleware;
+﻿namespace WebApi.Middleware;
 
 /// <summary>
 /// <see cref="ExceptionHandlingMiddleware"/> 的管道注册扩展。

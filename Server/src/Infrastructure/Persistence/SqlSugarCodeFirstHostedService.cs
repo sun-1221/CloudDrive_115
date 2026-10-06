@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 using SqlSugar;
@@ -8,7 +9,7 @@ namespace Infrastructure.Persistence;
 /// 应用启动时执行 SqlSugar CodeFirst 建表的后台服务。
 /// </summary>
 internal sealed class SqlSugarCodeFirstHostedService(
-    ISqlSugarClient db,
+    IServiceScopeFactory scopeFactory,
     SqlSugarCodeFirstOptions options) : IHostedService
 {
     /// <summary>
@@ -18,7 +19,10 @@ internal sealed class SqlSugarCodeFirstHostedService(
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        // CodeFirst 只负责确保表结构存在，连接和实体集合由 SqlSugarSetup 的 DI 配置统一提供。
+        // HostedService 是 Singleton，不能直接持有 Scoped 的 ISqlSugarClient；
+        // 启动建表时创建短生命周期作用域，避免捕获请求级数据库客户端。
+        using IServiceScope scope = scopeFactory.CreateScope();
+        ISqlSugarClient db = scope.ServiceProvider.GetRequiredService<ISqlSugarClient>();
         SqlSugarSetup.InitTables(db, options.EntityTypes.ToArray());
         return Task.CompletedTask;
     }

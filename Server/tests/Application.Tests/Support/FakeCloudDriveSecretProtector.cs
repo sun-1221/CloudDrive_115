@@ -1,4 +1,4 @@
-using Application.Abstractions.CloudDrive;
+﻿using Application.Abstractions.CloudDrive;
 
 namespace Application.Tests.Support;
 
@@ -15,7 +15,9 @@ internal sealed class FakeCloudDriveSecretProtector : ICloudDriveSecretProtector
     public string Unprotect(string keyName, string ciphertext, int? keyVersion = null)
     {
         if (!ciphertext.StartsWith(Prefix))
+        {
             throw new InvalidOperationException("Invalid protected text");
+        }
 
         return System.Text.Encoding.UTF8.GetString(
             Convert.FromBase64String(ciphertext[Prefix.Length..]));

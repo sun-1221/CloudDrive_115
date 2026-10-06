@@ -1,4 +1,4 @@
-using System.Net.Http.Json;
+﻿using System.Net.Http.Json;
 using System.Text.Json;
 
 namespace Infrastructure.Http;
@@ -15,6 +15,7 @@ public static class HttpRequestBuilders
     /// </summary>
     /// <param name="requestUri">相对或绝对 URI。</param>
     /// <param name="queryParameters">键值对；<see langword="null"/> 值将被忽略。</param>
+    /// <returns>返回当前操作的处理结果。</returns>
     public static HttpRequestMessage CreateGet(
         string requestUri,
         IReadOnlyDictionary<string, string?>? queryParameters = null)
@@ -28,6 +29,7 @@ public static class HttpRequestBuilders
     /// <summary>
     /// 构造 <c>application/x-www-form-urlencoded</c> 请求。
     /// </summary>
+    /// <returns>返回当前操作的处理结果。</returns>
     public static HttpRequestMessage CreateFormUrlEncoded(
         HttpMethod method,
         string requestUri,
@@ -49,6 +51,7 @@ public static class HttpRequestBuilders
     /// <param name="method">HTTP 方法。</param>
     /// <param name="requestUri">相对或绝对 URI。</param>
     /// <param name="configure">用于追加文本 / 文件部分的回调。</param>
+    /// <returns>返回当前操作的处理结果。</returns>
     public static HttpRequestMessage CreateMultipartForm(
         HttpMethod method,
         string requestUri,
@@ -72,6 +75,7 @@ public static class HttpRequestBuilders
     /// <param name="requestUri">相对或绝对 URI。</param>
     /// <param name="body">请求体对象，可为 <see langword="null"/>。</param>
     /// <param name="options">自定义 JSON 序列化选项；<see langword="null"/> 时使用默认值。</param>
+    /// <returns>返回当前操作的处理结果。</returns>
     public static HttpRequestMessage CreateJson<T>(
         HttpMethod method,
         string requestUri,

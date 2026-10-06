@@ -25,7 +25,7 @@ namespace Infrastructure.Jobs;
 /// </summary>
 internal sealed class CloudDriveTranscodeJob(
     ICloudDriveJobRepository jobRepository,
-    ICloudDriveOpenApiGateway openApiGateway,
+    ICloudDriveWebApiGateway openApiGateway,
     ITransactionManager transactionManager,
     IPublisher publisher,
     ICloudDriveJobAuditLogger auditLogger,
@@ -37,12 +37,12 @@ internal sealed class CloudDriveTranscodeJob(
     private static readonly JsonSerializerOptions PayloadJsonOptions = new(JsonSerializerDefaults.Web);
 
     /// <inheritdoc />
-    public async Task Execute(IJobExecutionContext context)
+    public async ValueTask Execute(IJobExecutionContext context, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
 
         Guid jobId = ReadJobId(context);
-        CloudDriveJob? job = await jobRepository.GetByIdAsync(jobId, context.CancellationToken);
+        CloudDriveJob? job = await jobRepository.GetByIdAsync(jobId, cancellationToken);
         if (job is null)
         {
             logger.LogWarning("115 视频转码后台任务不存在 JobId={JobId}", jobId);
@@ -51,30 +51,30 @@ internal sealed class CloudDriveTranscodeJob(
 
         if (job.JobType != CloudDriveJobType.Transcode)
         {
-            await MarkFailedAsync(job, $"后台任务类型不匹配，期望 Transcode，实际 {job.JobType}", context.CancellationToken);
+            await MarkFailedAsync(job, $"后台任务类型不匹配，期望 Transcode，实际 {job.JobType}", cancellationToken);
             return;
         }
 
         SubmitTranscodeInput? input = DeserializePayload(job);
         if (input is null || string.IsNullOrWhiteSpace(input.PickCode))
         {
-            await MarkFailedAsync(job, "视频转码任务缺少有效 PickCode。", context.CancellationToken);
+            await MarkFailedAsync(job, "视频转码任务缺少有效 PickCode。", cancellationToken);
             return;
         }
 
         try
         {
-            await StartJobAsync(job, context.CancellationToken);
-            await SubmitTranscodeAsync(job, input, context.CancellationToken);
+            await StartJobAsync(job, cancellationToken);
+            await SubmitTranscodeAsync(job, input, cancellationToken);
 
-            bool isReady = await ProbeUntilReadyAsync(job, input, context.CancellationToken);
+            bool isReady = await ProbeUntilReadyAsync(job, input, cancellationToken);
             if (!isReady)
             {
-                await MarkFailedAsync(job, "视频转码尚未在本轮后台任务探测内完成。", context.CancellationToken);
+                await MarkFailedAsync(job, "视频转码尚未在本轮后台任务探测内完成。", cancellationToken);
                 return;
             }
 
-            await CompleteJobAsync(job, context.CancellationToken);
+            await CompleteJobAsync(job, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -85,7 +85,7 @@ internal sealed class CloudDriveTranscodeJob(
                 job.Id,
                 sensitiveFieldsFilter.Redact(job.CloudAccountUid));
 
-            await MarkFailedAsync(job, CreateSafeErrorMessage(ex), context.CancellationToken);
+            await MarkFailedAsync(job, CreateSafeErrorMessage(ex), cancellationToken);
         }
     }
 
@@ -145,13 +145,14 @@ internal sealed class CloudDriveTranscodeJob(
         for (int attempt = 1; attempt <= ProbeMaxAttempts; attempt++)
         {
             CloudDriveVideoPlayResponse response = await ProbePlayAsync(job, input.PickCode!, cancellationToken);
+
             // 仅依赖 Status 字段判断转码完成；成功播放 schema 未完整采集前不得依赖 VideoUrls 推断
             bool isReady = !string.Equals(response.Status, "transcoding", StringComparison.OrdinalIgnoreCase);
 
             await UpdateCheckpointAsync(
                 job,
                 CreateCheckpoint(input.PickCode!, isReady ? "ready" : "transcoding", attempt),
-                isReady ? 95 : Math.Min(30 + attempt * 20, 90),
+                isReady ? 95 : Math.Min(30 + (attempt * 20), 90),
                 cancellationToken);
 
             if (isReady)

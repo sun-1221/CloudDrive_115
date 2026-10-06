@@ -1,4 +1,4 @@
-using Domain.Enums;
+﻿using Domain.Enums;
 using Domain.Events;
 
 namespace Domain.Entities;
@@ -104,7 +104,7 @@ public sealed class CloudDriveJob : AggregateRoot<Guid>
             ResourceId = resourceId,
             Progress = 0,
             PayloadJson = payloadJson,
-            CreationTime = DateTime.UtcNow
+            CreationTime = DateTime.UtcNow,
         };
     }
 
@@ -178,7 +178,7 @@ public sealed class CloudDriveJob : AggregateRoot<Guid>
         CloudDriveJobStatus previousStatus = Status;
         Status = newStatus;
 
-        AddDomainEvent(new CloudDriveJobStatusChanged(
+        RaiseDomainEvent(new CloudDriveJobStatusChanged(
             Id,
             UserId,
             CloudAccountUid,

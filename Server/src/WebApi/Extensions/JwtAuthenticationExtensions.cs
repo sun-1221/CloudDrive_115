@@ -1,8 +1,12 @@
+﻿using System.Net;
 using System.Text;
+using System.Text.Json;
+
+using Application.Abstractions;
+using Domain.Repositories;
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 
 namespace WebApi.Extensions;
@@ -68,6 +72,7 @@ public static class JwtAuthenticationExtensions
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
             {
+                options.MapInboundClaims = false;
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
@@ -79,10 +84,81 @@ public static class JwtAuthenticationExtensions
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey)),
                     ClockSkew = TimeSpan.FromMinutes(1),
                 };
+
+                options.Events = new JwtBearerEvents
+                {
+                    OnChallenge = context =>
+                    {
+                        context.HandleResponse();
+                        return WriteProblemDetailsAsync(
+                            context.HttpContext,
+                            HttpStatusCode.Unauthorized,
+                            "Unauthorized");
+                    },
+                    OnForbidden = context => WriteProblemDetailsAsync(
+                        context.HttpContext,
+                        HttpStatusCode.Forbidden,
+                        "Forbidden"),
+                    OnTokenValidated = async context =>
+                    {
+                        string? sid = context.Principal?.FindFirst("sid")?.Value;
+                        if (!Guid.TryParse(sid, out Guid sessionId))
+                        {
+                            context.Fail("JWT 缺少有效的会话 ID。");
+                            return;
+                        }
+
+                        IUserSessionRepository repository = context.HttpContext.RequestServices.GetRequiredService<IUserSessionRepository>();
+                        if (await repository.GetActiveAsync(sessionId, context.HttpContext.RequestAborted) is null)
+                        {
+                            context.Fail("登录会话已撤销或过期。");
+                        }
+                        else
+                        {
+                            context.HttpContext.RequestServices.GetRequiredService<IUserSessionContextAccessor>().SetSession(sessionId);
+                        }
+                    },
+                };
             });
 
         services.AddAuthorization();
 
         return services;
+    }
+
+    /// <summary>
+    /// 将认证失败和授权失败响应统一写入 ProblemDetails，避免受保护端点绕过全局异常中间件时输出空响应。
+    /// </summary>
+    /// <param name="httpContext">当前 HTTP 请求上下文。</param>
+    /// <param name="statusCode">需要写入响应的 HTTP 状态码。</param>
+    /// <param name="title">ProblemDetails 的标题。</param>
+    /// <returns>表示异步写入响应体的任务。</returns>
+    private static async Task WriteProblemDetailsAsync(
+        HttpContext httpContext,
+        HttpStatusCode statusCode,
+        string title)
+    {
+        if (httpContext.Response.HasStarted)
+        {
+            return;
+        }
+
+        int status = (int)statusCode;
+        var problem = new ProblemDetails
+        {
+            Status = status,
+            Title = title,
+            Instance = httpContext.Request.Path.Value,
+        };
+
+        httpContext.Response.StatusCode = status;
+        httpContext.Response.ContentType = "application/problem+json";
+
+        await JsonSerializer.SerializeAsync(
+            httpContext.Response.Body,
+            problem,
+            problem.GetType(),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web),
+            httpContext.RequestAborted);
     }
 }

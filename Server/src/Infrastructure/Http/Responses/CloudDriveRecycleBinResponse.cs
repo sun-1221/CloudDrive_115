@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 using Infrastructure.Http.Json;
 
@@ -49,4 +49,10 @@ internal sealed class CloudDriveRecycleBinResponse
     [JsonConverter(typeof(StringOrNumberToIntJsonConverter))]
     [JsonPropertyName("is_asc")]
     public int? IsAscending { get; init; }
+
+    /// <summary>
+    /// 获取或设置回收站条目数组。
+    /// </summary>
+    [JsonPropertyName("data")]
+    public IReadOnlyList<CloudDriveRecycleBinItemResponse> Items { get; init; } = [];
 }

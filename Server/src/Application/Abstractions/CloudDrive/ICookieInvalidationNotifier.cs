@@ -1,4 +1,4 @@
-namespace Application.Abstractions.CloudDrive;
+﻿namespace Application.Abstractions.CloudDrive;
 
 /// <summary>
 /// Cookie 失效通知抽象。用于发布 Cookie 失效事件与运维告警。
@@ -16,5 +16,6 @@ public interface ICookieInvalidationNotifier
     /// <param name="cloudAccountUid">115 账号唯一标识。</param>
     /// <param name="reason">失效原因（供日志与审计）。</param>
     /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>表示异步通知发送操作的 <see cref="Task"/>。</returns>
     Task NotifyAsync(Guid userId, string cloudAccountUid, string reason, CancellationToken cancellationToken = default);
 }

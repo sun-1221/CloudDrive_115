@@ -4,7 +4,7 @@ using Application.Abstractions.CloudDrive;
 
 namespace Application.Tests.Support;
 
-internal sealed class RecordingCloudDriveOpenApiGateway : ICloudDriveOpenApiGateway
+internal sealed class RecordingCloudDriveOpenApiGateway : ICloudDriveWebApiGateway
 {
     private readonly Dictionary<string, object?> _webApiResponses = new(StringComparer.Ordinal);
     private readonly Dictionary<string, object?> _userCenterResponses = new(StringComparer.Ordinal);

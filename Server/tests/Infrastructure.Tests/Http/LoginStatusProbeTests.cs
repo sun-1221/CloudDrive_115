@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 using Application.Abstractions.CloudDrive;
 
@@ -8,22 +8,28 @@ using Infrastructure.Http;
 
 namespace Infrastructure.Tests.Http;
 
+/// <summary>
+/// 115 网盘登录状态探测器测试。
+/// </summary>
 public sealed class LoginStatusProbeTests
 {
+    /// <summary>
+    /// 验证网关探测成功时返回已登录。
+    /// </summary>
     [Fact]
     public async Task ProbeAsync_WhenGatewaySucceeds_ReturnsLoggedInTrueAsync()
     {
-        // 准备
+        // Arrange（准备）
         var gateway = new StubGateway(JsonDocument.Parse("""{"state":true}""").RootElement.Clone());
         var probe = new LoginStatusProbe(gateway);
 
-        // 执行
+        // Act（执行）
         LoginStatusProbeResult result = await probe.ProbeAsync(
             Guid.NewGuid(),
             "115001",
             CancellationToken.None);
 
-        // 断言
+        // Assert（断言）
         Assert.True(result.IsLoggedIn);
         Assert.Null(result.FailureReason);
         Assert.Equal("files", gateway.LastEndpoint);
@@ -31,43 +37,49 @@ public sealed class LoginStatusProbeTests
         Assert.Equal("1", gateway.LastContext?.QueryParameters?["limit"]);
     }
 
+    /// <summary>
+    /// 验证 Cookie 失效时登录状态探测返回未登录。
+    /// </summary>
     [Fact]
     public async Task ProbeAsync_WhenCookieInvalidated_ReturnsLoggedInFalseAsync()
     {
-        // 准备
+        // Arrange（准备）
         var gateway = new StubGateway(new CloudDriveCookieInvalidatedException(errorCode: "cloud_drive_cookie_invalidated"));
         var probe = new LoginStatusProbe(gateway);
 
-        // 执行
+        // Act（执行）
         LoginStatusProbeResult result = await probe.ProbeAsync(
             Guid.NewGuid(),
             "115001",
             CancellationToken.None);
 
-        // 断言
+        // Assert（断言）
         Assert.False(result.IsLoggedIn);
         Assert.Equal("cloud_drive_cookie_invalidated", result.FailureReason);
     }
 
+    /// <summary>
+    /// 验证网络异常时登录状态探测返回未知状态。
+    /// </summary>
     [Fact]
     public async Task ProbeAsync_WhenNetworkUnknown_ReturnsLoggedInNullAsync()
     {
-        // 准备
+        // Arrange（准备）
         var gateway = new StubGateway(new CloudDriveNetworkException(errorCode: "cloud_drive_network_error"));
         var probe = new LoginStatusProbe(gateway);
 
-        // 执行
+        // Act（执行）
         LoginStatusProbeResult result = await probe.ProbeAsync(
             Guid.NewGuid(),
             "115001",
             CancellationToken.None);
 
-        // 断言
+        // Assert（断言）
         Assert.Null(result.IsLoggedIn);
         Assert.Equal("cloud_drive_network_error", result.FailureReason);
     }
 
-    private sealed class StubGateway(object responseOrException) : ICloudDriveOpenApiGateway
+    private sealed class StubGateway(object responseOrException) : ICloudDriveWebApiGateway
     {
         public string? LastEndpoint { get; private set; }
 

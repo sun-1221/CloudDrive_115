@@ -16,11 +16,17 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Infrastructure.Tests.Jobs;
 
+/// <summary>
+/// 115 网盘视频转码后台任务测试。
+/// </summary>
 public sealed class CloudDriveTranscodeJobTests
 {
     private static readonly Guid TestUserId = Guid.Parse("77777777-7777-7777-7777-777777777777");
     private const string TestCloudAccountUid = "115001";
 
+    /// <summary>
+    /// 验证探测返回可播放地址时转码任务完成。
+    /// </summary>
     [Fact]
     public async Task Execute_WhenProbeReturnsPlayableUrl_CompletesJobAsync()
     {
@@ -39,6 +45,7 @@ public sealed class CloudDriveTranscodeJobTests
                     Definition = 4,
                     Url = "https://play.example/video.m3u8"
                 }
+
             ]
         });
         var transactionManager = new CloudDriveJobTestDoubles.RecordingTransactionManager();
@@ -73,6 +80,9 @@ public sealed class CloudDriveTranscodeJobTests
         Assert.Equal(1, checkpoint.RootElement.GetProperty("probeAttempt").GetInt32());
     }
 
+    /// <summary>
+    /// 验证探测一直未就绪时转码任务失败并记录转码中提示。
+    /// </summary>
     [Fact]
     public async Task Execute_WhenProbeNeverReady_FailsWithTranscodingMessageAsync()
     {
@@ -89,6 +99,7 @@ public sealed class CloudDriveTranscodeJobTests
                 Status = "transcoding"
             });
         }
+
         var transactionManager = new CloudDriveJobTestDoubles.RecordingTransactionManager();
         CloudDriveTranscodeJob transcodeJob = CreateTranscodeJob(
             repository,
@@ -107,6 +118,9 @@ public sealed class CloudDriveTranscodeJobTests
         Assert.Equal(["files/video_push", "files/video", "files/video", "files/video"], gateway.Endpoints);
     }
 
+    /// <summary>
+    /// 验证缺少 PickCode 时转码任务失败且不调用网关。
+    /// </summary>
     [Fact]
     public async Task Execute_WhenPickCodeMissing_FailsWithoutCallingGatewayAsync()
     {
@@ -156,7 +170,7 @@ public sealed class CloudDriveTranscodeJobTests
 
     private static CloudDriveTranscodeJob CreateTranscodeJob(
         ICloudDriveJobRepository repository,
-        ICloudDriveOpenApiGateway gateway,
+        ICloudDriveWebApiGateway gateway,
         Application.Abstractions.ITransactionManager transactionManager,
         IPublisher publisher)
     {
@@ -170,7 +184,7 @@ public sealed class CloudDriveTranscodeJobTests
             NullLogger<CloudDriveTranscodeJob>.Instance);
     }
 
-    private sealed class RecordingTranscodeGateway : ICloudDriveOpenApiGateway
+    private sealed class RecordingTranscodeGateway : ICloudDriveWebApiGateway
     {
         public Queue<CloudDriveVideoPlayResponse> PlayResponses { get; } = [];
 

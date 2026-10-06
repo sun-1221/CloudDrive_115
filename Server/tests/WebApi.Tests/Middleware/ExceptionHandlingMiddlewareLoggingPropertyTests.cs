@@ -1,4 +1,4 @@
-using FsCheck;
+﻿using FsCheck;
 using FsCheck.Fluent;
 using FsCheck.Xunit;
 
@@ -27,6 +27,7 @@ public sealed class ExceptionHandlingMiddlewareLoggingPropertyTests
         NonEmptyString path,
         NonEmptyString message)
     {
+        // Arrange（准备）
         var logger = new FakeLogger<ExceptionHandlingMiddleware>();
         var env = new FakeHostEnvironment();
         string requestPath = "/" + path.Get;
@@ -41,8 +42,10 @@ public sealed class ExceptionHandlingMiddlewareLoggingPropertyTests
         context.Request.Path = requestPath;
         string actualPath = context.Request.Path.Value!;
 
+        // Act（执行）
         await middleware.InvokeAsync(context);
 
+        // Assert（断言）
         Assert.Contains(logger.Entries, e => e.Level == LogLevel.Error);
         LogEntry errorEntry = logger.Entries.First(e => e.Level == LogLevel.Error);
 

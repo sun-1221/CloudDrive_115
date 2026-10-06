@@ -1,11 +1,8 @@
 using System.Reflection;
 
 using Application.Abstractions;
-using Application.Abstractions.CloudDrive;
 using Application.Behaviors;
-using Application.CloudDrive.Auth;
 
-using Domain.Entities;
 using Domain.Repositories;
 
 using Infrastructure.Persistence;
@@ -22,8 +19,9 @@ namespace Infrastructure.DependencyInjection;
 /// </summary>
 /// <remarks>
 /// 按设计 §MediatR Pipeline Behaviors + §8. WebApi 启动与认证 要求：<br/>
-/// - Pipeline Behaviors 按 LoggingBehavior → ValidationBehavior → TransactionBehavior →
+/// - Pipeline Behaviors 默认按 LoggingBehavior → ValidationBehavior → TransactionBehavior →
 ///   DomainEventDispatchBehavior 顺序注册（R3.8）<br/>
+/// - 业务模块可通过 <c>preValidationBehaviors</c> 显式插入验证前上下文解析 Behavior（R3.8）<br/>
 /// - 仓储开放泛型 <see cref="IRepository{TEntity,TId}"/> → <see cref="Repository{TEntity,TId}"/>
 ///   注册为 <see cref="ServiceLifetime.Scoped"/>（R12.1）<br/>
 /// - 机密保护通过 <see cref="Security.SecretsSetup.AddSecretsProtection"/> 提供入口，
@@ -37,11 +35,13 @@ public static class ServiceCollectionExtensions
     /// </summary>
     /// <param name="services">服务集合。</param>
     /// <param name="applicationAssembly">Application 程序集，用于扫描 MediatR Handler 与 FluentValidation Validator。</param>
+    /// <param name="preValidationBehaviors">业务模块显式插入在 Logging 与 Validation 之间的 Pipeline Behavior 开放泛型类型。</param>
     /// <returns>原始服务集合。</returns>
     /// <exception cref="ArgumentNullException">当 <paramref name="applicationAssembly"/> 为 <see langword="null"/> 时抛出。</exception>
     public static IServiceCollection AddApplicationServices(
         this IServiceCollection services,
-        Assembly applicationAssembly)
+        Assembly applicationAssembly,
+        IReadOnlyCollection<Type>? preValidationBehaviors = null)
     {
         ArgumentNullException.ThrowIfNull(applicationAssembly);
 
@@ -50,9 +50,16 @@ public static class ServiceCollectionExtensions
             cfg.RegisterServicesFromAssembly(applicationAssembly);
         });
 
-        // Pipeline Behaviors 必须按 Logging → Validation → Transaction → DomainEventDispatch 顺序注册
+        // Pipeline Behaviors 必须按 Logging → [业务前置] → Validation → Transaction → DomainEventDispatch 顺序注册。
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
-        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(CloudDriveAccountContextBehavior<,>));
+        if (preValidationBehaviors is not null)
+        {
+            foreach (Type behaviorType in preValidationBehaviors)
+            {
+                AddPreValidationBehavior(services, behaviorType);
+            }
+        }
+
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(TransactionBehavior<,>));
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(DomainEventDispatchBehavior<,>));
@@ -61,7 +68,6 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<IDomainEventSource, DomainEventSource>();
         services.AddScoped<ITransactionManager, SqlSugarTransactionManager>();
-        services.AddScoped<ICloudDriveAccountContextAccessor, CloudDriveAccountContextAccessor>();
 
         return services;
     }
@@ -76,7 +82,23 @@ public static class ServiceCollectionExtensions
     {
         services.AddScoped(typeof(IRepository<,>), typeof(Repository<,>));
         services.AddScoped<ICookieSessionRepository, CookieSessionRepository>();
+        services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IUserSessionRepository, UserSessionRepository>();
         services.AddScoped<ICloudDriveJobRepository, CloudDriveJobRepository>();
         return services;
+    }
+
+    private static void AddPreValidationBehavior(IServiceCollection services, Type behaviorType)
+    {
+        ArgumentNullException.ThrowIfNull(behaviorType);
+
+        if (!behaviorType.IsGenericTypeDefinition)
+        {
+            throw new ArgumentException(
+                "Pre-validation pipeline behavior must be an open generic type definition.",
+                nameof(behaviorType));
+        }
+
+        services.AddTransient(typeof(IPipelineBehavior<,>), behaviorType);
     }
 }

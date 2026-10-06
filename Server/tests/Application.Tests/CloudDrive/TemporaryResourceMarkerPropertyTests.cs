@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 
 using Application.CloudDrive.Dtos;
 
@@ -15,6 +15,7 @@ public sealed class TemporaryResourceMarkerPropertyTests
     [Fact]
     public void CloudDriveDtos_WithIsTemporary_DefaultToTrue()
     {
+        // Arrange（准备）
         Type[] temporaryDtoTypes = typeof(CloudDriveDownloadDto).Assembly
             .GetTypes()
             .Where(type => type.Namespace == typeof(CloudDriveDownloadDto).Namespace)
@@ -27,11 +28,13 @@ public sealed class TemporaryResourceMarkerPropertyTests
         Assert.Contains(typeof(CloudDriveDocPreviewDto), temporaryDtoTypes);
         Assert.Contains(typeof(CloudDriveVideoPlayDto), temporaryDtoTypes);
 
+        // Act（执行）
         foreach (Type dtoType in temporaryDtoTypes)
         {
             object dto = Activator.CreateInstance(dtoType)!;
             PropertyInfo isTemporaryProperty = dtoType.GetProperty("IsTemporary", BindingFlags.Public | BindingFlags.Instance)!;
 
+            // Assert（断言）
             Assert.True((bool)isTemporaryProperty.GetValue(dto)!);
         }
     }

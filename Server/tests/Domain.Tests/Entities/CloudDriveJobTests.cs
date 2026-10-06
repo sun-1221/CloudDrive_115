@@ -1,4 +1,4 @@
-using Domain.Entities;
+﻿using Domain.Entities;
 using Domain.Enums;
 using Domain.Events;
 
@@ -12,6 +12,9 @@ public sealed class CloudDriveJobTests
     private static readonly Guid TestUserId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private const string TestCloudAccountUid = "115-user-001";
 
+    /// <summary>
+    /// 验证待处理任务启动后状态变为运行中并追加状态变更事件。
+    /// </summary>
     [Fact]
     public void Start_WhenJobIsPending_ChangesStatusToRunningAndAppendsEvent()
     {
@@ -29,6 +32,9 @@ public sealed class CloudDriveJobTests
         Assert.Equal(CloudDriveJobStatus.Running, domainEvent.NewStatus);
     }
 
+    /// <summary>
+    /// 验证运行中任务完成后状态变为已完成。
+    /// </summary>
     [Fact]
     public void Complete_WhenJobIsRunning_ChangesStatusToCompleted()
     {
@@ -50,6 +56,9 @@ public sealed class CloudDriveJobTests
         Assert.Equal(CloudDriveJobStatus.Completed, domainEvent.NewStatus);
     }
 
+    /// <summary>
+    /// 验证运行中任务失败后状态变为失败并记录错误。
+    /// </summary>
     [Fact]
     public void Fail_WhenJobIsRunning_ChangesStatusToFailedAndRecordsError()
     {
@@ -71,6 +80,9 @@ public sealed class CloudDriveJobTests
         Assert.Equal(CloudDriveJobStatus.Failed, domainEvent.NewStatus);
     }
 
+    /// <summary>
+    /// 验证运行中任务取消后状态变为已取消。
+    /// </summary>
     [Fact]
     public void Cancel_WhenJobIsRunning_ChangesStatusToCancelled()
     {

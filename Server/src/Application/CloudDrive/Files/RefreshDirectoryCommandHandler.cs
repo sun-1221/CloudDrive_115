@@ -10,9 +10,8 @@ using Microsoft.Extensions.Options;
 namespace Application.CloudDrive.Files;
 
 internal sealed class RefreshDirectoryCommandHandler(
-    ICloudDriveOpenApiGateway openApiGateway,
+    ICloudDriveWebApiGateway openApiGateway,
     ICloudDriveMetadataCache metadataCache,
-    ICloudDriveRateLimiter rateLimiter,
     ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : ICommandHandler<RefreshDirectoryCommand>
@@ -38,12 +37,6 @@ internal sealed class RefreshDirectoryCommandHandler(
             Limit = 1,
         };
         CloudDriveApiContext context = CloudDriveFileHandlerSupport.CreateFileListContext(listInput);
-
-        using IDisposable permit = await rateLimiter.AcquireAsync(
-            request.UserId,
-            cloudAccountUid,
-            context.Category,
-            cancellationToken);
 
         await openApiGateway.SendWebApiRequestAsync<PagedResultDto<CloudDriveFileDto>>(
             request.UserId,

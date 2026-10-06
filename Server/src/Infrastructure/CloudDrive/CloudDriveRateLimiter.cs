@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 
 using Application.Abstractions.CloudDrive;
 using Application.CloudDrive;
@@ -223,7 +223,7 @@ internal sealed class CloudDriveRateLimiter(
             }
 
             double elapsedSeconds = (nowUtc - _lastRefillUtc).TotalSeconds;
-            _tokens = Math.Min(_capacity, _tokens + elapsedSeconds * _capacity);
+            _tokens = Math.Min(_capacity, _tokens + (elapsedSeconds * _capacity));
             _lastRefillUtc = nowUtc;
         }
 

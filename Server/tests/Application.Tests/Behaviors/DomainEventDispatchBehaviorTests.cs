@@ -1,13 +1,14 @@
-using MediatR;
-
-using Application.Abstractions;
+﻿using Application.Abstractions;
 using Application.Behaviors;
 using Application.Commands;
 using Application.Events;
 using Application.Queries;
+
 using Domain.Entities;
 using Domain.Events;
 using Domain.Results;
+
+using MediatR;
 
 namespace Application.Tests.Behaviors;
 
@@ -19,10 +20,10 @@ public sealed class DomainEventDispatchBehaviorTests
         // Arrange
         var publisher = new FakePublisher();
         var eventSource = new FakeDomainEventSource();
-        var entity = new TestEntity(Guid.NewGuid());
+        var entity = new TestAggregateRoot(Guid.NewGuid());
         var domainEvent = new TestDomainEvent("created");
 
-        entity.AddDomainEvent(domainEvent);
+        entity.Record(domainEvent);
         eventSource.Track(entity);
 
         var behavior = new DomainEventDispatchBehavior<TestCommand, Result>(publisher, eventSource);
@@ -52,9 +53,9 @@ public sealed class DomainEventDispatchBehaviorTests
         // Arrange
         var publisher = new FakePublisher();
         var eventSource = new FakeDomainEventSource();
-        var entity = new TestEntity(Guid.NewGuid());
+        var entity = new TestAggregateRoot(Guid.NewGuid());
 
-        entity.AddDomainEvent(new TestDomainEvent("created"));
+        entity.Record(new TestDomainEvent("created"));
         eventSource.Track(entity);
 
         var behavior = new DomainEventDispatchBehavior<TestQuery, Result<int>>(publisher, eventSource);
@@ -78,12 +79,14 @@ public sealed class DomainEventDispatchBehaviorTests
 
     private sealed record TestDomainEvent(string Name) : DomainEvent;
 
-    private sealed class TestEntity : Entity<Guid>
+    private sealed class TestAggregateRoot : AggregateRoot<Guid>
     {
-        public TestEntity(Guid id)
+        public TestAggregateRoot(Guid id)
         {
             Id = id;
         }
+
+        public void Record(DomainEvent domainEvent) => RaiseDomainEvent(domainEvent);
     }
 
     private sealed class FakeDomainEventSource : IDomainEventSource

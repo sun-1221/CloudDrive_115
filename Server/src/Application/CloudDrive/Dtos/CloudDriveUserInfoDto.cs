@@ -1,10 +1,12 @@
-namespace Application.CloudDrive.Dtos;
+﻿namespace Application.CloudDrive.Dtos;
 
 /// <summary>
 /// 115 用户聚合信息。
 /// </summary>
 public class CloudDriveUserInfoDto
 {
+    /// <summary>获取或设置基础资料 schema 状态。</summary>
+    public string SchemaStatus { get; set; } = "not_collected";
     /// <summary>
     /// 获取或设置官方 user_id。
     /// </summary>

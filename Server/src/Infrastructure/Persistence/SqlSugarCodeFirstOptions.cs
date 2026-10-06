@@ -1,4 +1,4 @@
-namespace Infrastructure.Persistence;
+﻿namespace Infrastructure.Persistence;
 
 /// <summary>
 /// SqlSugar CodeFirst 启动任务使用的实体类型集合。

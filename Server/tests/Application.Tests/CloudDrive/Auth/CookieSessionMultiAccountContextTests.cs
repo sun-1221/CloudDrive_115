@@ -16,8 +16,14 @@ using Microsoft.Extensions.Options;
 
 namespace Application.Tests.CloudDrive.Auth;
 
+/// <summary>
+/// Cookie 会话多账号上下文隔离测试。
+/// </summary>
 public sealed class CookieSessionMultiAccountContextTests
 {
+    /// <summary>
+    /// 验证多账号写入会按用户和云盘账号隔离。
+    /// </summary>
     [Fact]
     public async Task UpsertCookieSessionCommandHandler_WhenMultipleAccounts_IsolatesByUserAndCloudAccount()
     {
@@ -42,6 +48,9 @@ public sealed class CookieSessionMultiAccountContextTests
         Assert.DoesNotContain("uid-1", secondHeader);
     }
 
+    /// <summary>
+    /// 验证多账号撤销仅影响目标账号。
+    /// </summary>
     [Fact]
     public async Task RevokeCookieSessionCommandHandler_WhenMultipleAccounts_AffectsOnlyTargetAccount()
     {
@@ -72,6 +81,9 @@ public sealed class CookieSessionMultiAccountContextTests
         Assert.DoesNotContain(context.RateLimiter.ResetCalls, call => call.CloudAccountUid == "115002");
     }
 
+    /// <summary>
+    /// 验证绑定账号查询仅返回当前用户账号。
+    /// </summary>
     [Fact]
     public async Task GetBoundAccountsQueryHandler_WhenMultipleUsers_ReturnsOnlyCurrentUserAccounts()
     {
@@ -94,19 +106,24 @@ public sealed class CookieSessionMultiAccountContextTests
         Assert.DoesNotContain(result.Value, item => item.CloudAccountUid == "115999");
     }
 
+    /// <summary>
+    /// 验证账号上下文未设置时用户信息查询抛出无效操作异常。
+    /// </summary>
     [Fact]
     public async Task GetUserInfoQueryHandler_WhenAccessorNotSet_ThrowsInvalidOperation()
     {
-        // Arrange
+        // Arrange（准备）
         TestContext context = CreateContext();
         Guid userId = Guid.NewGuid();
         await context.UpsertHandler.Handle(CreateUpsertCommand(userId, "115001", "uid-1"), CancellationToken.None);
 
-        // Act & Assert — accessor 未设置上下文时直接抛异常
+        // Act（执行）
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => context.UserInfoHandler.Handle(
                 new GetUserInfoQuery(userId),
                 CancellationToken.None));
+
+        // Assert（断言）
         Assert.Empty(context.Gateway.WebEndpoints);
     }
 
@@ -232,7 +249,7 @@ public sealed class CookieSessionMultiAccountContextTests
         }
     }
 
-    private sealed class RecordingGateway : ICloudDriveOpenApiGateway
+    private sealed class RecordingGateway : ICloudDriveWebApiGateway
     {
         private readonly Dictionary<string, JsonElement> _webResponses = new(StringComparer.Ordinal);
         private readonly Dictionary<string, JsonElement> _userCenterResponses = new(StringComparer.Ordinal);

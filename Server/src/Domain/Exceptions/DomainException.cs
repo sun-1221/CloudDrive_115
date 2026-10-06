@@ -1,4 +1,4 @@
-namespace Domain.Exceptions;
+﻿namespace Domain.Exceptions;
 
 /// <summary>
 /// 领域/业务异常基类。业务模块通过派生本类或约定 <see cref="StatusCode"/>，
@@ -51,5 +51,29 @@ public abstract class DomainException : Exception
     {
         StatusCode = statusCode;
         ErrorCode = errorCode;
+    }
+
+    /// <summary>
+    /// 默认构造函数。
+    /// </summary>
+    public DomainException() : base()
+    {
+    }
+
+    /// <summary>
+    /// 以消息构造领域异常。
+    /// </summary>
+    /// <param name="message">异常消息。</param>
+    public DomainException(string? message) : base(message)
+    {
+    }
+
+    /// <summary>
+    /// 以消息和内部异常构造领域异常。
+    /// </summary>
+    /// <param name="message">异常消息。</param>
+    /// <param name="innerException">内部异常。</param>
+    public DomainException(string? message, Exception? innerException) : base(message, innerException)
+    {
     }
 }

@@ -1,4 +1,4 @@
-namespace Application.CloudDrive.Dtos;
+﻿namespace Application.CloudDrive.Dtos;
 
 /// <summary>
 /// 115 云下载配额。
@@ -29,5 +29,4 @@ public class CloudDriveOfflineQuotaDto
     /// 获取或设置已使用额度。
     /// </summary>
     public long Used { get; set; }
-
 }

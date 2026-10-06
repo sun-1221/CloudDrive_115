@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 
 using Application.Abstractions.CloudDrive;
 using Application.CloudDrive.Dtos;
@@ -20,6 +20,11 @@ public sealed class CloudDriveAccountContextBehavior<TRequest, TResponse>
     private readonly ICloudDriveAccountContextResolver _resolver;
     private readonly ICloudDriveAccountContextAccessor _accessor;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CloudDriveAccountContextBehavior{TRequest, TResponse}"/> class.
+    /// </summary>
+    /// <param name="resolver">账号上下文解析器。</param>
+    /// <param name="accessor">账号上下文访问器。</param>
     public CloudDriveAccountContextBehavior(
         ICloudDriveAccountContextResolver resolver,
         ICloudDriveAccountContextAccessor accessor)

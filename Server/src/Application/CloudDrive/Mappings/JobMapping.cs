@@ -1,4 +1,4 @@
-using Application.CloudDrive.Dtos;
+﻿using Application.CloudDrive.Dtos;
 
 using Domain.Entities;
 
@@ -12,6 +12,7 @@ public static class JobMapping
     /// <summary>
     /// 将后台任务聚合根映射为 DTO。
     /// </summary>
+    /// <returns>返回当前操作的处理结果。</returns>
     public static CloudDriveJobDto ToDto(this CloudDriveJob job)
     {
         return new CloudDriveJobDto

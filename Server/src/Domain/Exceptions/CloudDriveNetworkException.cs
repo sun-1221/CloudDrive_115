@@ -1,4 +1,4 @@
-namespace Domain.Exceptions;
+﻿namespace Domain.Exceptions;
 
 /// <summary>
 /// 调用 115 网页端 API 出现网络超时或通信失败时抛出。
@@ -28,6 +28,14 @@ public sealed class CloudDriveNetworkException : DomainException
         Exception innerException,
         string? errorCode = "cloud_drive_network_error")
         : base(502, message, innerException, errorCode)
+    {
+    }
+
+    private CloudDriveNetworkException(int statusCode, string message, string? errorCode = null) : base(statusCode, message, errorCode)
+    {
+    }
+
+    private CloudDriveNetworkException(int statusCode, string message, Exception innerException, string? errorCode = null) : base(statusCode, message, innerException, errorCode)
     {
     }
 }

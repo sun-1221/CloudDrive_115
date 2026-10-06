@@ -1,4 +1,4 @@
-namespace Domain.Results;
+﻿namespace Domain.Results;
 
 /// <summary>
 /// 领域/应用层错误的统一表示。使用 <c>Code</c> 进行机读分类，<c>Description</c> 承载人类可读信息。

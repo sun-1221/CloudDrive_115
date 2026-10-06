@@ -1,5 +1,4 @@
-using Application.Abstractions.CloudDrive;
-using Application.CloudDrive;
+﻿using Application.CloudDrive;
 using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
 using Application.CloudDrive.Share;
@@ -17,7 +16,7 @@ public sealed class ShareHandlerTests
     private const string TestCloudAccountUid = "115001";
 
     [Fact]
-    public async Task GetMySharesQueryHandler_WhenListReturned_ReturnsNotCollectedItems()
+    public async Task GetMySharesQueryHandler_WhenListReturned_MapsShareItems()
     {
         // Arrange
         var gateway = new RecordingCloudDriveOpenApiGateway();
@@ -40,22 +39,30 @@ public sealed class ShareHandlerTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Empty(result.Value.Items);
-        Assert.Equal("not_collected", result.Value.ItemSchemaStatus);
+        Assert.Equal("available", result.Value.ItemSchemaStatus);
         Assert.Equal(1, result.Value.Count);
+        CloudDriveShareItemDto item = Assert.Single(result.Value.Items);
+        Assert.Equal("s1", item.ShareCode);
+        Assert.Equal("Demo", item.ShareTitle);
+        Assert.Equal("file-1", item.FileId);
+        Assert.Equal("demo.txt", item.FileName);
+        Assert.Equal("pick-1", item.PickCode);
+        Assert.Equal(42, item.FileSize);
+        Assert.NotNull(item.CreateTime);
+        Assert.NotNull(item.ExpireTime);
+        Assert.Equal("https://share.test/s1", item.Url);
+        Assert.Equal("available", item.SchemaStatus);
         CloudDriveGatewayRequest request = Assert.Single(gateway.WebApiRequests);
         Assert.Equal("share/slist", request.Endpoint);
         Assert.Equal("json", request.Context.QueryParameters!["format"]);
     }
 
     [Fact]
-    public async Task GetShareSendsQueryHandler_WhenSampleShapeMissing_ReturnsNotCollectedList()
+    public async Task GetShareSendsQueryHandler_WhenCalled_ReturnsNotCollected()
     {
         // Arrange
         var gateway = new RecordingCloudDriveOpenApiGateway();
-        gateway.RespondWeb("share/send", """{"state":true,"data":{}}""");
-        var accessor = CreateAccessor();
-        var handler = new GetShareSendsQueryHandler(gateway, accessor, CreateEnabledConfig());
+        var handler = new GetShareSendsQueryHandler();
 
         // Act
         Result<CloudDriveShareListDto> result = await handler.Handle(
@@ -69,9 +76,9 @@ public sealed class ShareHandlerTests
             CancellationToken.None);
 
         // Assert
-        Assert.True(result.IsSuccess);
-        Assert.Empty(result.Value.Items);
-        Assert.Equal("not_collected", result.Value.ItemSchemaStatus);
+        Assert.True(result.IsFailure);
+        Assert.Equal("cloud_drive_api_not_collected", result.Error.Code);
+        Assert.Empty(gateway.WebApiRequests);
     }
 
     private static CloudDriveAccountContextAccessor CreateAccessor()

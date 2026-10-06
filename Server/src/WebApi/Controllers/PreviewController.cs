@@ -1,4 +1,4 @@
-using Application.CloudDrive.Dtos;
+﻿using Application.CloudDrive.Dtos;
 using Application.CloudDrive.Preview;
 
 using MediatR;
@@ -15,6 +15,12 @@ namespace WebApi.Controllers;
 [Route("api/files")]
 public sealed class PreviewController(ISender sender) : ControllerBase
 {
+    /// <summary>
+    /// 获取图片预览地址。
+    /// </summary>
+    /// <param name="pickCode">115 文件提取码。</param>
+    /// <param name="cancellationToken">用于取消当前异步操作的令牌。</param>
+    /// <returns>表示异步操作结果的 <see cref="Task{TResult}"/>。</returns>
     [HttpGet("{pickCode}/preview")]
     public async Task<IResult> GetImagePreviewAsync(string pickCode, CancellationToken cancellationToken)
     {

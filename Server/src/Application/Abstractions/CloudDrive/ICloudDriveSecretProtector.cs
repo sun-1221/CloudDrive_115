@@ -1,4 +1,4 @@
-namespace Application.Abstractions.CloudDrive;
+﻿namespace Application.Abstractions.CloudDrive;
 
 /// <summary>
 /// 115 网盘 Cookie 负载加密 / 签名密钥保护抽象。

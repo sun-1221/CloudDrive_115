@@ -1,4 +1,4 @@
-using Application.CloudDrive.Dtos;
+﻿using Application.CloudDrive.Dtos;
 
 namespace Application.CloudDrive.Mappings;
 
@@ -10,6 +10,7 @@ public static class PreviewMapping
     /// <summary>
     /// 将下载地址 DTO 映射为图片预览 DTO。
     /// </summary>
+    /// <returns>返回当前操作的处理结果。</returns>
     public static CloudDriveImagePreviewDto ToDto(
         this CloudDriveDownloadDto download,
         string fileType)
@@ -26,6 +27,7 @@ public static class PreviewMapping
     /// <summary>
     /// 将下载地址 DTO 映射为文档预览 DTO。
     /// </summary>
+    /// <returns>返回当前操作的处理结果。</returns>
     public static CloudDriveDocPreviewDto ToDto(
         this CloudDriveDownloadDto download,
         string fileType,

@@ -1,4 +1,4 @@
-using Application.Abstractions.CloudDrive;
+﻿using Application.Abstractions;
 using Application.CloudDrive.Dtos;
 using Application.Commands;
 
@@ -11,4 +11,4 @@ namespace Application.CloudDrive.Files;
 /// <param name="Input">文件上传输入。</param>
 /// <param name="FileStream">待上传文件流；异步排队场景可为空。</param>
 public sealed record UploadFileCommand(Guid UserId, UploadFileInput Input, Stream? FileStream)
-    : ICommand<CloudDriveUploadExecutionDto>, ICloudDriveAccountScopedRequest;
+    : ICommand<CloudDriveUploadExecutionDto>, IHasInput<UploadFileInput>;

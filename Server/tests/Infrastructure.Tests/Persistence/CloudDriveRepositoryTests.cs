@@ -1,4 +1,4 @@
-using Domain.Entities;
+﻿using Domain.Entities;
 using Domain.Enums;
 
 using Infrastructure.Persistence;
@@ -8,11 +8,17 @@ using SqlSugar;
 
 namespace Infrastructure.Tests.Persistence;
 
+/// <summary>
+/// 115 网盘持久化仓储测试。
+/// </summary>
 public sealed class CloudDriveRepositoryTests : IDisposable
 {
     private readonly SqlSugarClient _db;
     private readonly FakeDomainEventSource _eventSource = new();
 
+    /// <summary>
+    /// 初始化内存数据库和 115 网盘仓储表结构。
+    /// </summary>
     public CloudDriveRepositoryTests()
     {
         var config = new ConnectionConfig
@@ -27,25 +33,31 @@ public sealed class CloudDriveRepositoryTests : IDisposable
         SqlSugarSetup.InitTables(_db, typeof(CookieSession), typeof(CloudDriveJob));
     }
 
+    /// <summary>
+    /// 释放内存数据库连接。
+    /// </summary>
     public void Dispose()
     {
         _db.Dispose();
     }
 
+    /// <summary>
+    /// 验证 Cookie 会话仓储插入后可按账号读取并跟踪领域事件。
+    /// </summary>
     [Fact]
     public async Task CookieSessionRepository_InsertAndGetByAccountAsync_PersistsAndTracks()
     {
-        // 准备
+        // Arrange（准备）
         var repository = new CookieSessionRepository(_db, _eventSource);
         Guid userId = Guid.NewGuid();
         CookieSession session = CookieSession.Create(userId, "115001", "encrypted-payload", 1);
 
-        // 执行
+        // Act（执行）
         int rows = await repository.InsertAsync(session, CancellationToken.None);
         CookieSession? loaded = await repository.GetByAccountAsync(userId, "115001", CancellationToken.None);
         IReadOnlyList<CookieSession> userSessions = await repository.GetByUserAsync(userId, CancellationToken.None);
 
-        // 断言
+        // Assert（断言）
         Assert.Equal(1, rows);
         Assert.NotNull(loaded);
         Assert.Equal(session.Id, loaded.Id);
@@ -54,10 +66,13 @@ public sealed class CloudDriveRepositoryTests : IDisposable
         Assert.Same(session, _eventSource.Tracked[0]);
     }
 
+    /// <summary>
+    /// 验证 Cookie 会话仓储更新时会跟踪变更实体。
+    /// </summary>
     [Fact]
     public async Task CookieSessionRepository_UpdateAsync_TracksChangedEntity()
     {
-        // 准备
+        // Arrange（准备）
         var repository = new CookieSessionRepository(_db, _eventSource);
         CookieSession session = CookieSession.Create(Guid.NewGuid(), "115001", "old", 1);
         _ = await repository.InsertAsync(session, CancellationToken.None);
@@ -65,21 +80,24 @@ public sealed class CloudDriveRepositoryTests : IDisposable
 
         session.UpdatePayload("new", 2);
 
-        // 执行
+        // Act（执行）
         int rows = await repository.UpdateAsync(session, CancellationToken.None);
         CookieSession? loaded = await repository.GetByIdAsync(session.Id, CancellationToken.None);
 
-        // 断言
+        // Assert（断言）
         Assert.Equal(1, rows);
         Assert.NotNull(loaded);
         Assert.Equal(2, loaded.KeyVersion);
         Assert.Single(_eventSource.Tracked);
     }
 
+    /// <summary>
+    /// 验证后台任务仓储可按用户和状态查询匹配任务。
+    /// </summary>
     [Fact]
     public async Task CloudDriveJobRepository_QueryByUserAndStatuses_ReturnsMatchingJobs()
     {
-        // 准备
+        // Arrange（准备）
         var repository = new CloudDriveJobRepository(_db, _eventSource);
         Guid userId = Guid.NewGuid();
         Guid otherUserId = Guid.NewGuid();
@@ -94,14 +112,14 @@ public sealed class CloudDriveRepositoryTests : IDisposable
         _ = await repository.InsertAsync(other, CancellationToken.None);
         _eventSource.Clear();
 
-        // 执行
+        // Act（执行）
         IReadOnlyList<CloudDriveJob> userJobs = await repository.GetByUserAsync(userId, CancellationToken.None);
         CloudDriveJob? scopedJob = await repository.GetByIdForUserAsync(userId, pending.Id, CancellationToken.None);
         IReadOnlyList<CloudDriveJob> resumableJobs = await repository.GetByStatusesAsync(
             [CloudDriveJobStatus.Pending, CloudDriveJobStatus.Running],
             CancellationToken.None);
 
-        // 断言
+        // Assert（断言）
         Assert.Equal(2, userJobs.Count);
         Assert.NotNull(scopedJob);
         Assert.Equal(pending.Id, scopedJob.Id);
@@ -110,10 +128,13 @@ public sealed class CloudDriveRepositoryTests : IDisposable
         Assert.Contains(resumableJobs, job => job.Id == other.Id);
     }
 
+    /// <summary>
+    /// 验证后台任务仓储更新和删除时会跟踪实体。
+    /// </summary>
     [Fact]
     public async Task CloudDriveJobRepository_UpdateAndDeleteAsync_TracksEntity()
     {
-        // 准备
+        // Arrange（准备）
         var repository = new CloudDriveJobRepository(_db, _eventSource);
         CloudDriveJob job = CloudDriveJob.Create(Guid.NewGuid(), "115001", CloudDriveJobType.Upload);
         _ = await repository.InsertAsync(job, CancellationToken.None);
@@ -121,12 +142,12 @@ public sealed class CloudDriveRepositoryTests : IDisposable
 
         job.Start();
 
-        // 执行
+        // Act（执行）
         int updateRows = await repository.UpdateAsync(job, CancellationToken.None);
         int deleteRows = await repository.DeleteAsync(job, CancellationToken.None);
         CloudDriveJob? loaded = await repository.GetByIdAsync(job.Id, CancellationToken.None);
 
-        // 断言
+        // Assert（断言）
         Assert.Equal(1, updateRows);
         Assert.Equal(1, deleteRows);
         Assert.Null(loaded);

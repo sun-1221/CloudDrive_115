@@ -3,7 +3,6 @@ using System.Text.Json;
 using Application.Abstractions.CloudDrive;
 using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
-using Application.CloudDrive.Files;
 using Application.Queries;
 
 using Domain.Results;
@@ -13,7 +12,7 @@ using Microsoft.Extensions.Options;
 namespace Application.CloudDrive.Offline;
 
 internal sealed class GetOfflineQuotaQueryHandler(
-    ICloudDriveOpenApiGateway openApiGateway,
+    ICloudDriveWebApiGateway openApiGateway,
     ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : IQueryHandler<GetOfflineQuotaQuery, CloudDriveOfflineQuotaDto>
@@ -29,7 +28,7 @@ internal sealed class GetOfflineQuotaQueryHandler(
         JsonElement quota = await openApiGateway.SendOfflineApiRequestAsync<JsonElement>(
             request.UserId,
             cloudAccountUid,
-            HttpMethod.Get,
+            HttpMethod.Post,
             "get_quota_package_info",
             CloudDriveOfflineSupport.CreateQuotaContext(),
             cancellationToken);

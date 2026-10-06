@@ -1,4 +1,4 @@
-using Application.Abstractions.CloudDrive;
+﻿using Application.Abstractions.CloudDrive;
 using Application.CloudDrive.Dtos;
 using Application.CloudDrive.Mappings;
 using Application.Commands;
@@ -33,10 +33,7 @@ internal sealed class UpsertCookieSessionCommandHandler(
             request.Input.ExtraFields,
             cancellationToken);
 
-        await metadataCache.InvalidateDirectoryAsync(
-            request.UserId,
-            request.Input.CloudAccountUid,
-            directoryId: "0");
+        await metadataCache.InvalidateDirectoryAsync(request.UserId, request.Input.CloudAccountUid, directoryId: "0", cancellationToken: cancellationToken);
 
         rateLimiter.Reset(request.UserId, request.Input.CloudAccountUid);
 

@@ -1,4 +1,4 @@
-using Application.Behaviors;
+﻿using Application.Behaviors;
 using Application.Tests.Support;
 
 using FsCheck.Xunit;
@@ -55,19 +55,20 @@ public sealed class LoggingBehaviorPropertyTests
     [Fact]
     public async Task Handle_WhenHandlerThrows_LogsErrorWithRequestNameAndElapsedMs()
     {
-        // Arrange
+        // Arrange（准备）
         var logger = new FakeLogger<LoggingBehavior<TestRequest, TestResponse>>();
         var behavior = new LoggingBehavior<TestRequest, TestResponse>(logger);
         var request = new TestRequest(1);
         var expectedException = new InvalidOperationException("boom");
 
-        // Act & Assert
+        // Act（执行）
         InvalidOperationException actual = await Assert.ThrowsAsync<InvalidOperationException>(
             () => behavior.Handle(
                 request,
                 _ => Task.FromException<TestResponse>(expectedException),
                 CancellationToken.None));
 
+        // Assert（断言）
         Assert.Same(expectedException, actual);
         FakeLogEntry errorEntry = Assert.Single(logger.Entries, e => e.Level == LogLevel.Error);
         Assert.Equal(nameof(TestRequest), errorEntry.State["RequestName"]);

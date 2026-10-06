@@ -1,4 +1,4 @@
-namespace Application.Tests.Support;
+﻿namespace Application.Tests.Support;
 
 internal sealed record CloudDriveUploadRequest(
     Guid UserId,

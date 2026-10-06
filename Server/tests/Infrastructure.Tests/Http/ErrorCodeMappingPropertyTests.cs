@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text;
 using System.Text.Json;
 
@@ -20,8 +20,14 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.Http;
 
+/// <summary>
+/// 115 网盘 API 错误码映射属性测试。
+/// </summary>
 public sealed class ErrorCodeMappingPropertyTests
 {
+    /// <summary>
+    /// 验证 HTTP 错误状态码会映射到预期异常类型。
+    /// </summary>
     [Theory]
     [InlineData(HttpStatusCode.Unauthorized, typeof(CloudDriveCookieInvalidatedException))]
     [InlineData(HttpStatusCode.Forbidden, typeof(CloudDriveCookieInvalidatedException))]
@@ -32,14 +38,14 @@ public sealed class ErrorCodeMappingPropertyTests
         HttpStatusCode statusCode,
         Type expectedExceptionType)
     {
-        // 准备
+        // Arrange（准备）
         TestClientContext context = await TestClientContext.CreateAsync(new QueueHandler(
             new HttpResponseMessage(statusCode)
             {
                 Content = new StringContent("""{"state":false,"error":"failed"}""", Encoding.UTF8, "application/json"),
             }));
 
-        // 执行
+        // Act（执行）
         Exception exception = await Record.ExceptionAsync(
             () => context.Client.SendWebApiRequestAsync<JsonElement>(
                 context.UserId,
@@ -49,7 +55,7 @@ public sealed class ErrorCodeMappingPropertyTests
                 new CloudDriveApiContext { Category = "files" },
                 CancellationToken.None));
 
-        // 断言
+        // Assert（断言）
         Assert.NotNull(exception);
         Assert.IsType(expectedExceptionType, exception);
 
@@ -66,6 +72,9 @@ public sealed class ErrorCodeMappingPropertyTests
         }
     }
 
+    /// <summary>
+    /// 验证业务错误响应会映射到预期异常类型。
+    /// </summary>
     [Theory]
     [InlineData("""{"state":false,"errNo":"login_required","error":"login_required"}""", typeof(CloudDriveCookieInvalidatedException))]
     [InlineData("""{"state":false,"errNo":429,"error":"rate limit"}""", typeof(CloudDriveRateLimitException))]
@@ -75,14 +84,14 @@ public sealed class ErrorCodeMappingPropertyTests
         string json,
         Type expectedExceptionType)
     {
-        // 准备
+        // Arrange（准备）
         TestClientContext context = await TestClientContext.CreateAsync(new QueueHandler(
             new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json"),
             }));
 
-        // 执行
+        // Act（执行）
         Exception exception = await Record.ExceptionAsync(
             () => context.Client.SendWebApiRequestAsync<JsonElement>(
                 context.UserId,
@@ -92,7 +101,7 @@ public sealed class ErrorCodeMappingPropertyTests
                 new CloudDriveApiContext { Category = "files" },
                 CancellationToken.None));
 
-        // 断言
+        // Assert（断言）
         Assert.NotNull(exception);
         Assert.IsType(expectedExceptionType, exception);
 
@@ -110,14 +119,17 @@ public sealed class ErrorCodeMappingPropertyTests
         }
     }
 
+    /// <summary>
+    /// 验证网络超时时抛出超时网络异常。
+    /// </summary>
     [Fact]
     public async Task SendWebApiRequestAsync_WhenNetworkTimeout_ThrowsTimeoutNetworkExceptionAsync()
     {
-        // 准备
+        // Arrange（准备）
         TestClientContext context = await TestClientContext.CreateAsync(new ThrowingHandler(
             new TaskCanceledException("timeout")));
 
-        // 执行
+        // Act（执行）
         CloudDriveNetworkException exception = await Assert.ThrowsAsync<CloudDriveNetworkException>(
             () => context.Client.SendWebApiRequestAsync<JsonElement>(
                 context.UserId,
@@ -127,18 +139,21 @@ public sealed class ErrorCodeMappingPropertyTests
                 new CloudDriveApiContext(),
                 CancellationToken.None));
 
-        // 断言
+        // Assert（断言）
         Assert.Equal("cloud_drive_api_timeout", exception.ErrorCode);
     }
 
+    /// <summary>
+    /// 验证连接失败时抛出网络异常。
+    /// </summary>
     [Fact]
     public async Task SendWebApiRequestAsync_WhenConnectionFails_ThrowsNetworkExceptionAsync()
     {
-        // 准备
+        // Arrange（准备）
         TestClientContext context = await TestClientContext.CreateAsync(new ThrowingHandler(
             new HttpRequestException("connection failed")));
 
-        // 执行
+        // Act（执行）
         CloudDriveNetworkException exception = await Assert.ThrowsAsync<CloudDriveNetworkException>(
             () => context.Client.SendWebApiRequestAsync<JsonElement>(
                 context.UserId,
@@ -148,32 +163,38 @@ public sealed class ErrorCodeMappingPropertyTests
                 new CloudDriveApiContext(),
                 CancellationToken.None));
 
-        // 断言
+        // Assert（断言）
         Assert.Equal("cloud_drive_api_network_error", exception.ErrorCode);
     }
 
+    /// <summary>
+    /// 验证未知 state=false 响应结构会返回未知错误结构。
+    /// </summary>
     [Theory]
     [InlineData("unexpected")]
     [InlineData("unknownField")]
     [InlineData("raw")]
     public void ErrorFieldAdapter_WhenUnknownStateFalseShape_ReturnsUnknownErrorShape(string propertyName)
     {
-        // 准备
+        // Arrange（准备）
         var adapter = new ErrorFieldAdapter();
         using JsonDocument document = JsonDocument.Parse($$"""{"state":false,"{{propertyName}}":"value"}""");
 
-        // 执行
-        CloudDriveApiError? error = adapter.TryParse(new Uri("https://webapi.115.com/unregistered"), document);
+        // Act（执行）
+        CloudDriveApiError? error = adapter.TryParse(HttpMethod.Get, new Uri("https://webapi.115.com/unregistered"), document);
 
-        // 断言
+        // Assert（断言）
         Assert.NotNull(error);
         Assert.Equal("unknown_error_shape", error.RawField);
     }
 
+    /// <summary>
+    /// 验证只读弹性 HTTP 客户端遇到瞬时失败会重试。
+    /// </summary>
     [Fact]
     public async Task AddReadResilientHttpClient_WhenTransientFailure_RetriesAsync()
     {
-        // 准备
+        // Arrange（准备）
         var services = new ServiceCollection();
         var handler = new QueueHandler(
             new HttpResponseMessage(HttpStatusCode.InternalServerError),
@@ -188,18 +209,21 @@ public sealed class ErrorCodeMappingPropertyTests
         HttpClient client = provider.GetRequiredService<IHttpClientFactory>().CreateClient("read-test");
         client.BaseAddress = new Uri("https://webapi.115.com/");
 
-        // 执行
+        // Act（执行）
         HttpResponseMessage response = await client.GetAsync("files", CancellationToken.None);
 
-        // 断言
+        // Assert（断言）
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(handler.SendCount >= 2);
     }
 
+    /// <summary>
+    /// 验证写入弹性 HTTP 客户端遇到瞬时失败不会重试。
+    /// </summary>
     [Fact]
     public async Task AddWriteResilientHttpClient_WhenTransientFailure_DoesNotRetryAsync()
     {
-        // 准备
+        // Arrange（准备）
         var services = new ServiceCollection();
         var handler = new QueueHandler(new HttpResponseMessage(HttpStatusCode.InternalServerError));
 
@@ -209,10 +233,10 @@ public sealed class ErrorCodeMappingPropertyTests
         HttpClient client = provider.GetRequiredService<IHttpClientFactory>().CreateClient("write-test");
         client.BaseAddress = new Uri("https://webapi.115.com/");
 
-        // 执行
-        HttpResponseMessage response = await client.PostAsync("files/history", new StringContent(""), CancellationToken.None);
+        // Act（执行）
+        HttpResponseMessage response = await client.PostAsync("files/history", new StringContent(string.Empty), CancellationToken.None);
 
-        // 断言
+        // Assert（断言）
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         Assert.Equal(1, handler.SendCount);
     }
@@ -296,7 +320,7 @@ public sealed class ErrorCodeMappingPropertyTests
             {
                 BaseAddress = name switch
                 {
-                    CloudDriveHttpClientNames.Offline => new Uri("https://115.com/web/lixian/"),
+                    CloudDriveHttpClientNames.Offline => new Uri("https://clouddownload.115.com/web/"),
                     CloudDriveHttpClientNames.Upload => new Uri("https://uplb.115.com/"),
                     _ => new Uri("https://webapi.115.com/"),
                 },

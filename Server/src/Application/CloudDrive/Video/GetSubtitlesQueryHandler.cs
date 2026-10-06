@@ -14,7 +14,7 @@ namespace Application.CloudDrive.Video;
 
 internal sealed class GetSubtitlesQueryHandler(
     CloudDriveFileManager fileManager,
-    ICloudDriveOpenApiGateway openApiGateway,
+    ICloudDriveWebApiGateway openApiGateway,
     ICloudDriveAccountContextAccessor accountContextAccessor,
     IOptions<CloudDriveAppConfig> configOptions)
     : IQueryHandler<GetSubtitlesQuery, CloudDriveSubtitleListDto>

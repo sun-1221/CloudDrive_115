@@ -1,4 +1,4 @@
-using Application.CloudDrive;
+﻿using Application.CloudDrive;
 using Application.CloudDrive.Auth;
 using Application.Tests.Support;
 
@@ -15,7 +15,7 @@ namespace Application.Tests.CloudDrive;
 public sealed class UserDataIsolationPropertyTests
 {
     [Fact]
-    public async Task DifferentUsers_HaveIndependentSessions()
+    public async Task CookieSessions_WhenUsersDiffer_HaveIndependentSessions()
     {
         // Arrange
         var repo = new FakeCookieSessionRepository();

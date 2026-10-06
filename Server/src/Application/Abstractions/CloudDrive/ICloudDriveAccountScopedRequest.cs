@@ -1,4 +1,4 @@
-namespace Application.Abstractions.CloudDrive;
+﻿namespace Application.Abstractions.CloudDrive;
 
 /// <summary>
 /// 标记接口：声明此 MediatR 请求需要 115 账号上下文。

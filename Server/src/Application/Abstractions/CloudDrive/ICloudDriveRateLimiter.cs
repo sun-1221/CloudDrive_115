@@ -1,4 +1,4 @@
-namespace Application.Abstractions.CloudDrive;
+﻿namespace Application.Abstractions.CloudDrive;
 
 /// <summary>
 /// 115 网盘频控限流抽象。基于令牌桶算法与有界排队/拒绝策略，
@@ -11,9 +11,10 @@ namespace Application.Abstractions.CloudDrive;
 public interface ICloudDriveRateLimiter
 {
     /// <summary>
-    /// 获取执行许可。根据 <see cref="CloudDriveAppConfig.RateLimitOverflowStrategy"/> 选择排队或立即拒绝。
+    /// 获取执行许可。根据 <c>CloudDriveAppConfig.RateLimitOverflowStrategy</c> 选择排队或立即拒绝。
     /// 返回 <see cref="IDisposable"/> 许可，调用方通过 <c>using</c> 释放。
     /// </summary>
+    /// <returns>获取成功时返回需要由调用方释放的限流许可。</returns>
     Task<IDisposable> AcquireAsync(
         Guid userId,
         string cloudAccountUid,

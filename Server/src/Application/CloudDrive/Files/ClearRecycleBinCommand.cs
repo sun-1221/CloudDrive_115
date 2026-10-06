@@ -1,4 +1,4 @@
-using Application.Abstractions.CloudDrive;
+﻿using Application.Abstractions;
 using Application.CloudDrive.Dtos;
 using Application.Commands;
 
@@ -10,4 +10,4 @@ namespace Application.CloudDrive.Files;
 /// <param name="UserId">系统用户 ID。</param>
 /// <param name="Input">清空回收站输入。</param>
 public sealed record ClearRecycleBinCommand(Guid UserId, ClearRecycleBinInput Input)
-    : ICommand<CloudDriveOperationResultDto>, ICloudDriveAccountScopedRequest;
+    : ICommand<CloudDriveOperationResultDto>, IHasInput<ClearRecycleBinInput>;

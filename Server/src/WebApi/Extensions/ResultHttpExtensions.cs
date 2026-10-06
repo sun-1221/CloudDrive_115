@@ -1,8 +1,7 @@
-using System.Net;
+﻿using System.Net;
 
 using Domain.Results;
 
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace WebApi.Extensions;
@@ -63,6 +62,7 @@ public static class ResultHttpExtensions
     /// <summary>
     /// 将 <see cref="Result{T}"/> 映射为 201 Created。
     /// </summary>
+    /// <returns>返回当前操作的处理结果。</returns>
     public static IResult ToCreatedHttpResult<T>(this Result<T> result, string? location = null)
     {
         ArgumentNullException.ThrowIfNull(result);
@@ -75,6 +75,7 @@ public static class ResultHttpExtensions
     /// <summary>
     /// 将可能代表后台受理的 <see cref="Result{T}"/> 映射为 200/202。
     /// </summary>
+    /// <returns>返回当前操作的处理结果。</returns>
     public static IResult ToOperationHttpResult<T>(this Result<T> result, Func<T, bool> acceptedSelector)
     {
         ArgumentNullException.ThrowIfNull(result);
@@ -95,6 +96,10 @@ public static class ResultHttpExtensions
 
         return error.Code switch
         {
+            "invalid_credentials" or
+            "session_unavailable" => (int)HttpStatusCode.Unauthorized,
+            "user_name_taken" => (int)HttpStatusCode.Conflict,
+            "cloud_drive_account_unavailable" => (int)HttpStatusCode.NotFound,
             "cloud_drive_cookie_invalidated" or
             "cookie_not_active" => (int)HttpStatusCode.Unauthorized,
             "cloud_drive_account_context_unavailable" or
@@ -102,7 +107,7 @@ public static class ResultHttpExtensions
             "cloud_drive_configuration_unavailable" or
             "offline_signature_not_available" or
             "share_sample_unavailable" or
-            "cloud_drive_api_not_collected" => (int)HttpStatusCode.ServiceUnavailable,
+            "cloud_drive_api_not_collected" => 501,
             "cloud_drive_file_not_found" or
             "cloud_drive_job_not_found" => (int)HttpStatusCode.NotFound,
             "cloud_drive_rate_limited" => 429,

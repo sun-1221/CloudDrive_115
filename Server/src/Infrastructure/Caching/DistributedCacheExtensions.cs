@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 using Microsoft.Extensions.Caching.Distributed;
 
@@ -11,7 +11,7 @@ namespace Infrastructure.Caching;
 /// 按设计 §3. IDistributedCache 封装实现：<br/>
 /// - 使用 <see cref="System.Text.Json"/> 进行序列化/反序列化（R7.5）<br/>
 /// - 提供 <see cref="GetAsync{T}"/>、<see cref="SetAsync{T}"/>、<see cref="GetOrSetAsync{T}"/>（R7.1、R7.2）<br/>
-/// - 过期时间可由调用方显式传入，未传入时由调用方根据 <see cref="CachingOptions.DefaultTtl"/> 决定（R7.3）。
+/// - 过期时间可由调用方显式传入，未传入时不隐式设置默认过期时间（R7.3）。
 /// </remarks>
 public static class DistributedCacheExtensions
 {
@@ -20,6 +20,7 @@ public static class DistributedCacheExtensions
     /// <summary>
     /// 按键读取并反序列化缓存值。缓存未命中时返回 <see langword="default"/>。
     /// </summary>
+    /// <returns>命中时返回反序列化后的缓存值；未命中时返回 <see langword="default"/>。</returns>
     public static async Task<T?> GetAsync<T>(
         this IDistributedCache cache,
         string key,
@@ -43,8 +44,9 @@ public static class DistributedCacheExtensions
     /// <param name="cache">缓存实例。</param>
     /// <param name="key">缓存键。</param>
     /// <param name="value">要写入的值，可为 <see langword="null"/>。</param>
-    /// <param name="ttl">相对过期时间；<see langword="null"/> 时由调用方选择是否使用默认 TTL。</param>
+    /// <param name="ttl">相对过期时间；<see langword="null"/> 时不设置隐式默认过期时间。</param>
     /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>表示异步缓存写入操作的 <see cref="Task"/>。</returns>
     public static async Task SetAsync<T>(
         this IDistributedCache cache,
         string key,
@@ -72,7 +74,7 @@ public static class DistributedCacheExtensions
     /// <param name="cache">缓存实例。</param>
     /// <param name="key">缓存键。</param>
     /// <param name="factory">未命中时用于生成值的异步工厂。</param>
-    /// <param name="ttl">相对过期时间；<see langword="null"/> 时使用缓存服务默认值。</param>
+    /// <param name="ttl">相对过期时间；<see langword="null"/> 时不设置隐式默认过期时间。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>命中时返回反序列化后的值；未命中时返回 <paramref name="factory"/> 生成的值。</returns>
     public static async Task<T?> GetOrSetAsync<T>(

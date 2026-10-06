@@ -2,17 +2,18 @@ namespace Application.Abstractions.CloudDrive;
 
 /// <summary>
 /// 115 API 统一网关抽象。覆盖 webapi.115.com、my.115.com、vip.115.com、pay.115.com、
-/// 115.com/web/lixian、uplb.115.com 与 OSS 直传等多域名分组。
+/// clouddownload.115.com/web、uplb.115.com 与 OSS 直传等多域名分组。
 /// </summary>
 /// <remarks>
 /// 定义在 Application 层，基础设施层由 <c>CloudDriveApiClient</c> 实现。
 /// 网关内部从 <c>CookieSessionManager</c> 获取当前 Cookie 并注入请求头。
 /// </remarks>
-public interface ICloudDriveOpenApiGateway
+public interface ICloudDriveWebApiGateway
 {
     /// <summary>
     /// 发送网页端业务 API 请求（默认 webapi.115.com）。
     /// </summary>
+    /// <returns>返回反序列化后的网页端 API 响应。</returns>
     Task<T> SendWebApiRequestAsync<T>(
         Guid userId,
         string cloudAccountUid,
@@ -25,6 +26,7 @@ public interface ICloudDriveOpenApiGateway
     /// 发送用户中心类 API 请求（my.115.com / vip.115.com / pay.115.com）。
     /// <paramref name="context"/> 的 <see cref="CloudDriveApiContext.TargetDomain"/> 指向具体域名。
     /// </summary>
+    /// <returns>返回反序列化后的用户中心 API 响应。</returns>
     Task<T> SendUserCenterRequestAsync<T>(
         Guid userId,
         string cloudAccountUid,
@@ -34,9 +36,10 @@ public interface ICloudDriveOpenApiGateway
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 发送云下载 API 请求（115.com/web/lixian/）。
+    /// 发送云下载 API 请求（clouddownload.115.com/web/）。
     /// 自动从 <see cref="ICookieSignatureStrategy"/> 生成 sign + time + uid 签名并合并到请求体。
     /// </summary>
+    /// <returns>返回反序列化后的云下载 API 响应。</returns>
     Task<T> SendOfflineApiRequestAsync<T>(
         Guid userId,
         string cloudAccountUid,
@@ -49,6 +52,7 @@ public interface ICloudDriveOpenApiGateway
     /// 上传初始化（POST uplb.115.com/3.0/sampleinitupload.php）。
     /// 返回秒传结果或 OSS 直传凭证。
     /// </summary>
+    /// <returns>返回反序列化后的上传初始化响应。</returns>
     Task<T> SendUploadInitRequestAsync<T>(
         Guid userId,
         string cloudAccountUid,
@@ -58,6 +62,7 @@ public interface ICloudDriveOpenApiGateway
     /// <summary>
     /// OSS 直传（PostObject 方式，不需 Cookie 注入）。
     /// </summary>
+    /// <returns>返回反序列化后的 OSS 直传响应。</returns>
     Task<T> UploadFileAsync<T>(
         Guid userId,
         string cloudAccountUid,

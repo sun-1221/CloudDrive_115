@@ -1,39 +1,18 @@
-using System.Text.Json;
-
-using Application.Abstractions.CloudDrive;
-using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
-using Application.CloudDrive.Files;
 using Application.Queries;
 
 using Domain.Results;
 
-using Microsoft.Extensions.Options;
-
 namespace Application.CloudDrive.Share;
 
-internal sealed class GetShareSendsQueryHandler(
-    ICloudDriveOpenApiGateway openApiGateway,
-    ICloudDriveAccountContextAccessor accountContextAccessor,
-    IOptions<CloudDriveAppConfig> configOptions)
+internal sealed class GetShareSendsQueryHandler
     : IQueryHandler<GetShareSendsQuery, CloudDriveShareListDto>
 {
-    public async Task<Result<CloudDriveShareListDto>> Handle(
+    public Task<Result<CloudDriveShareListDto>> Handle(
         GetShareSendsQuery request,
         CancellationToken cancellationToken)
     {
-        CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
-
-        string cloudAccountUid = accountContextAccessor.CloudAccountUid;
-
-        JsonElement response = await openApiGateway.SendWebApiRequestAsync<JsonElement>(
-            request.UserId,
-            cloudAccountUid,
-            HttpMethod.Get,
-            "share/send",
-            CloudDriveShareSupport.CreateListContext(request.Input),
-            cancellationToken);
-
-        return Result.Success(CloudDriveShareSupport.MapList(response));
+        return Task.FromResult(Result.Failure<CloudDriveShareListDto>(
+            new Error("cloud_drive_api_not_collected", "分享发送接口尚未采集，当前能力保持禁用。")));
     }
 }

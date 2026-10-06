@@ -14,7 +14,7 @@ namespace Application.Tests.CloudDrive;
 public sealed class CacheConsistencyPropertyTests
 {
     [Fact]
-    public async Task ExecuteWithCacheInvalidation_ClearsAffectedDirectoryCache()
+    public async Task ExecuteWithCacheInvalidation_WhenDirectoryAffected_ClearsAffectedDirectoryCache()
     {
         // Arrange
         var cache = new FakeMetadataCache();
@@ -23,7 +23,7 @@ public sealed class CacheConsistencyPropertyTests
         var config = Options.Create(new CloudDriveAppConfig());
         var logger = new FakeLogger<CloudDriveFileManager>();
 
-        var manager = new CloudDriveFileManager(cache, gateway, rateLimiter, config, logger);
+        var manager = new CloudDriveFileManager(cache, gateway, config, logger);
         Guid userId = Guid.NewGuid();
         const string cloudAccountUid = "115-user-001";
         const string directoryId = "dir-001";
@@ -48,6 +48,7 @@ public sealed class CacheConsistencyPropertyTests
     private sealed class FakeMetadataCache : ICloudDriveMetadataCache
     {
         private readonly Dictionary<string, object> _store = [];
+
         public List<(Guid UserId, string CloudAccountUid, string DirectoryId)> InvalidatedDirectories { get; } = [];
 
         public void Seed(string key, object value) => _store[key] = value;
@@ -75,9 +76,14 @@ public sealed class CacheConsistencyPropertyTests
             CancellationToken cancellationToken = default)
         {
             InvalidatedDirectories.Add((userId, cloudAccountUid, directoryId));
+
             // 移除匹配的缓存键
             var keysToRemove = _store.Keys.Where(k => k.Contains($"dir:{directoryId}")).ToList();
-            foreach (string key in keysToRemove) _store.Remove(key);
+            foreach (string key in keysToRemove)
+            {
+                _store.Remove(key);
+            }
+
             return Task.CompletedTask;
         }
 
@@ -92,7 +98,7 @@ public sealed class CacheConsistencyPropertyTests
     /// <summary>
     /// 测试用 API 网关。
     /// </summary>
-    private sealed class FakeOpenApiGateway : ICloudDriveOpenApiGateway
+    private sealed class FakeOpenApiGateway : ICloudDriveWebApiGateway
     {
         public Task<T> SendWebApiRequestAsync<T>(Guid userId, string cloudAccountUid, HttpMethod method, string endpoint, CloudDriveApiContext context, CancellationToken cancellationToken = default) =>
             Task.FromResult(default(T)!);

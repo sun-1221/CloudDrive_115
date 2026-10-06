@@ -1,4 +1,4 @@
-using System.Diagnostics.Metrics;
+﻿using System.Diagnostics.Metrics;
 
 namespace Infrastructure.Diagnostics;
 
@@ -9,12 +9,16 @@ internal static class CloudDriveMetrics
     private static readonly Meter Meter = new(MeterName, "1.0.0");
     private static readonly Counter<long> RateLimitQueuedCounter =
         Meter.CreateCounter<long>("cloud_drive_rate_limit_queued_total");
+
     private static readonly Counter<long> RateLimitRejectedCounter =
         Meter.CreateCounter<long>("cloud_drive_rate_limit_rejected_total");
+
     private static readonly Counter<long> RateLimitThrottleSignalCounter =
         Meter.CreateCounter<long>("cloud_drive_rate_limit_throttle_signals_total");
+
     private static readonly Counter<long> HttpRetryCounter =
         Meter.CreateCounter<long>("cloud_drive_http_retry_total");
+
     private static readonly Counter<long> ApiFailureCounter =
         Meter.CreateCounter<long>("cloud_drive_api_failure_total");
 

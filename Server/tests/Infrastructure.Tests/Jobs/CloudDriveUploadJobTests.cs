@@ -18,12 +18,18 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Infrastructure.Tests.Jobs;
 
+/// <summary>
+/// 115 网盘上传后台任务测试。
+/// </summary>
 public sealed class CloudDriveUploadJobTests : IDisposable
 {
     private static readonly Guid TestUserId = Guid.Parse("44444444-4444-4444-4444-444444444444");
     private const string TestCloudAccountUid = "115001";
     private readonly string _tempFilePath = Path.Combine(Path.GetTempPath(), $"cloud-upload-{Guid.NewGuid():N}.tmp");
 
+    /// <summary>
+    /// 清理上传后台任务测试生成的临时文件。
+    /// </summary>
     public void Dispose()
     {
         if (File.Exists(_tempFilePath))
@@ -32,6 +38,9 @@ public sealed class CloudDriveUploadJobTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// 验证秒传成功时完成任务并失效目标目录缓存。
+    /// </summary>
     [Fact]
     public async Task Execute_WhenInstantUpload_CompletesJobAndInvalidatesTargetDirectoryAsync()
     {
@@ -85,6 +94,9 @@ public sealed class CloudDriveUploadJobTests : IDisposable
         Assert.Equal("U_1_dir-001", initContext.FormFields["target"]);
     }
 
+    /// <summary>
+    /// 验证需要 OSS 上传时会上传文件并完成任务。
+    /// </summary>
     [Fact]
     public async Task Execute_WhenOssUploadRequired_UploadsFileAndCompletesJobAsync()
     {
@@ -136,6 +148,9 @@ public sealed class CloudDriveUploadJobTests : IDisposable
         Assert.Equal([(TestUserId, TestCloudAccountUid, "dir-001")], metadataCache.InvalidatedDirectories);
     }
 
+    /// <summary>
+    /// 验证临时文件缺失时任务失败且不调用网关。
+    /// </summary>
     [Fact]
     public async Task Execute_WhenTempFileMissing_FailsJobAndDoesNotCallGatewayAsync()
     {
@@ -190,7 +205,7 @@ public sealed class CloudDriveUploadJobTests : IDisposable
 
     private static CloudDriveUploadJob CreateUploadJob(
         ICloudDriveJobRepository repository,
-        ICloudDriveOpenApiGateway gateway,
+        ICloudDriveWebApiGateway gateway,
         ICloudDriveMetadataCache metadataCache,
         Application.Abstractions.ITransactionManager transactionManager,
         IPublisher publisher)
@@ -206,7 +221,7 @@ public sealed class CloudDriveUploadJobTests : IDisposable
             NullLogger<CloudDriveUploadJob>.Instance);
     }
 
-    private sealed class RecordingUploadGateway : ICloudDriveOpenApiGateway
+    private sealed class RecordingUploadGateway : ICloudDriveWebApiGateway
     {
         public CloudDriveUploadInitResponse InitResponse { get; init; } = new();
 
@@ -281,5 +296,4 @@ public sealed class CloudDriveUploadJobTests : IDisposable
         string FileName,
         IReadOnlyDictionary<string, string> FormFields,
         string FileContent);
-
 }

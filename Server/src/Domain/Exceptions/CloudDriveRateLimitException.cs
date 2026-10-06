@@ -1,4 +1,4 @@
-namespace Domain.Exceptions;
+﻿namespace Domain.Exceptions;
 
 /// <summary>
 /// 115 网盘请求触发本地或远端频率限制时抛出。
@@ -14,6 +14,14 @@ public sealed class CloudDriveRateLimitException : DomainException
         string message = "115 网盘请求过于频繁",
         string? errorCode = "cloud_drive_rate_limited")
         : base(429, message, errorCode)
+    {
+    }
+
+    private CloudDriveRateLimitException(int statusCode, string message, string? errorCode = null) : base(statusCode, message, errorCode)
+    {
+    }
+
+    private CloudDriveRateLimitException(int statusCode, string message, Exception innerException, string? errorCode = null) : base(statusCode, message, innerException, errorCode)
     {
     }
 }

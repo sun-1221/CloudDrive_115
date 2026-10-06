@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 
 using Domain.Entities;
 
@@ -25,6 +25,21 @@ internal static class CloudDriveSqlSugarMapping
             entity.DbTableName = "cloud_drive_cookie_sessions";
             entity.TableDescription = "115 Cookie sessions";
             EnsureCookieSessionIndexes(entity);
+            return;
+        }
+
+        if (entityType == typeof(User))
+        {
+            entity.DbTableName = "users";
+            entity.TableDescription = "Personal users";
+            EnsureUserIndexes(entity);
+            return;
+        }
+
+        if (entityType == typeof(UserSession))
+        {
+            entity.DbTableName = "user_sessions";
+            entity.TableDescription = "JWT login sessions";
             return;
         }
 
@@ -60,6 +75,43 @@ internal static class CloudDriveSqlSugarMapping
             return;
         }
 
+        if (declaringType == typeof(User))
+        {
+            switch (property.Name)
+            {
+                case nameof(User.UserName):
+                    column.DbColumnName = "user_name";
+                    column.Length = 128;
+                    break;
+                case nameof(User.PasswordHash):
+                    column.DbColumnName = "password_hash";
+                    column.Length = 512;
+                    break;
+                case nameof(User.CreationTime):
+                    column.DbColumnName = "creation_time";
+                    break;
+                case nameof(User.LastModificationTime):
+                    column.DbColumnName = "last_modification_time";
+                    column.IsNullable = true;
+                    break;
+            }
+
+            return;
+        }
+
+        if (declaringType == typeof(UserSession))
+        {
+            switch (property.Name)
+            {
+                case nameof(UserSession.UserId): column.DbColumnName = "user_id"; break;
+                case nameof(UserSession.ActiveCloudAccountUid): column.DbColumnName = "active_cloud_account_uid"; column.Length = 128; column.IsNullable = true; break;
+                case nameof(UserSession.ExpiresAt): column.DbColumnName = "expires_at"; break;
+                case nameof(UserSession.RevokedAt): column.DbColumnName = "revoked_at"; column.IsNullable = true; break;
+                case nameof(UserSession.CreationTime): column.DbColumnName = "creation_time"; break;
+                case nameof(UserSession.LastSeenAt): column.DbColumnName = "last_seen_at"; break;
+            }
+        }
+
         if (declaringType == typeof(CloudDriveJob))
         {
             ApplyCloudDriveJobColumn(property, column);
@@ -82,6 +134,7 @@ internal static class CloudDriveSqlSugarMapping
                 break;
             case nameof(CookieSession.EncryptedCookiePayload):
                 column.DbColumnName = "encrypted_cookie_payload";
+
                 // Cookie 密文可能随 Data Protection 元数据增长，使用 TEXT 避免被默认长度截断。
                 column.DataType = "TEXT";
                 column.Length = 0;
@@ -153,6 +206,7 @@ internal static class CloudDriveSqlSugarMapping
                 break;
             case nameof(CloudDriveJob.PayloadJson):
                 column.DbColumnName = "payload_json";
+
                 // 任务输入可能保存完整上游请求参数，使用 TEXT 兼容较大的 JSON 负载。
                 column.DataType = "TEXT";
                 column.Length = 0;
@@ -160,6 +214,7 @@ internal static class CloudDriveSqlSugarMapping
                 break;
             case nameof(CloudDriveJob.CheckpointData):
                 column.DbColumnName = "checkpoint_data";
+
                 // 断点数据由不同任务类型自行定义，保持 TEXT 以承载可扩展 JSON。
                 column.DataType = "TEXT";
                 column.Length = 0;
@@ -184,22 +239,34 @@ internal static class CloudDriveSqlSugarMapping
     /// </summary>
     private static void EnsureCookieSessionIndexes(EntityInfo entity)
     {
-        const string indexName = "ux_cloud_drive_cookie_sessions_user_account";
+        const string IndexName = "ux_cloud_drive_cookie_sessions_user_account";
 
         entity.Indexs ??= [];
 
-        if (entity.Indexs.Any(index => index.IndexName == indexName))
+        if (entity.Indexs.Any(index => index.IndexName == IndexName))
         {
             // ApplyFrameworkConventions 可能被多次调用，重复添加同名索引会导致 CodeFirst 建表失败。
             return;
         }
 
         entity.Indexs.Add(new SugarIndexAttribute(
-            indexName,
+            IndexName,
             nameof(CookieSession.UserId),
             OrderByType.Asc,
             nameof(CookieSession.CloudAccountUid),
             OrderByType.Asc,
             isUnique: true));
+    }
+
+    private static void EnsureUserIndexes(EntityInfo entity)
+    {
+        const string indexName = "ux_users_user_name";
+        entity.Indexs ??= [];
+        if (entity.Indexs.Any(index => index.IndexName == indexName))
+        {
+            return;
+        }
+
+        entity.Indexs.Add(new SugarIndexAttribute(indexName, nameof(User.UserName), OrderByType.Asc, isUnique: true));
     }
 }

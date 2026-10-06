@@ -14,16 +14,17 @@ namespace Application.Tests.CloudDrive;
 public sealed class RateLimitConsistencyPropertyTests
 {
     [Fact]
-    public async Task GetFileList_AlwaysAcquiresRateLimitPermit()
+    public async Task GetFileList_AlwaysInvokesGateway_WhichEnforcesRateLimit()
     {
         // Arrange
         var cache = new AlwaysMissCache();
         var gateway = new CountingGateway();
-        var rateLimiter = new CountingRateLimiter();
         var config = Options.Create(new CloudDriveAppConfig());
         var logger = new FakeLogger<CloudDriveFileManager>();
 
-        var manager = new CloudDriveFileManager(cache, gateway, rateLimiter, config, logger);
+        // 限流统一由 CloudDriveApiClient（ICloudDriveWebApiGateway 实现）在 SendAuthenticatedApiRequestAsync 中执行，
+        // 此处验证每次缓存未命中都触发网关调用（即每次请求均经过网关限流管道）。
+        var manager = new CloudDriveFileManager(cache, gateway, config, logger);
         Guid userId = Guid.NewGuid();
         const string cloudAccountUid = "115-user-001";
 
@@ -35,12 +36,12 @@ public sealed class RateLimitConsistencyPropertyTests
                 new CloudDriveApiContext { Category = "files" });
         }
 
-        // Assert — 每次都应获取限流许可
-        Assert.Equal(3, rateLimiter.AcquireCount);
+        // Assert — 每次缓存未命中都应触发网关调用
+        Assert.Equal(3, gateway.WebApiCallCount);
     }
 
     [Fact]
-    public void RecordThrottleSignal_RecordsCorrectDimension()
+    public void RecordThrottleSignal_WhenThrottleOccurs_RecordsCorrectDimension()
     {
         // Arrange
         var rateLimiter = new CountingRateLimiter();
@@ -85,10 +86,15 @@ public sealed class RateLimitConsistencyPropertyTests
     /// <summary>
     /// 测试用 API 网关（计数）。
     /// </summary>
-    private sealed class CountingGateway : ICloudDriveOpenApiGateway
+    private sealed class CountingGateway : ICloudDriveWebApiGateway
     {
-        public Task<T> SendWebApiRequestAsync<T>(Guid userId, string cloudAccountUid, HttpMethod method, string endpoint, CloudDriveApiContext context, CancellationToken cancellationToken = default) =>
-            Task.FromResult(default(T)!);
+        public int WebApiCallCount { get; private set; }
+
+        public Task<T> SendWebApiRequestAsync<T>(Guid userId, string cloudAccountUid, HttpMethod method, string endpoint, CloudDriveApiContext context, CancellationToken cancellationToken = default)
+        {
+            WebApiCallCount++;
+            return Task.FromResult(default(T)!);
+        }
 
         public Task<T> SendUserCenterRequestAsync<T>(Guid userId, string cloudAccountUid, HttpMethod method, string endpoint, CloudDriveApiContext context, CancellationToken cancellationToken = default) =>
             Task.FromResult(default(T)!);
@@ -109,6 +115,7 @@ public sealed class RateLimitConsistencyPropertyTests
     private sealed class CountingRateLimiter : ICloudDriveRateLimiter
     {
         public int AcquireCount { get; private set; }
+
         public List<(Guid, string, string?)> ThrottleSignals { get; } = [];
 
         public Task<IDisposable> AcquireAsync(Guid userId, string cloudAccountUid, string? category = null, CancellationToken cancellationToken = default)

@@ -1,4 +1,4 @@
-using Application.Abstractions;
+﻿using Application.Abstractions;
 
 using Domain.Entities;
 
@@ -15,7 +15,7 @@ namespace Infrastructure.Persistence;
 ///   确保与 Repository、事务边界对齐。<br/>
 /// 本实现非线程安全，假设在单个请求的同步串行管道中使用。
 /// </remarks>
-public sealed class DomainEventSource : IDomainEventSource
+internal sealed class DomainEventSource : IDomainEventSource
 {
     // 使用 List + 引用相等去重，避免实体定义自定义 Equals 时产生误合并
     private readonly List<IEntity> _trackedEntities = [];

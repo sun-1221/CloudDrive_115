@@ -46,6 +46,16 @@ public class GetFileListInput
     public int? CustomOrder { get; set; }
 
     /// <summary>
+    /// 获取或设置官方 fc_mix 查询参数。
+    /// </summary>
+    public int? FcMix { get; set; }
+
+    /// <summary>
+    /// 获取或设置官方 nf 查询参数。
+    /// </summary>
+    public int? Nf { get; set; }
+
+    /// <summary>
     /// 获取或设置官方 stdir。
     /// </summary>
     public int? Stdir { get; set; }

@@ -1,4 +1,4 @@
-using Application.Abstractions.CloudDrive;
+﻿using Application.Abstractions.CloudDrive;
 using Application.Behaviors;
 using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
@@ -13,6 +13,7 @@ public sealed class CloudDriveAccountContextBehaviorTests
     [Fact]
     public async Task Handle_WhenInputAccountMissing_ResolvesAccountBeforeNext()
     {
+        // Arrange（准备）
         var resolver = new StubResolver(Result.Success(new CloudDriveAccountContext(
             TestQuery.UserIdValue,
             "115001",
@@ -22,11 +23,13 @@ public sealed class CloudDriveAccountContextBehaviorTests
         var input = new GetFileListInput();
         var query = new TestQuery(TestQuery.UserIdValue, input);
 
+        // Act（执行）
         Result<string> result = await behavior.Handle(
             query,
             _ => Task.FromResult(Result.Success(accessor.CloudAccountUid)),
             CancellationToken.None);
 
+        // Assert（断言）
         Assert.True(result.IsSuccess);
         Assert.Equal("115001", result.Value);
         Assert.Equal("115001", accessor.CloudAccountUid);
@@ -35,17 +38,20 @@ public sealed class CloudDriveAccountContextBehaviorTests
     [Fact]
     public async Task Handle_WhenResolverFails_ReturnsFailureWithoutCallingNext()
     {
+        // Arrange（准备）
         var resolver = new StubResolver(Result.Failure<CloudDriveAccountContext>(new Error(
             "cloud_drive_account_context_unavailable",
             "missing")));
         var accessor = new CloudDriveAccountContextAccessor();
         var behavior = new CloudDriveAccountContextBehavior<TestQuery, Result<string>>(resolver, accessor);
 
+        // Act（执行）
         Result<string> result = await behavior.Handle(
             new TestQuery(TestQuery.UserIdValue, new GetFileListInput()),
             _ => throw new InvalidOperationException("next should not run"),
             CancellationToken.None);
 
+        // Assert（断言）
         Assert.True(result.IsFailure);
         Assert.Equal("cloud_drive_account_context_unavailable", result.Error.Code);
     }
@@ -64,5 +70,4 @@ public sealed class CloudDriveAccountContextBehaviorTests
             return Task.FromResult(result);
         }
     }
-
 }

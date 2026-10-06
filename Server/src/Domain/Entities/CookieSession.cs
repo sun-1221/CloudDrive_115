@@ -1,4 +1,4 @@
-using Domain.Enums;
+﻿using Domain.Enums;
 using Domain.Events;
 
 namespace Domain.Entities;
@@ -97,10 +97,10 @@ public sealed class CookieSession : AggregateRoot<Guid>
             EncryptedCookiePayload = encryptedPayload,
             KeyVersion = keyVersion,
             Status = CookieSessionStatus.Active,
-            CreationTime = DateTime.UtcNow
+            CreationTime = DateTime.UtcNow,
         };
 
-        session.AddDomainEvent(new CookieSessionUpserted(
+        session.RaiseDomainEvent(new CookieSessionUpserted(
             userId,
             cloudAccountUid,
             session.CreationTime));
@@ -122,7 +122,7 @@ public sealed class CookieSession : AggregateRoot<Guid>
         CooldownUntil = null;
         LastModificationTime = DateTime.UtcNow;
 
-        AddDomainEvent(new CookieSessionUpserted(
+        RaiseDomainEvent(new CookieSessionUpserted(
             UserId,
             CloudAccountUid,
             LastModificationTime.Value));
@@ -145,7 +145,7 @@ public sealed class CookieSession : AggregateRoot<Guid>
         CooldownUntil = DateTime.UtcNow.AddSeconds(cooldownSeconds);
         LastModificationTime = DateTime.UtcNow;
 
-        AddDomainEvent(new CookieInvalidated(
+        RaiseDomainEvent(new CookieInvalidated(
             CloudAccountUid,
             reason,
             DateTime.UtcNow,
@@ -181,7 +181,7 @@ public sealed class CookieSession : AggregateRoot<Guid>
         CooldownUntil = utcNow.AddSeconds(cooldownSeconds);
         LastModificationTime = utcNow;
 
-        AddDomainEvent(new CookieInvalidated(
+        RaiseDomainEvent(new CookieInvalidated(
             CloudAccountUid,
             effectiveReason,
             utcNow,

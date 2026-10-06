@@ -1,3 +1,4 @@
+using Application.Behaviors;
 using Application.Commands;
 
 using Infrastructure.Jobs;
@@ -27,7 +28,9 @@ public static class CloudDriveServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
-        services.AddApplicationServices(typeof(ICommand).Assembly);
+        services.AddApplicationServices(
+            typeof(ICommand).Assembly,
+            [typeof(CloudDriveAccountContextBehavior<,>)]);
         services.AddCloudDriveInfrastructure(configuration);
         services.AddQuartzJobs();
 

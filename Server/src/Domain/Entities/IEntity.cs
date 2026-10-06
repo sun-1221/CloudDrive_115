@@ -1,4 +1,4 @@
-using Domain.Events;
+﻿using Domain.Events;
 
 namespace Domain.Entities;
 

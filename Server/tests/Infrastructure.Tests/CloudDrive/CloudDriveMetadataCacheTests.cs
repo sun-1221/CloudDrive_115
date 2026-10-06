@@ -1,4 +1,4 @@
-using Application.CloudDrive;
+﻿using Application.CloudDrive;
 
 using Infrastructure.CloudDrive;
 
@@ -8,10 +8,16 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.CloudDrive;
 
+/// <summary>
+/// 115 网盘元数据缓存测试。
+/// </summary>
 public sealed class CloudDriveMetadataCacheTests
 {
     private readonly MemoryDistributedCache _distributedCache = new(Options.Create(new MemoryDistributedCacheOptions()));
 
+    /// <summary>
+    /// 验证同一缓存键重复读取会使用缓存值。
+    /// </summary>
     [Fact]
     public async Task GetOrSetAsync_WhenCalledTwice_UsesCachedValue()
     {
@@ -40,8 +46,11 @@ public sealed class CloudDriveMetadataCacheTests
         Assert.Equal(1, cache.KnownKeyCount);
     }
 
+    /// <summary>
+    /// 验证目录失效只移除匹配用户、账号和目录的缓存键。
+    /// </summary>
     [Fact]
-    public async Task InvalidateDirectoryAsync_RemovesOnlyMatchingUserAccountDirectoryKeys()
+    public async Task InvalidateDirectoryAsync_WhenDirectoryMatches_RemovesOnlyMatchingUserAccountDirectoryKeys()
     {
         // Arrange
         CloudDriveMetadataCache cache = CreateCache();
@@ -64,8 +73,11 @@ public sealed class CloudDriveMetadataCacheTests
         Assert.Equal("other-user", await cache.GetOrSetAsync(otherUserKey, _ => Task.FromResult("miss")));
     }
 
+    /// <summary>
+    /// 验证文件失效只移除匹配文件的缓存键。
+    /// </summary>
     [Fact]
-    public async Task InvalidateFileAsync_RemovesOnlyMatchingFileKeys()
+    public async Task InvalidateFileAsync_WhenFileMatches_RemovesOnlyMatchingFileKeys()
     {
         // Arrange
         CloudDriveMetadataCache cache = CreateCache();
@@ -84,6 +96,9 @@ public sealed class CloudDriveMetadataCacheTests
         Assert.Equal("file-2", await cache.GetOrSetAsync(otherFileKey, _ => Task.FromResult("miss")));
     }
 
+    /// <summary>
+    /// 验证缓存 TTL 过期后会重新加载值。
+    /// </summary>
     [Fact]
     public async Task GetOrSetAsync_WhenTtlExpires_ReloadsValue()
     {
@@ -111,15 +126,20 @@ public sealed class CloudDriveMetadataCacheTests
         Assert.Equal(2, factoryCalls);
     }
 
+    /// <summary>
+    /// 验证缓存键包含敏感字段时抛出异常。
+    /// </summary>
     [Fact]
     public async Task GetOrSetAsync_WhenKeyContainsSensitiveField_Throws()
     {
-        // Arrange
+        // Arrange（准备）
         CloudDriveMetadataCache cache = CreateCache();
 
-        // Act & Assert
+        // Act（执行）
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => cache.GetOrSetAsync("cloud-drive:metadata:cookie:UID=secret", _ => Task.FromResult("bad")));
+
+        // Assert（断言）
     }
 
     private static async Task SeedAsync(CloudDriveMetadataCache cache, string key, string value)

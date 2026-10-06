@@ -1,4 +1,4 @@
-namespace Domain.Enums;
+﻿namespace Domain.Enums;
 
 /// <summary>
 /// Cookie 会话状态。
@@ -12,5 +12,5 @@ public enum CookieSessionStatus
     Invalidated = 1,
 
     /// <summary>会话已被主动撤销（运维手动解绑）。</summary>
-    Revoked = 2
+    Revoked = 2,
 }

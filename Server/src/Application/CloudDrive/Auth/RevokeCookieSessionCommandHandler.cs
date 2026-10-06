@@ -1,4 +1,4 @@
-using Application.Abstractions.CloudDrive;
+﻿using Application.Abstractions.CloudDrive;
 using Application.Commands;
 
 using Domain.Results;
@@ -32,10 +32,7 @@ internal sealed class RevokeCookieSessionCommandHandler(
             request.Input.CloudAccountUid,
             cancellationToken);
 
-        await metadataCache.InvalidateDirectoryAsync(
-            request.UserId,
-            request.Input.CloudAccountUid,
-            directoryId: "0");
+        await metadataCache.InvalidateDirectoryAsync(request.UserId, request.Input.CloudAccountUid, directoryId: "0", cancellationToken: cancellationToken);
 
         rateLimiter.Reset(request.UserId, request.Input.CloudAccountUid);
 

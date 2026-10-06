@@ -1,8 +1,10 @@
 using System.Globalization;
+using System.Text.Json;
 
 using Application.Abstractions.CloudDrive;
 using Application.CloudDrive.Dtos;
 
+using Domain.Exceptions;
 using Domain.Results;
 
 namespace Application.CloudDrive.Files;
@@ -39,21 +41,15 @@ internal static class CloudDriveFileHandlerSupport
         };
 
         AddOptional(queryParameters, "type", input.Type);
-        AddOptional(queryParameters, "suffix", input.Suffix);
         AddOptional(queryParameters, "asc", input.Asc);
         AddOptional(queryParameters, "o", input.OrderBy);
         AddOptional(queryParameters, "custom_order", input.CustomOrder);
+        AddOptional(queryParameters, "fc_mix", input.FcMix);
+        AddOptional(queryParameters, "nf", input.Nf);
         AddOptional(queryParameters, "stdir", input.Stdir);
-        AddOptional(queryParameters, "star", input.Star);
-        AddOptional(queryParameters, "cur", input.Cur);
         AddOptional(queryParameters, "show_dir", input.ShowDir);
         AddOptional(queryParameters, "natsort", input.NatSort);
-        AddOptional(queryParameters, "snap", input.Snap);
         AddOptional(queryParameters, "count_folders", input.CountFolders);
-        AddOptional(queryParameters, "record_open_time", input.RecordOpenTime);
-        AddOptional(queryParameters, "code", input.Code);
-        AddOptional(queryParameters, "scid", input.Scid);
-        AddOptional(queryParameters, "source", input.Source);
 
         return new CloudDriveApiContext
         {
@@ -111,8 +107,64 @@ internal static class CloudDriveFileHandlerSupport
             Category = "download",
             QueryParameters = new Dictionary<string, string>(StringComparer.Ordinal)
             {
+                // 115 下载契约只观察到这两个 number-string 查询字段；不把它们扩展为其它业务参数。
+                ["_"] = "1",
+                ["dl"] = "1",
                 ["pickcode"] = input.PickCode,
+            },
+        };
+    }
+
+    public static CloudDriveApiContext CreateCreateFolderContext(CreateFolderInput input)
+    {
+        return new CloudDriveApiContext
+        {
+            Category = "file-write",
+            FormFields = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["cname"] = input.FolderName,
+                ["pid"] = input.ParentId,
+            },
+        };
+    }
+
+    public static CloudDriveApiContext CreateCopyContext(string fileId, string targetDirectoryId)
+    {
+        return new CloudDriveApiContext
+        {
+            Category = "file-write",
+            FormFields = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["fid[0]"] = fileId,
                 ["format"] = "json",
+                ["pid"] = targetDirectoryId,
+            },
+        };
+    }
+
+    public static CloudDriveApiContext CreateRenameContext(string fileId, string newFileName)
+    {
+        return new CloudDriveApiContext
+        {
+            Category = "file-write",
+            FormFields = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [$"files_new_name[{fileId}]"] = newFileName,
+                ["format"] = "json",
+            },
+        };
+    }
+
+    public static CloudDriveApiContext CreateToggleStarContext(ToggleStarInput input)
+    {
+        return new CloudDriveApiContext
+        {
+            Category = "file-write",
+            FormFields = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["file_id"] = input.FileId,
+                ["format"] = "json",
+                ["star"] = input.Star ? "1" : "0",
             },
         };
     }
@@ -124,11 +176,11 @@ internal static class CloudDriveFileHandlerSupport
             Category = "recycle-bin",
             QueryParameters = new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                ["aid"] = "7",
-                ["cid"] = "0",
+                ["asc"] = "0",
                 ["offset"] = input.Offset.ToString(CultureInfo.InvariantCulture),
                 ["limit"] = input.Limit.ToString(CultureInfo.InvariantCulture),
                 ["format"] = "json",
+                ["o"] = "file_name",
             },
         };
     }
@@ -208,6 +260,87 @@ internal static class CloudDriveFileHandlerSupport
 
     public static Error InvalidInput(string code, string message) => new(code, message);
 
+    public static JsonElement Payload(JsonElement response) =>
+        response.ValueKind == JsonValueKind.Object
+            && response.TryGetProperty("data", out JsonElement data)
+            ? data
+            : response;
+
+    public static string? ReadString(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind != JsonValueKind.Object
+            || !element.TryGetProperty(propertyName, out JsonElement value)
+            || value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        return value.ValueKind == JsonValueKind.String ? value.GetString() : value.ToString();
+    }
+
+    public static long ReadLong(JsonElement element, string propertyName) =>
+        long.TryParse(ReadString(element, propertyName), NumberStyles.Integer, CultureInfo.InvariantCulture, out long result)
+            ? result
+            : 0;
+
+    /// <summary>
+    /// 验证已采集写操作或下载响应的成功 envelope，避免未知响应被误报为完成。
+    /// </summary>
+    /// <param name="response">上游响应。</param>
+    /// <param name="operationName">操作名称。</param>
+    /// <param name="codePropertyName">成功码字段名称。</param>
+    /// <param name="codeKind">成功码字段的 JSON 类型。</param>
+    public static void EnsureSuccessEnvelope(
+        JsonElement response,
+        string operationName,
+        string? codePropertyName = null,
+        JsonValueKind codeKind = JsonValueKind.Undefined)
+    {
+        if (response.ValueKind != JsonValueKind.Object
+            || !response.TryGetProperty("state", out JsonElement state)
+            || state.ValueKind != JsonValueKind.True)
+        {
+            throw new CloudDriveApiException(
+                $"115 {operationName} 返回未知成功响应结构。",
+                "unknown_error_shape");
+        }
+
+        if (codePropertyName is null)
+        {
+            return;
+        }
+
+        if (!response.TryGetProperty(codePropertyName, out JsonElement code)
+            || code.ValueKind != codeKind
+            || (codeKind == JsonValueKind.String && !string.IsNullOrEmpty(code.GetString()))
+            || (codeKind == JsonValueKind.Number && (!code.TryGetInt64(out long number) || number != 0)))
+        {
+            throw new CloudDriveApiException(
+                $"115 {operationName} 返回未知成功响应结构。",
+                "unknown_error_shape");
+        }
+    }
+
+    /// <summary>
+    /// 要求上游响应包含非空字符串字段。
+    /// </summary>
+    /// <param name="response">上游响应。</param>
+    /// <param name="propertyName">字段名称。</param>
+    /// <param name="operationName">操作名称。</param>
+    /// <returns>字段值。</returns>
+    public static string RequireString(JsonElement response, string propertyName, string operationName)
+    {
+        string? value = ReadString(response, propertyName);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new CloudDriveApiException(
+                $"115 {operationName} 缺少成功响应字段。",
+                "unknown_error_shape");
+        }
+
+        return value;
+    }
+
     private static CloudDriveApiContext CreateUploadInitContext(
         string cloudAccountUid,
         string directoryId,
@@ -248,5 +381,4 @@ internal static class CloudDriveFileHandlerSupport
             parameters[key] = value;
         }
     }
-
 }

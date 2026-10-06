@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.Json;
 
 using Application.Abstractions.CloudDrive;
@@ -21,9 +21,10 @@ internal static class CloudDriveOfflineSupport
         return new CloudDriveApiContext
         {
             Category = "offline",
-            FormFields = new Dictionary<string, string>(StringComparer.Ordinal)
+            QueryParameters = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["page"] = input.Page.ToString(CultureInfo.InvariantCulture),
+                ["page_size"] = "15",
                 ["stat"] = input.Stat.ToString(CultureInfo.InvariantCulture),
             },
         };
@@ -42,7 +43,7 @@ internal static class CloudDriveOfflineSupport
         return new CloudDriveApiContext
         {
             Category = "offline",
-            FormFields = new Dictionary<string, string>(StringComparer.Ordinal)
+            QueryParameters = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["stat"] = "0",
             },

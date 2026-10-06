@@ -1,4 +1,4 @@
-using Application.Abstractions;
+﻿using Application.Abstractions;
 
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,7 +12,7 @@ namespace Infrastructure.Security;
 /// 按设计 §8. WebApi 启动与认证的机密保护约定实现：<br/>
 /// - 注册 <see cref="IDataProtectionProvider"/>；<br/>
 /// - 设置统一的 <c>ApplicationName</c>，保证同一应用的多个实例可共享密钥；<br/>
-/// - 支持通过 <paramref name="keyStoragePath"/> 将密钥持久化到文件系统（R12.7）；<br/>
+/// - 支持通过 <c>keyStoragePath</c> 将密钥持久化到文件系统（R12.7）；<br/>
 /// - 注册 <see cref="ISecretProtector"/> 的单例实现（R12.7）。
 /// </remarks>
 public static class SecretsSetup

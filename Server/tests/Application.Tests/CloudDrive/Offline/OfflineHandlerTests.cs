@@ -1,22 +1,26 @@
-using Application.Abstractions.CloudDrive;
-using Application.CloudDrive;
+﻿using Application.CloudDrive;
 using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
 using Application.CloudDrive.Offline;
 using Application.Tests.Support;
 
-using Domain.Exceptions;
 using Domain.Results;
 
 using Microsoft.Extensions.Options;
 
 namespace Application.Tests.CloudDrive.Offline;
 
+/// <summary>
+/// 115 网盘离线任务处理器测试。
+/// </summary>
 public sealed class OfflineHandlerTests
 {
     private static readonly Guid TestUserId = Guid.Parse("77777777-7777-7777-7777-777777777777");
     private const string TestCloudAccountUid = "115001";
 
+    /// <summary>
+    /// 验证离线任务列表查询会映射分页任务概要。
+    /// </summary>
     [Fact]
     public async Task GetOfflineTaskListQueryHandler_WhenTasksReturned_MapsPagedTasks()
     {
@@ -35,6 +39,7 @@ public sealed class OfflineHandlerTests
                 new GetOfflineTaskListInput
                 {
                     Page = 1,
+                    Stat = 12,
                 }),
             CancellationToken.None);
 
@@ -45,9 +50,14 @@ public sealed class OfflineHandlerTests
         Assert.Equal(1, result.Value.Count);
         CloudDriveGatewayRequest request = Assert.Single(gateway.OfflineRequests);
         Assert.Equal("task_lists", request.Endpoint);
-        Assert.Equal("0", request.Context.FormFields!["stat"]);
+        Assert.Equal("1", request.Context.QueryParameters!["page"]);
+        Assert.Equal("15", request.Context.QueryParameters["page_size"]);
+        Assert.Equal("12", request.Context.QueryParameters["stat"]);
     }
 
+    /// <summary>
+    /// 验证离线配额查询不会额外调用统计接口。
+    /// </summary>
     [Fact]
     public async Task GetOfflineQuotaQueryHandler_WhenQuotaReturned_DoesNotCallStats()
     {
@@ -69,6 +79,9 @@ public sealed class OfflineHandlerTests
         Assert.Equal(["get_quota_package_info"], gateway.OfflineRequests.Select(request => request.Endpoint));
     }
 
+    /// <summary>
+    /// 验证离线统计查询会映射统计字段。
+    /// </summary>
     [Fact]
     public async Task GetOfflineStatsQueryHandler_WhenStatsReturned_MapsStatistics()
     {
@@ -90,6 +103,9 @@ public sealed class OfflineHandlerTests
         Assert.Equal("task_count", gateway.OfflineRequests.Single().Endpoint);
     }
 
+    /// <summary>
+    /// 验证新增离线任务接口未采集时返回业务失败且不发送请求。
+    /// </summary>
     [Fact]
     public async Task AddOfflineTaskCommandHandler_WhenApiNotCollected_ReturnsBusinessFailureWithoutRequest()
     {
@@ -113,6 +129,9 @@ public sealed class OfflineHandlerTests
         Assert.Empty(gateway.OfflineRequests);
     }
 
+    /// <summary>
+    /// 验证取消离线任务接口未采集时返回业务失败且不发送请求。
+    /// </summary>
     [Fact]
     public async Task CancelOfflineTaskCommandHandler_WhenApiNotCollected_ReturnsBusinessFailureWithoutRequest()
     {

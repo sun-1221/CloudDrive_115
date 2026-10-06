@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text.Json;
 
 using FluentValidation;
@@ -8,14 +8,14 @@ using FsCheck;
 using FsCheck.Fluent;
 using FsCheck.Xunit;
 
-using DomainResult = Domain.Results.Result;
-using DomainError = Domain.Results.Error;
-
 using Microsoft.AspNetCore.Http;
 
 using WebApi.Extensions;
 using WebApi.Middleware;
 using WebApi.Tests.Support;
+
+using DomainError = Domain.Results.Error;
+using DomainResult = Domain.Results.Result;
 
 namespace WebApi.Tests.Middleware;
 
@@ -33,8 +33,12 @@ public sealed class ExceptionHandlingMiddlewareStatusCodePropertyTests
     [Property(Arbitrary = [typeof(NonEmptyStringArb)])]
     public async Task Any_exception_produces_problem_json_response(NonEmptyString message)
     {
+        // Arrange（准备）
+
+        // Act（执行）
         DefaultHttpContext context = await InvokeMiddlewareAsync(new InvalidOperationException(message.Get));
 
+        // Assert（断言）
         Assert.StartsWith("application/problem+json", context.Response.ContentType, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -44,11 +48,14 @@ public sealed class ExceptionHandlingMiddlewareStatusCodePropertyTests
     [Property(Arbitrary = [typeof(NonEmptyStringArb)])]
     public async Task ValidationException_maps_to_400_with_errors(NonEmptyString property, NonEmptyString message)
     {
+        // Arrange（准备）
         var failure = new ValidationFailure(property.Get, message.Get);
         var exception = new ValidationException([failure]);
 
+        // Act（执行）
         DefaultHttpContext context = await InvokeMiddlewareAsync(exception);
 
+        // Assert（断言）
         Assert.Equal((int)HttpStatusCode.BadRequest, context.Response.StatusCode);
 
         using JsonDocument document = await ReadResponseBodyAsync(context);
@@ -63,10 +70,13 @@ public sealed class ExceptionHandlingMiddlewareStatusCodePropertyTests
     [Property(Arbitrary = [typeof(DomainStatusCodeArb), typeof(NonEmptyStringArb)])]
     public async Task DomainException_maps_to_its_status_code(DomainStatusCode code, NonEmptyString message)
     {
+        // Arrange（准备）
         var exception = new TestDomainException(code.Value, message.Get);
 
+        // Act（执行）
         DefaultHttpContext context = await InvokeMiddlewareAsync(exception);
 
+        // Assert（断言）
         Assert.Equal(code.Value, context.Response.StatusCode);
     }
 
@@ -77,29 +87,36 @@ public sealed class ExceptionHandlingMiddlewareStatusCodePropertyTests
     [Property(Arbitrary = [typeof(NonEmptyStringArb)])]
     public async Task Unknown_exception_maps_to_500_and_hides_internals(NonEmptyString secret)
     {
+        // Arrange（准备）
         var exception = new InvalidOperationException(secret.Get);
 
+        // Act（执行）
         DefaultHttpContext context = await InvokeMiddlewareAsync(exception, isDevelopment: false);
 
+        // Assert（断言）
         Assert.Equal((int)HttpStatusCode.InternalServerError, context.Response.StatusCode);
 
         using JsonDocument document = await ReadResponseBodyAsync(context);
         Assert.True(document.RootElement.TryGetProperty("detail", out JsonElement detail));
         string? detailText = detail.GetString();
+
         // 非开发环境下 detail 应为固定提示，隐藏内部细节（如异常类型、堆栈、消息中的敏感数据）
         Assert.Equal("服务器内部错误", detailText);
     }
 
     /// <summary>
-    /// 需求 R10.6：<see cref="Result.Failure"/> 经 WebApi 适配层映射为非 2xx <see cref="Microsoft.AspNetCore.Mvc.ProblemDetails"/>。
+    /// 需求 R10.6：<c>Result.Failure</c> 经 WebApi 适配层映射为非 2xx <see cref="Microsoft.AspNetCore.Mvc.ProblemDetails"/>。
     /// </summary>
     [Property(Arbitrary = [typeof(NonSuccessStatusCodeArb), typeof(NonEmptyStringArb)])]
     public void Result_Failure_never_maps_to_2xx(NonSuccessStatusCode statusCode, NonEmptyString code, NonEmptyString description)
     {
+        // Arrange（准备）
         DomainResult failure = DomainResult.Failure(new DomainError(code.Get, description.Get));
 
+        // Act（执行）
         IResult httpResult = failure.ToHttpResult(statusCode.Value);
 
+        // Assert（断言）
         var problem = Assert.IsType<Microsoft.AspNetCore.Http.HttpResults.ProblemHttpResult>(httpResult);
         int actualStatus = problem.StatusCode;
         Assert.False(actualStatus is >= 200 and < 300, $"失败响应状态码不应为 2xx，实际 = {actualStatus}");
@@ -111,12 +128,16 @@ public sealed class ExceptionHandlingMiddlewareStatusCodePropertyTests
     [Property(Arbitrary = [typeof(SuccessStatusCodeArb), typeof(NonEmptyStringArb)])]
     public void ToHttpResult_rejects_2xx_failure_status_code(SuccessStatusCode statusCode, NonEmptyString code, NonEmptyString description)
     {
+        // Arrange（准备）
         DomainResult failure = DomainResult.Failure(new DomainError(code.Get, description.Get));
 
+        // Act（执行）
         Assert.Throws<ArgumentOutOfRangeException>(() =>
         {
             _ = failure.ToHttpResult(statusCode.Value);
         });
+
+        // Assert（断言）
     }
 
     private static async Task<DefaultHttpContext> InvokeMiddlewareAsync(Exception exception, bool isDevelopment = false)

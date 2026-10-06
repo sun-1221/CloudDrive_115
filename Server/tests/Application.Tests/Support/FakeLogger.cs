@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 
 namespace Application.Tests.Support;
 
@@ -15,7 +15,9 @@ internal sealed class FakeLogger<TCategory> : ILogger<TCategory>
     /// </summary>
     public IReadOnlyList<FakeLogEntry> Entries => _entries;
 
-    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+    public IDisposable? BeginScope<TState>(TState state)
+        where TState : notnull
+        => null;
 
     public bool IsEnabled(LogLevel logLevel) => true;
 

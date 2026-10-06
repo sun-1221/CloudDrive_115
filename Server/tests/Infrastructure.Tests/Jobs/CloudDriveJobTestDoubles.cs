@@ -1,4 +1,4 @@
-using Application.Abstractions;
+﻿using Application.Abstractions;
 using Application.Abstractions.CloudDrive;
 
 using Domain.Entities;
@@ -33,6 +33,8 @@ internal static class CloudDriveJobTestDoubles
         public TriggerKey RecoveringTriggerKey => new("recovering", "cloud-drive");
 
         public int RefireCount => 0;
+
+        public int RetryAttempt => 0;
 
         public JobDataMap MergedJobDataMap { get; } = new() { ["JobId"] = jobId.ToString("D") };
 

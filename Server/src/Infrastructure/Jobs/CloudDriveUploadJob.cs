@@ -27,7 +27,7 @@ namespace Infrastructure.Jobs;
 /// </summary>
 internal sealed class CloudDriveUploadJob(
     ICloudDriveJobRepository jobRepository,
-    ICloudDriveOpenApiGateway openApiGateway,
+    ICloudDriveWebApiGateway openApiGateway,
     ICloudDriveMetadataCache metadataCache,
     ITransactionManager transactionManager,
     IPublisher publisher,
@@ -39,12 +39,12 @@ internal sealed class CloudDriveUploadJob(
     private static readonly JsonSerializerOptions PayloadJsonOptions = new(JsonSerializerDefaults.Web);
 
     /// <inheritdoc />
-    public async Task Execute(IJobExecutionContext context)
+    public async ValueTask Execute(IJobExecutionContext context, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
 
         Guid jobId = ReadJobId(context);
-        CloudDriveJob? job = await jobRepository.GetByIdAsync(jobId, context.CancellationToken);
+        CloudDriveJob? job = await jobRepository.GetByIdAsync(jobId, cancellationToken);
         if (job is null)
         {
             logger.LogWarning("115 上传后台任务不存在 JobId={JobId}", jobId);
@@ -53,28 +53,28 @@ internal sealed class CloudDriveUploadJob(
 
         if (job.JobType != CloudDriveJobType.Upload)
         {
-            await MarkFailedAsync(job, $"后台任务类型不匹配，期望 Upload，实际 {job.JobType}", context.CancellationToken);
+            await MarkFailedAsync(job, $"后台任务类型不匹配，期望 Upload，实际 {job.JobType}", cancellationToken);
             return;
         }
 
         UploadFileInput? input = DeserializePayload(job);
         if (input is null)
         {
-            await MarkFailedAsync(job, "上传任务缺少有效 PayloadJson。", context.CancellationToken);
+            await MarkFailedAsync(job, "上传任务缺少有效 PayloadJson。", cancellationToken);
             return;
         }
 
         try
         {
-            await StartJobAsync(job, context.CancellationToken);
-            await ExecuteUploadAsync(job, input, context.CancellationToken);
-            await CompleteJobAsync(job, input.DirectoryId, context.CancellationToken);
+            await StartJobAsync(job, cancellationToken);
+            await ExecuteUploadAsync(job, input, cancellationToken);
+            await CompleteJobAsync(job, input.DirectoryId, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             auditLogger.LogError(job, ex);
             logger.LogError(ex, "115 上传后台任务失败 JobId={JobId}, CloudAccountUid={CloudAccountUid}", job.Id, sensitiveFieldsFilter.Redact(job.CloudAccountUid));
-            await MarkFailedAsync(job, CreateSafeErrorMessage(ex), context.CancellationToken);
+            await MarkFailedAsync(job, CreateSafeErrorMessage(ex), cancellationToken);
         }
     }
 
@@ -191,7 +191,7 @@ internal sealed class CloudDriveUploadJob(
     {
         job.Complete();
         await SaveAndPublishAsync(job, "completed", cancellationToken);
-        await metadataCache.InvalidateDirectoryAsync(job.UserId, job.CloudAccountUid, directoryId);
+        await metadataCache.InvalidateDirectoryAsync(job.UserId, job.CloudAccountUid, directoryId, cancellationToken);
     }
 
     private async Task MarkFailedAsync(

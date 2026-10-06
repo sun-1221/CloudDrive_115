@@ -1,5 +1,4 @@
-using Application.Abstractions.CloudDrive;
-using Application.CloudDrive;
+﻿using Application.CloudDrive;
 using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
 using Application.CloudDrive.User;
@@ -34,7 +33,7 @@ public sealed class UserAggregationHandlerTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal("not_collected", result.Value.SchemaStatus);
+        Assert.Equal("available", result.Value.SchemaStatus);
         Assert.Contains(gateway.WebApiRequests, request => request.Endpoint == "files/index_info");
     }
 
@@ -56,8 +55,14 @@ public sealed class UserAggregationHandlerTests
         // Assert
         Assert.True(result.IsSuccess);
         Assert.Equal("VIP", result.Value.LevelName);
-        Assert.Contains(gateway.UserCenterRequests, request => request.Endpoint == "proapi/3.0/index.php");
-        Assert.Contains(gateway.UserCenterRequests, request => request.Endpoint == ".");
+        Assert.Contains(gateway.UserCenterRequests, request =>
+            request.Endpoint == "."
+            && request.Context.QueryParameters!["ct"] == "order"
+            && request.Context.QueryParameters["ac"] == "get_yun_card");
+        Assert.Contains(gateway.UserCenterRequests, request =>
+            request.Endpoint == "."
+            && request.Context.QueryParameters!["ct"] == "balance"
+            && request.Context.QueryParameters["ac"] == "getBalance");
     }
 
     private static RecordingCloudDriveOpenApiGateway CreateUserGateway()
@@ -65,7 +70,6 @@ public sealed class UserAggregationHandlerTests
         var gateway = new RecordingCloudDriveOpenApiGateway();
         gateway.RespondWeb("files/index_info", """{"state":true,"data":{"all_total":"10 GB","all_use":"2 GB","all_remain":"8 GB","all_total_size":10,"all_use_size":2,"all_remain_size":8}}""");
         gateway.RespondWeb("user/vip_limit", """{"state":true,"data":{"level_name":"VIP","expire":"1893456000"}}""");
-        gateway.RespondUserCenter("proapi/3.0/index.php", """{"state":true,"data":{"user_name":"tester-my","pub_mobile":"must-not-map"}}""");
         gateway.RespondUserCenter(".", """{"state":true,"data":{"vip_count":2,"00_balance":88}}""");
         return gateway;
     }

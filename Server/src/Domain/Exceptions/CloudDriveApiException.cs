@@ -1,4 +1,4 @@
-namespace Domain.Exceptions;
+﻿namespace Domain.Exceptions;
 
 /// <summary>
 /// 115 网页端 API 返回未分类业务错误或未知错误响应结构时抛出。
@@ -46,6 +46,14 @@ public sealed class CloudDriveApiException : DomainException
         Exception innerException,
         string? errorCode = "cloud_drive_api_error")
         : base(502, message, innerException, errorCode)
+    {
+    }
+
+    private CloudDriveApiException(int statusCode, string message, string? errorCode = null) : base(statusCode, message, errorCode)
+    {
+    }
+
+    private CloudDriveApiException(int statusCode, string message, Exception innerException, string? errorCode = null) : base(statusCode, message, innerException, errorCode)
     {
     }
 

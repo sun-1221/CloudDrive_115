@@ -1,4 +1,7 @@
+using System.Text.Json;
+
 using Application.Abstractions.CloudDrive;
+
 using Application.CloudDrive.Dtos;
 using Application.CloudDrive.Files;
 
@@ -60,6 +63,26 @@ internal static class CloudDrivePreviewSupport
         {
             PickCode = pickCode,
         });
+    }
+
+    public static CloudDriveApiContext CreateDownloadContext(GetPreviewInput input)
+    {
+        return CloudDriveFileHandlerSupport.CreateDownloadContext(new GetDownloadUrlInput
+        {
+            PickCode = input.PickCode,
+        });
+    }
+
+    public static CloudDriveDownloadDto MapDownload(JsonElement response)
+    {
+        JsonElement payload = CloudDriveFileHandlerSupport.Payload(response);
+        return new CloudDriveDownloadDto
+        {
+            DownloadUrl = CloudDriveFileHandlerSupport.ReadString(payload, "file_url_302") ?? string.Empty,
+            FileName = CloudDriveFileHandlerSupport.ReadString(payload, "file_name") ?? string.Empty,
+            FileSize = CloudDriveFileHandlerSupport.ReadLong(payload, "file_size"),
+            IsTemporary = true,
+        };
     }
 
     public static string ResolveExtension(CloudDriveFileDto file)

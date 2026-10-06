@@ -1,4 +1,4 @@
-using Domain.Entities;
+﻿using Domain.Entities;
 using Domain.Enums;
 using Domain.Events;
 
@@ -14,6 +14,9 @@ public sealed class CookieSessionTests
     private const string TestEncryptedPayload = "encrypted-cookie-payload";
     private const int TestKeyVersion = 1;
 
+    /// <summary>
+    /// 验证活跃会话标记失效时会追加 Cookie 失效领域事件。
+    /// </summary>
     [Fact]
     public void MarkInvalidated_WhenSessionIsActive_AppendsCookieInvalidatedEvent()
     {
@@ -35,6 +38,9 @@ public sealed class CookieSessionTests
         Assert.Equal(session.CooldownUntil, domainEvent.CooldownUntil);
     }
 
+    /// <summary>
+    /// 验证当前时间早于冷却截止时间时会判定处于冷却期。
+    /// </summary>
     [Fact]
     public void IsInCooldown_WhenNowIsBeforeCooldownUntil_ReturnsTrue()
     {
@@ -50,6 +56,9 @@ public sealed class CookieSessionTests
         Assert.True(isInCooldown);
     }
 
+    /// <summary>
+    /// 验证活跃会话撤销后状态变为已撤销。
+    /// </summary>
     [Fact]
     public void Revoke_WhenSessionIsActive_ChangesStatusToRevoked()
     {

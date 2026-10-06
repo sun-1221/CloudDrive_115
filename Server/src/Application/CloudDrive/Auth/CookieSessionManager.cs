@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 using Application.Abstractions.CloudDrive;
 
@@ -32,6 +32,7 @@ public sealed class CookieSessionManager(
     /// 存储或更新 Cookie 会话。将 UID/CID/USSID + 额外字段序列化为 JSON 并加密持久化。
     /// 同一 <c>UserId + CloudAccountUid</c> 上下文只保留一条记录。
     /// </summary>
+    /// <returns>表示异步 Cookie 会话保存操作的 <see cref="Task"/>。</returns>
     public async Task UpsertSessionAsync(
         Guid userId,
         string cloudAccountUid,
@@ -71,6 +72,7 @@ public sealed class CookieSessionManager(
     /// 获取当前有效的 Cookie 字符串（用于请求头注入）。
     /// 若 Cookie 处于失效或冷却期内，抛出 <see cref="CloudDriveCookieInvalidatedException"/>。
     /// </summary>
+    /// <returns>返回可注入 115 请求头的 Cookie 字符串。</returns>
     public async Task<string> GetValidCookieHeaderAsync(
         Guid userId,
         string cloudAccountUid,
@@ -119,6 +121,7 @@ public sealed class CookieSessionManager(
     /// <summary>
     /// 检查指定账号是否已绑定可用 Cookie。
     /// </summary>
+    /// <returns>已绑定且处于可用状态时返回 <see langword="true"/>。</returns>
     public async Task<bool> IsAuthorizedAsync(
         Guid userId,
         string cloudAccountUid,
@@ -135,6 +138,7 @@ public sealed class CookieSessionManager(
     /// <summary>
     /// 标记 Cookie 失效并进入冷却期。
     /// </summary>
+    /// <returns>表示异步失效标记操作的 <see cref="Task"/>。</returns>
     public async Task MarkInvalidatedAsync(
         Guid userId,
         string cloudAccountUid,
@@ -157,6 +161,7 @@ public sealed class CookieSessionManager(
     /// <summary>
     /// 进入冷却期（可覆盖默认冷却时长）。供 <c>EnterCookieCooldownCommand</c> 使用。
     /// </summary>
+    /// <returns>表示异步冷却期更新操作的 <see cref="Task"/>。</returns>
     public async Task EnterCooldownAsync(
         Guid userId,
         string cloudAccountUid,
@@ -177,6 +182,7 @@ public sealed class CookieSessionManager(
     /// <summary>
     /// 撤销指定账号的 Cookie 会话（主动解绑）。
     /// </summary>
+    /// <returns>表示异步会话撤销操作的 <see cref="Task"/>。</returns>
     public async Task RevokeSessionAsync(
         Guid userId,
         string cloudAccountUid,
@@ -194,6 +200,7 @@ public sealed class CookieSessionManager(
     /// <summary>
     /// 撤销指定账号的 Cookie 会话（主动解绑）。
     /// </summary>
+    /// <returns>表示异步会话撤销操作的 <see cref="Task"/>。</returns>
     public Task RevokeAsync(
         Guid userId,
         string cloudAccountUid,
@@ -206,6 +213,7 @@ public sealed class CookieSessionManager(
     /// 返回当前用户下所有 Cookie 会话摘要列表。
     /// 不暴露 Cookie 原文。
     /// </summary>
+    /// <returns>返回当前用户已绑定账号的会话摘要列表。</returns>
     public async Task<IReadOnlyList<CookieSessionSummary>> GetBoundAccountsAsync(
         Guid userId,
         CancellationToken cancellationToken = default)
@@ -219,7 +227,7 @@ public sealed class CookieSessionManager(
             Status = s.Status,
             CreationTime = s.CreationTime,
             LastModificationTime = s.LastModificationTime,
-            CooldownUntil = s.CooldownUntil
+            CooldownUntil = s.CooldownUntil,
         }).ToList().AsReadOnly();
     }
 
@@ -249,7 +257,7 @@ public sealed class CookieSessionManager(
         {
             ["uid"] = cookies.Uid,
             ["cid"] = cookies.Cid,
-            ["ussid"] = cookies.Ussid
+            ["ussid"] = cookies.Ussid,
         };
 
         if (extraFields is { Count: > 0 })
@@ -273,7 +281,7 @@ public sealed class CookieSessionManager(
         {
             $"UID={uid}",
             $"CID={cid}",
-            $"USSID={ussid}"
+            $"USSID={ussid}",
         };
 
         if (root.TryGetProperty("extraFields", out JsonElement extras) &&

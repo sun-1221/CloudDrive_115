@@ -1,4 +1,4 @@
-namespace Domain.Exceptions;
+﻿namespace Domain.Exceptions;
 
 /// <summary>
 /// 115 网盘上传初始化、直传或完成确认失败时抛出。
@@ -14,6 +14,14 @@ public sealed class CloudDriveUploadException : DomainException
         string message = "115 网盘文件上传失败",
         string? errorCode = "cloud_drive_upload_failed")
         : base(500, message, errorCode)
+    {
+    }
+
+    private CloudDriveUploadException(int statusCode, string message, string? errorCode = null) : base(statusCode, message, errorCode)
+    {
+    }
+
+    private CloudDriveUploadException(int statusCode, string message, Exception innerException, string? errorCode = null) : base(statusCode, message, innerException, errorCode)
     {
     }
 }

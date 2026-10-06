@@ -1,4 +1,4 @@
-namespace Domain.Enums;
+﻿namespace Domain.Enums;
 
 /// <summary>
 /// 115 网盘后台任务执行状态。
@@ -18,5 +18,5 @@ public enum CloudDriveJobStatus
     Failed = 3,
 
     /// <summary>任务已被取消。</summary>
-    Cancelled = 4
+    Cancelled = 4,
 }

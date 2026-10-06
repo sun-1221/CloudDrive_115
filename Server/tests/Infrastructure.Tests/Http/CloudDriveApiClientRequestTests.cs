@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -19,12 +19,18 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.Http;
 
+/// <summary>
+/// 115 网盘 API 客户端请求构造与异常处理测试。
+/// </summary>
 public sealed class CloudDriveApiClientRequestTests
 {
+    /// <summary>
+    /// 验证 WebAPI 查询请求会附加 Cookie 并经过限流器。
+    /// </summary>
     [Fact]
     public async Task SendWebApiRequestAsync_WhenQueryRequest_AddsCookieAndRateLimitAsync()
     {
-        // 准备
+        // Arrange（准备）
         Guid userId = Guid.NewGuid();
         const string cloudAccountUid = "115001";
         var handler = new CaptureHttpMessageHandler(
@@ -45,7 +51,7 @@ public sealed class CloudDriveApiClientRequestTests
             },
         };
 
-        // 执行
+        // Act（执行）
         TestResponse result = await client.SendWebApiRequestAsync<TestResponse>(
             userId,
             cloudAccountUid,
@@ -54,7 +60,7 @@ public sealed class CloudDriveApiClientRequestTests
             context,
             CancellationToken.None);
 
-        // 断言
+        // Assert（断言）
         Assert.Equal("ok", result.Name);
         Assert.Equal(1, rateLimiter.AcquireCount);
         Assert.Equal((userId, cloudAccountUid, "files"), rateLimiter.LastAcquire);
@@ -66,10 +72,13 @@ public sealed class CloudDriveApiClientRequestTests
         Assert.Equal("UID=uid; CID=cid; USSID=ussid", cookieValues.Single());
     }
 
+    /// <summary>
+    /// 验证用户中心 Pay 域 JSON 请求会路由到 Pay 客户端并发送 JSON 请求体。
+    /// </summary>
     [Fact]
     public async Task SendUserCenterRequestAsync_WhenPayDomainWithJsonBody_RoutesAndSendsJsonAsync()
     {
-        // 准备
+        // Arrange（准备）
         Guid userId = Guid.NewGuid();
         const string cloudAccountUid = "115001";
         var handler = new CaptureHttpMessageHandler(
@@ -85,7 +94,7 @@ public sealed class CloudDriveApiClientRequestTests
             JsonBody = new { ping = "pong" },
         };
 
-        // 执行
+        // Act（执行）
         TestResponse result = await client.SendUserCenterRequestAsync<TestResponse>(
             userId,
             cloudAccountUid,
@@ -94,7 +103,7 @@ public sealed class CloudDriveApiClientRequestTests
             context,
             CancellationToken.None);
 
-        // 断言
+        // Assert（断言）
         Assert.Equal("balance", result.Name);
         Assert.Equal(CloudDriveHttpClientNames.Pay, handler.ClientNames.Single());
 
@@ -105,10 +114,13 @@ public sealed class CloudDriveApiClientRequestTests
         Assert.Contains("\"ping\":\"pong\"", await request.Content.ReadAsStringAsync());
     }
 
+    /// <summary>
+    /// 验证 WebAPI 返回 HTTP 401 时会标记 Cookie 会话失效。
+    /// </summary>
     [Fact]
     public async Task SendWebApiRequestAsync_WhenHttpUnauthorized_MarksCookieInvalidatedAsync()
     {
-        // 准备
+        // Arrange（准备）
         Guid userId = Guid.NewGuid();
         const string cloudAccountUid = "115001";
         var handler = new CaptureHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.Unauthorized));
@@ -122,7 +134,7 @@ public sealed class CloudDriveApiClientRequestTests
             repository,
             notifier);
 
-        // 执行
+        // Act（执行）
         CloudDriveCookieInvalidatedException exception = await Assert.ThrowsAsync<CloudDriveCookieInvalidatedException>(
             () => client.SendWebApiRequestAsync<TestResponse>(
                 userId,
@@ -132,7 +144,7 @@ public sealed class CloudDriveApiClientRequestTests
                 new CloudDriveApiContext(),
                 CancellationToken.None));
 
-        // 断言
+        // Assert（断言）
         Assert.Equal("cloud_drive_cookie_invalidated", exception.ErrorCode);
         CookieSession? session = await repository.GetByAccountAsync(userId, cloudAccountUid);
         Assert.NotNull(session);
@@ -141,10 +153,13 @@ public sealed class CloudDriveApiClientRequestTests
         Assert.Single(notifier.Notifications);
     }
 
+    /// <summary>
+    /// 验证离线签名请求会附加离线查询参数与签名表单。
+    /// </summary>
     [Fact]
     public async Task SendOfflineApiRequestAsync_WhenSignedRequest_AddsLixianQueryAndSignatureBodyAsync()
     {
-        // 准备
+        // Arrange（准备）
         Guid userId = Guid.NewGuid();
         const string cloudAccountUid = "115001";
         var handler = new CaptureHttpMessageHandler(
@@ -170,22 +185,22 @@ public sealed class CloudDriveApiClientRequestTests
             },
         };
 
-        // 执行
+        // Act（执行）
         TestResponse result = await client.SendOfflineApiRequestAsync<TestResponse>(
             userId,
             cloudAccountUid,
             HttpMethod.Post,
-            "task_lists",
+            "future_write",
             context,
             CancellationToken.None);
 
-        // 断言
+        // Assert（断言）
         Assert.Equal("offline", result.Name);
         Assert.Equal(CloudDriveHttpClientNames.Offline, handler.ClientNames.Single());
         Assert.Equal("page=1&stat=0", signatureStrategy.LastRequestBody);
 
         HttpRequestMessage request = handler.Requests.Single();
-        Assert.Equal("https://115.com/web/lixian/?ct=lixian&ac=task_lists", request.RequestUri!.ToString());
+        Assert.Equal("https://clouddownload.115.com/web/?ac=future_write", request.RequestUri!.ToString());
         Assert.True(request.Headers.TryGetValues("Cookie", out IEnumerable<string>? cookieValues));
         Assert.Equal("UID=uid; CID=cid; USSID=ussid", cookieValues.Single());
 
@@ -197,10 +212,13 @@ public sealed class CloudDriveApiClientRequestTests
         Assert.Contains("uid=115-uid", body);
     }
 
+    /// <summary>
+    /// 验证离线签名不可用时抛出配置异常。
+    /// </summary>
     [Fact]
     public async Task SendOfflineApiRequestAsync_WhenSignatureUnavailable_ThrowsConfigurationExceptionAsync()
     {
-        // 准备
+        // Arrange（准备）
         Guid userId = Guid.NewGuid();
         const string cloudAccountUid = "115001";
         var handler = new CaptureHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK));
@@ -211,25 +229,28 @@ public sealed class CloudDriveApiClientRequestTests
             cloudAccountUid,
             cookieSignatureStrategy: new CaptureCookieSignatureStrategy(default));
 
-        // 执行
+        // Act（执行）
         CloudDriveConfigurationException exception = await Assert.ThrowsAsync<CloudDriveConfigurationException>(
             () => client.SendOfflineApiRequestAsync<TestResponse>(
                 userId,
                 cloudAccountUid,
                 HttpMethod.Post,
-                "task_lists",
+                "future_write",
                 new CloudDriveApiContext(),
                 CancellationToken.None));
 
-        // 断言
+        // Assert（断言）
         Assert.Equal("offline_signature_not_available", exception.ErrorCode);
         Assert.Empty(handler.Requests);
     }
 
+    /// <summary>
+    /// 验证上传初始化表单请求使用上传客户端并附加 Cookie。
+    /// </summary>
     [Fact]
     public async Task SendUploadInitRequestAsync_WhenFormRequest_UsesUploadClientAndCookieAsync()
     {
-        // 准备
+        // Arrange（准备）
         Guid userId = Guid.NewGuid();
         const string cloudAccountUid = "115001";
         var handler = new CaptureHttpMessageHandler(
@@ -251,14 +272,14 @@ public sealed class CloudDriveApiClientRequestTests
             },
         };
 
-        // 执行
+        // Act（执行）
         TestResponse result = await client.SendUploadInitRequestAsync<TestResponse>(
             userId,
             cloudAccountUid,
             context,
             CancellationToken.None);
 
-        // 断言
+        // Assert（断言）
         Assert.Equal("upload-init", result.Name);
         Assert.Equal(CloudDriveHttpClientNames.Upload, handler.ClientNames.Single());
 
@@ -272,10 +293,13 @@ public sealed class CloudDriveApiClientRequestTests
         Assert.Contains("target=U_1_0", body);
     }
 
+    /// <summary>
+    /// 验证 OSS 直传不注入 Cookie 且发送 multipart 表单。
+    /// </summary>
     [Fact]
     public async Task UploadFileAsync_WhenOssUpload_DoesNotInjectCookieAndSendsMultipartAsync()
     {
-        // 准备
+        // Arrange（准备）
         Guid userId = Guid.NewGuid();
         const string cloudAccountUid = "115001";
         var handler = new CaptureHttpMessageHandler(
@@ -295,7 +319,7 @@ public sealed class CloudDriveApiClientRequestTests
             ["callback"] = "callback",
         };
 
-        // 执行
+        // Act（执行）
         TestResponse result = await client.UploadFileAsync<TestResponse>(
             userId,
             cloudAccountUid,
@@ -305,7 +329,7 @@ public sealed class CloudDriveApiClientRequestTests
             formFields,
             CancellationToken.None);
 
-        // 断言
+        // Assert（断言）
         Assert.Equal("uploaded", result.Name);
         Assert.Equal(CloudDriveHttpClientNames.UploadDirect, handler.ClientNames.Single());
 
@@ -323,10 +347,13 @@ public sealed class CloudDriveApiClientRequestTests
         Assert.Contains("demo", body);
     }
 
+    /// <summary>
+    /// 验证上传回调业务失败时抛出上传异常。
+    /// </summary>
     [Fact]
     public async Task UploadFileAsync_WhenCallbackBusinessFailure_ThrowsUploadExceptionAsync()
     {
-        // 准备
+        // Arrange（准备）
         Guid userId = Guid.NewGuid();
         const string cloudAccountUid = "115001";
         var handler = new CaptureHttpMessageHandler(
@@ -345,7 +372,7 @@ public sealed class CloudDriveApiClientRequestTests
 
         await using var fileStream = new MemoryStream(Encoding.UTF8.GetBytes("demo"));
 
-        // 执行
+        // Act（执行）
         CloudDriveUploadException exception = await Assert.ThrowsAsync<CloudDriveUploadException>(
             () => client.UploadFileAsync<TestResponse>(
                 userId,
@@ -355,14 +382,17 @@ public sealed class CloudDriveApiClientRequestTests
                 "demo.txt",
                 cancellationToken: CancellationToken.None));
 
-        // 断言
+        // Assert（断言）
         Assert.Equal("cloud_drive_upload_failed", exception.ErrorCode);
     }
 
+    /// <summary>
+    /// 验证未知业务错误响应结构会抛出未知错误结构异常。
+    /// </summary>
     [Fact]
     public async Task SendWebApiRequestAsync_WhenUnknownBusinessErrorShape_ThrowsUnknownErrorShapeAsync()
     {
-        // 准备
+        // Arrange（准备）
         Guid userId = Guid.NewGuid();
         const string cloudAccountUid = "115001";
         var handler = new CaptureHttpMessageHandler(
@@ -372,7 +402,7 @@ public sealed class CloudDriveApiClientRequestTests
             });
         CloudDriveApiClient client = await CreateClientAsync(handler, new CountingRateLimiter(), userId, cloudAccountUid);
 
-        // 执行
+        // Act（执行）
         CloudDriveApiException exception = await Assert.ThrowsAsync<CloudDriveApiException>(
             () => client.SendWebApiRequestAsync<TestResponse>(
                 userId,
@@ -382,14 +412,17 @@ public sealed class CloudDriveApiClientRequestTests
                 new CloudDriveApiContext(),
                 CancellationToken.None));
 
-        // 断言
+        // Assert（断言）
         Assert.Equal("unknown_error_shape", exception.ErrorCode);
     }
 
+    /// <summary>
+    /// 验证业务响应提示登录失效时会标记 Cookie 会话失效。
+    /// </summary>
     [Fact]
     public async Task SendWebApiRequestAsync_WhenBusinessLoginRequired_MarksCookieInvalidatedAsync()
     {
-        // 准备
+        // Arrange（准备）
         Guid userId = Guid.NewGuid();
         const string cloudAccountUid = "115001";
         var handler = new CaptureHttpMessageHandler(
@@ -413,7 +446,7 @@ public sealed class CloudDriveApiClientRequestTests
             notifier,
             errorAdapter);
 
-        // 执行
+        // Act（执行）
         await Assert.ThrowsAsync<CloudDriveCookieInvalidatedException>(
             () => client.SendWebApiRequestAsync<TestResponse>(
                 userId,
@@ -423,7 +456,7 @@ public sealed class CloudDriveApiClientRequestTests
                 new CloudDriveApiContext(),
                 CancellationToken.None));
 
-        // 断言
+        // Assert（断言）
         CookieSession? session = await repository.GetByAccountAsync(userId, cloudAccountUid);
         Assert.NotNull(session);
         Assert.Equal(CookieSessionStatus.Invalidated, session.Status);
@@ -451,7 +484,7 @@ public sealed class CloudDriveApiClientRequestTests
             MyApiBaseUrl = "https://my.115.com/",
             VipApiBaseUrl = "https://vip.115.com/",
             PayApiBaseUrl = "https://pay.115.com/",
-            OfflineApiBaseUrl = "https://115.com/web/lixian/",
+            OfflineApiBaseUrl = "https://clouddownload.115.com/web/",
             CloudDriveFeatureEnabled = true,
         });
 
@@ -535,7 +568,7 @@ public sealed class CloudDriveApiClientRequestTests
                     CloudDriveHttpClientNames.My => new Uri("https://my.115.com/"),
                     CloudDriveHttpClientNames.Vip => new Uri("https://vip.115.com/"),
                     CloudDriveHttpClientNames.Pay => new Uri("https://pay.115.com/"),
-                    CloudDriveHttpClientNames.Offline => new Uri("https://115.com/web/lixian/"),
+                    CloudDriveHttpClientNames.Offline => new Uri("https://clouddownload.115.com/web/"),
                     CloudDriveHttpClientNames.Upload => new Uri("https://uplb.115.com/"),
                     _ => new Uri("https://webapi.115.com/"),
                 },
@@ -572,7 +605,7 @@ public sealed class CloudDriveApiClientRequestTests
 
     private sealed class StaticErrorFieldAdapter(CloudDriveApiError? error) : IErrorFieldAdapter
     {
-        public CloudDriveApiError? TryParse(Uri requestUri, JsonDocument responseJson) => error;
+        public CloudDriveApiError? TryParse(HttpMethod method, Uri requestUri, JsonDocument responseJson) => error;
     }
 
     private sealed class NoopCookieSignatureStrategy : ICookieSignatureStrategy

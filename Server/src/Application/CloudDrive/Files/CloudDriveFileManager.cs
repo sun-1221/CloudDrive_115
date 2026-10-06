@@ -10,14 +10,13 @@ namespace Application.CloudDrive.Files;
 /// （缓存优先读取、写操作后缓存失效等）。
 /// </summary>
 /// <remarks>
-/// 普通类 + 构造函数注入。调用 <see cref="ICloudDriveOpenApiGateway"/> 时仅需传递
+/// 普通类 + 构造函数注入。调用 <see cref="ICloudDriveWebApiGateway"/> 时仅需传递
 /// <c>UserId + CloudAccountUid</c>；网关内部从 <c>CookieSessionManager</c> 获取当前 Cookie 并注入请求头。
 /// Cookie 方案不携带 <c>AppId</c> 维度。
 /// </remarks>
 public sealed class CloudDriveFileManager(
     ICloudDriveMetadataCache metadataCache,
-    ICloudDriveOpenApiGateway openApiGateway,
-    ICloudDriveRateLimiter rateLimiter,
+    ICloudDriveWebApiGateway openApiGateway,
     IOptions<CloudDriveAppConfig> configOptions,
     ILogger<CloudDriveFileManager> logger)
 {
@@ -39,13 +38,15 @@ public sealed class CloudDriveFileManager(
         CancellationToken cancellationToken = default)
     {
         CloudDriveAppConfig config = configOptions.Value;
-        string cacheKey = BuildDirectoryCacheKey(userId, cloudAccountUid, directoryId, "list");
+        string cacheKey = BuildDirectoryCacheKey(
+            userId,
+            cloudAccountUid,
+            directoryId,
+            "list",
+            context.QueryParameters);
 
         T? result = await metadataCache.GetOrSetAsync(cacheKey, async token =>
         {
-            using IDisposable permit = await rateLimiter.AcquireAsync(
-                userId, cloudAccountUid, context.Category, token);
-
             return await openApiGateway.SendWebApiRequestAsync<T>(
                 userId, cloudAccountUid, HttpMethod.Get, "files", context, token);
         }, TimeSpan.FromSeconds(config.CacheTtlSeconds), cancellationToken);
@@ -105,12 +106,16 @@ public sealed class CloudDriveFileManager(
             {
                 await metadataCache.InvalidateDirectoryAsync(userId, cloudAccountUid, directoryId, cancellationToken);
             }
+#pragma warning disable CA1031 // 缓存失效不应中断主操作，需兜底捕获所有异常
             catch (Exception ex)
+#pragma warning restore CA1031
             {
                 logger.LogWarning(
                     ex,
                     "缓存失效失败 UserId={UserId}, CloudAccountUid={CloudAccountUid}, DirectoryId={DirectoryId}",
-                    userId, cloudAccountUid, directoryId);
+                    userId,
+                    "[redacted]",
+                    "[redacted]");
             }
         }
 
@@ -118,8 +123,22 @@ public sealed class CloudDriveFileManager(
     }
 
     private static string BuildDirectoryCacheKey(
-        Guid userId, string cloudAccountUid, string directoryId, string suffix) =>
-        $"cd:{userId}:{cloudAccountUid}:dir:{directoryId}:{suffix}";
+        Guid userId,
+        string cloudAccountUid,
+        string directoryId,
+        string suffix,
+        IEnumerable<KeyValuePair<string, string>>? queryParameters = null)
+    {
+        string queryKey = queryParameters is null
+            ? string.Empty
+            : string.Join(
+                "&",
+                queryParameters
+                    .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                    .Select(pair => $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}"));
+
+        return $"cd:{userId}:{cloudAccountUid}:dir:{directoryId}:{suffix}:{queryKey}";
+    }
 
     private static string BuildFileCacheKey(
         Guid userId, string cloudAccountUid, string fileId, string suffix) =>

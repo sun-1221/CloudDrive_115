@@ -1,292 +1,287 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Text.Json;
 
 using Application.Abstractions.CloudDrive;
 
-using Infrastructure.Http.Json;
-
 namespace Infrastructure.Http;
 
 /// <summary>
-/// 115 网页端错误字段适配器。按 hostname + path 匹配不同接口的错误字段变体。
+/// 115 网页端错误字段适配器。按 method + host + 精确 path + observed query 匹配规则。
 /// </summary>
 internal sealed class ErrorFieldAdapter : IErrorFieldAdapter
 {
-    /// <summary>
-    /// 获取按接口路径注册的 115 错误字段描述符。
-    /// </summary>
     private static readonly IReadOnlyDictionary<string, ErrorFieldDescriptor> Descriptors =
         new ReadOnlyDictionary<string, ErrorFieldDescriptor>(CreateDescriptors());
 
-    /// <summary>
-    /// 尝试从 115 API 响应中解析业务错误。
-    /// </summary>
-    /// <param name="requestUri">当前请求 URI。</param>
-    /// <param name="responseJson">115 API 响应 JSON。</param>
-    /// <returns>解析到业务错误时返回错误信息；业务成功时返回 <see langword="null"/>。</returns>
-    public CloudDriveApiError? TryParse(Uri requestUri, JsonDocument responseJson)
+    /// <inheritdoc />
+    public CloudDriveApiError? TryParse(HttpMethod method, Uri requestUri, JsonDocument responseJson)
     {
+        ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(requestUri);
         ArgumentNullException.ThrowIfNull(responseJson);
 
-        ErrorFieldDescriptor descriptor = ResolveDescriptor(requestUri);
-        CloudDriveApiError? error = TryParseWithDescriptor(requestUri, responseJson, descriptor);
-        if (error is not null)
+        bool stateKnown = TryReadState(responseJson, out bool state);
+        if (stateKnown && state)
         {
-            return error;
+            return null;
         }
 
-        // state=false 但没有默认错误字段时不能吞掉，否则调用方会把未知失败当成成功响应。
-        if (IsStateFailure(responseJson) && !HasAnyDefaultErrorField(responseJson))
+        Resolution resolution = ResolveDescriptor(method, requestUri);
+        if (!resolution.Matched || resolution.Ambiguous)
         {
-            return new CloudDriveApiError(null, null, "unknown_error_shape", requestUri);
+            return (stateKnown && !state) || (!stateKnown && HasAnyErrorLikeField(responseJson))
+                ? UnknownError(requestUri)
+                : null;
         }
 
-        return null;
+        ErrorFieldDescriptor descriptor = resolution.Descriptor!;
+        if (!stateKnown)
+        {
+            // 所有已采集 envelope 的 state 均为 boolean；类型缺失或变化必须 fail closed。
+            return HasRegisteredErrorField(responseJson, descriptor) ? UnknownError(requestUri) : null;
+        }
+
+        return state ? null : TryParseFailure(requestUri, responseJson, descriptor);
     }
 
     /// <summary>
-    /// 获取已注册的错误字段描述符。
+    /// 获取已注册的错误描述符，供契约测试核对证据闭集。
     /// </summary>
     internal static IReadOnlyDictionary<string, ErrorFieldDescriptor> RegisteredDescriptors => Descriptors;
 
-    /// <summary>
-    /// 创建 115 API 错误字段描述符注册表。
-    /// </summary>
     private static Dictionary<string, ErrorFieldDescriptor> CreateDescriptors()
     {
-        var descriptors = new Dictionary<string, ErrorFieldDescriptor>(StringComparer.OrdinalIgnoreCase)
+        var descriptors = new Dictionary<string, ErrorFieldDescriptor>(StringComparer.Ordinal)
         {
-            ["webapi.115.com/files/search"] = new("/files/search", "errCode", ErrorCodeType.Number, "error", null, "errMsg"),
-            ["webapi.115.com/movies/subtitle"] = new("/movies/subtitle", "errNo", ErrorCodeType.Number, "error"),
-            ["webapi.115.com/user/vip_limit"] = new("/user/vip_limit", "code", ErrorCodeType.String, "message", null, "msg"),
-            ["webapi.115.com/user/index_info"] = new("/user/index_info", "code", ErrorCodeType.String, "message", null, "msg"),
-            ["webapi.115.com/files/index_info"] = new("/files/index_info", "code", ErrorCodeType.String, "message", null, "msg"),
-            ["webapi.115.com/user/fingerprint"] = new("/user/fingerprint", "code", ErrorCodeType.String, "message", null, "msg"),
-            ["pay.115.com/"] = new("/", "code", ErrorCodeType.Number, "msg", null, "message"),
-            ["webapi.115.com/share/send"] = new("/share/send", "errNo", ErrorCodeType.Number, "error", "errno"),
-            ["webapi.115.com/share/receive"] = new("/share/receive", "errNo", ErrorCodeType.Number, "error", "errno"),
-            ["webapi.115.com/share/slist"] = new("/share/slist", "errno", ErrorCodeType.Number, "error", "errNo"),
-            ["115.com/web/lixian/"] = new("/web/lixian/", "errcode", ErrorCodeType.Number, "error_msg", "errno", "error"),
-            ["vip.115.com/"] = new("/", "code", ErrorCodeType.Number, "message", null, "msg"),
-            ["webapi.115.com/rb"] = new("/rb", "errNo", ErrorCodeType.Number, "error", "errno"),
-            ["webapi.115.com/files"] = new("/files", "errNo", ErrorCodeType.Number, "error", "errno"),
-            ["webapi.115.com/files/video"] = new("/files/video", "errno", ErrorCodeType.Number, "error", "errNo"),
-            ["webapi.115.com/files/video_push"] = new("/files/video_push", "errNo", ErrorCodeType.Number, "error", "errno"),
-            ["webapi.115.com/movies/transcode"] = new("/movies/transcode", "errNo", ErrorCodeType.Number, "error", "errno"),
-            ["webapi.115.com/files/history"] = new("/files/history", "code", ErrorCodeType.String, "error", "errno", "message"),
-            ["my.115.com/proapi/"] = new("/proapi/", "code", ErrorCodeType.Number, "message"),
-            ["act.115.com/"] = new("/", "code", ErrorCodeType.Number, "message"),
+            [Key("GET", "webapi.115.com", "/files")] = Descriptor("GET", "webapi.115.com", "/files", "errNo", ErrorCodeType.Number, "error"),
+            [Key("POST", "webapi.115.com", "/files/add")] = Descriptor("POST", "webapi.115.com", "/files/add", "errno", ErrorCodeType.String, "error"),
+            [Key("POST", "webapi.115.com", "/files/batch_rename")] = Descriptor("POST", "webapi.115.com", "/files/batch_rename", "errno", ErrorCodeType.Number, "error"),
+            [Key("POST", "webapi.115.com", "/files/copy")] = Descriptor("POST", "webapi.115.com", "/files/copy", "errno", ErrorCodeType.String, "error"),
+            [Key("POST", "webapi.115.com", "/files/star")] = Descriptor("POST", "webapi.115.com", "/files/star", null, null, "error"),
+            [Key("GET", "webapi.115.com", "/files/download")] = Descriptor("GET", "webapi.115.com", "/files/download", "msg_code", ErrorCodeType.Number, "msg"),
+            [Key("GET", "webapi.115.com", "/files/video")] = Descriptor("GET", "webapi.115.com", "/files/video", "errno", ErrorCodeType.Number, "error"),
+            [Key("GET", "webapi.115.com", "/movies/subtitle")] = Descriptor("GET", "webapi.115.com", "/movies/subtitle", "errNo", ErrorCodeType.Number, "error"),
+            [Key("GET", "webapi.115.com", "/rb")] = Descriptor("GET", "webapi.115.com", "/rb", null, null, "error"),
+            [Key("GET", "webapi.115.com", "/share/slist")] = Descriptor("GET", "webapi.115.com", "/share/slist", "errno", ErrorCodeType.Number, "error"),
+            [Key("GET", "webapi.115.com", "/share/send")] = DescriptorWithFallback("GET", "webapi.115.com", "/share/send", "errNo", ErrorCodeType.Number, "error", "errno"),
+            [Key("GET", "webapi.115.com", "/share/receive")] = DescriptorWithFallback("GET", "webapi.115.com", "/share/receive", "errNo", ErrorCodeType.Number, "error", "errno"),
+            [Key("GET", "webapi.115.com", "/user/vip_limit", ("feature", "2"))] = Descriptor("GET", "webapi.115.com", "/user/vip_limit", "code", ErrorCodeType.String, "message", ("feature", "2")),
+            [Key("GET", "webapi.115.com", "/files/index_info", ("count_space_nums", "1"))] = Descriptor("GET", "webapi.115.com", "/files/index_info", "code", ErrorCodeType.Number, "error", ("count_space_nums", "1")),
+            [Key("GET", "webapi.115.com", "/user/setting", ("format", "json"))] = Descriptor("GET", "webapi.115.com", "/user/setting", "errno", ErrorCodeType.Number, "error", ("format", "json")),
+            [Key("GET", "pay.115.com", "/", ("ct", "balance"), ("ac", "getBalance"))] = Descriptor("GET", "pay.115.com", "/", "code", ErrorCodeType.Number, "msg", ("ct", "balance"), ("ac", "getBalance")),
+            [Key("GET", "vip.115.com", "/", ("ct", "order"), ("ac", "get_yun_card"))] = Descriptor("GET", "vip.115.com", "/", null, null, null, ("ct", "order"), ("ac", "get_yun_card")),
+            [Key("GET", "vip.115.com", "/", ("ct", "product"), ("ac", "product_list"))] = Descriptor("GET", "vip.115.com", "/", "code", ErrorCodeType.Number, "msg", ("ct", "product"), ("ac", "product_list")),
+            [Key("GET", "vip.115.com", "/", ("ct", "act_coupon"), ("ac", "get_coupon_yhq_list"))] = Descriptor("GET", "vip.115.com", "/", "code", ErrorCodeType.Number, null, ("ct", "act_coupon"), ("ac", "get_coupon_yhq_list")),
+            [Key("POST", "clouddownload.115.com", "/web/", ("ac", "task_lists"))] = DescriptorWithMessageFallback("POST", "clouddownload.115.com", "/web/", "errcode", ErrorCodeType.Number, "errtype", "error_msg", ("ac", "task_lists")),
+            [Key("POST", "clouddownload.115.com", "/web/", ("ac", "task_count"))] = DescriptorWithMessageFallback("POST", "clouddownload.115.com", "/web/", "errcode", ErrorCodeType.Number, "errtype", "error_msg", ("ac", "task_count")),
+            [Key("POST", "clouddownload.115.com", "/web/", ("ac", "get_quota_package_info"))] = DescriptorWithMessageFallback("POST", "clouddownload.115.com", "/web/", "errcode", ErrorCodeType.Number, "errtype", "error_msg", ("ac", "get_quota_package_info")),
+            [Key("POST", "clouddownload.115.com", "/web/", ("ac", "add_task_urls"))] = DescriptorWithFallback("POST", "clouddownload.115.com", "/web/", "errcode", ErrorCodeType.Number, "error_msg", "errno", ("ac", "add_task_urls")),
+            [Key("GET", "webapi.115.com", "/files/history")] = Descriptor("GET", "webapi.115.com", "/files/history", null, null, "error"),
         };
 
         return descriptors;
     }
 
-    /// <summary>
-    /// 根据请求 URI 解析最匹配的错误字段描述符。
-    /// </summary>
-    private static ErrorFieldDescriptor ResolveDescriptor(Uri requestUri)
+    private static ErrorFieldDescriptor Descriptor(
+        string method,
+        string host,
+        string path,
+        string? codeFieldName,
+        ErrorCodeType? codeType,
+        string? messageFieldName,
+        params (string Name, string Value)[] query)
     {
+        IReadOnlyDictionary<string, string>? requiredQuery = query.Length == 0
+            ? null
+            : query.ToDictionary(item => item.Name, item => item.Value, StringComparer.OrdinalIgnoreCase);
+
+        return new ErrorFieldDescriptor(method, host, path, codeFieldName, codeType, messageFieldName, requiredQuery);
+    }
+
+    private static ErrorFieldDescriptor DescriptorWithFallback(
+        string method,
+        string host,
+        string path,
+        string? codeFieldName,
+        ErrorCodeType? codeType,
+        string? messageFieldName,
+        string fallbackCodeFieldName,
+        params (string Name, string Value)[] query)
+    {
+        ErrorFieldDescriptor descriptor = Descriptor(method, host, path, codeFieldName, codeType, messageFieldName, query);
+        return descriptor with { FallbackCodeFieldName = fallbackCodeFieldName };
+    }
+
+    private static ErrorFieldDescriptor DescriptorWithMessageFallback(
+        string method,
+        string host,
+        string path,
+        string? codeFieldName,
+        ErrorCodeType? codeType,
+        string? messageFieldName,
+        string fallbackMessageFieldName,
+        params (string Name, string Value)[] query)
+    {
+        ErrorFieldDescriptor descriptor = Descriptor(method, host, path, codeFieldName, codeType, messageFieldName, query);
+        return descriptor with { FallbackMessageFieldName = fallbackMessageFieldName };
+    }
+
+    private static string Key(string method, string host, string path, params (string Name, string Value)[] query) =>
+        query.Length == 0
+            ? $"{method} {host}{path}"
+            : $"{method} {host}{path}?{string.Join('&', query.Select(item => $"{item.Name}={item.Value}"))}";
+
+    private static Resolution ResolveDescriptor(HttpMethod method, Uri requestUri)
+    {
+        string methodName = method.Method.ToUpperInvariant();
         string host = requestUri.Host.ToLowerInvariant();
-        string path = requestUri.AbsolutePath;
+        IReadOnlyDictionary<string, string> queryValues = ParseQuery(requestUri.Query);
 
-        string exactKey = TrimTrailingSlash($"{host}{path}");
+        List<ErrorFieldDescriptor> candidates = Descriptors.Values
+            .Where(descriptor => descriptor.Method.Equals(methodName, StringComparison.Ordinal)
+                && descriptor.Host.Equals(host, StringComparison.OrdinalIgnoreCase)
+                && descriptor.UrlPattern.Equals(requestUri.AbsolutePath, StringComparison.Ordinal)
+                && QueryMatches(queryValues, descriptor.RequiredQueryParameters))
+            .OrderByDescending(descriptor => descriptor.UrlPattern.Length)
+            .ThenByDescending(descriptor => descriptor.RequiredQueryParameters?.Count ?? 0)
+            .ToList();
 
-        // 精确匹配优先于目录前缀匹配，避免更具体的已采集路径被较宽泛的 /files 规则提前截获。
-        foreach (KeyValuePair<string, ErrorFieldDescriptor> descriptor in Descriptors)
+        if (candidates.Count == 0)
         {
-            string key = TrimTrailingSlash(descriptor.Key);
-            if (exactKey.Equals(key, StringComparison.OrdinalIgnoreCase))
-            {
-                return descriptor.Value;
-            }
+            return new Resolution(null, false, false);
         }
 
-        string hostPath = $"{host}{path}";
-
-        // 以斜杠结尾的注册项表示一个接口族，用于覆盖 my/proapi 与 lixian 这类子路径较多的接口。
-        foreach (KeyValuePair<string, ErrorFieldDescriptor> descriptor in Descriptors)
-        {
-            if (descriptor.Key.EndsWith("/", StringComparison.Ordinal)
-                && hostPath.StartsWith(descriptor.Key, StringComparison.OrdinalIgnoreCase))
-            {
-                return descriptor.Value;
-            }
-        }
-
-        // 未登记接口仍使用默认字段兜底，让新增接口先具备基本错误识别能力。
-        return new ErrorFieldDescriptor(
-            "*",
-            "code",
-            ErrorCodeType.Number,
-            "message",
-            "errno",
-            "error");
+        int specificity = candidates[0].RequiredQueryParameters?.Count ?? 0;
+        bool ambiguous = candidates.Count(item => item.UrlPattern.Length == candidates[0].UrlPattern.Length
+            && (item.RequiredQueryParameters?.Count ?? 0) == specificity) > 1;
+        return new Resolution(candidates[0], true, ambiguous);
     }
 
-    /// <summary>
-    /// 移除路径末尾的单个斜杠，便于进行路径等价匹配。
-    /// </summary>
-    private static string TrimTrailingSlash(string value)
+    private static bool QueryMatches(IReadOnlyDictionary<string, string> query, IReadOnlyDictionary<string, string>? required)
     {
-        return value.EndsWith("/", StringComparison.Ordinal)
-            ? value.Substring(0, value.Length - 1)
-            : value;
-    }
-
-    /// <summary>
-    /// 使用指定错误字段描述符解析 115 业务错误。
-    /// </summary>
-    private static CloudDriveApiError? TryParseWithDescriptor(
-        Uri requestUri,
-        JsonDocument responseJson,
-        ErrorFieldDescriptor descriptor)
-    {
-        string? codeText = ReadString(responseJson, descriptor.CodeFieldName)
-            ?? ReadString(responseJson, descriptor.FallbackCodeFieldName);
-        string? message = ReadString(responseJson, descriptor.MessageFieldName)
-            ?? ReadString(responseJson, descriptor.FallbackMessageFieldName)
-            ?? ReadString(responseJson, "Message")
-            ?? ReadString(responseJson, "err")
-            ?? ReadString(responseJson, "msg")
-            ?? ReadString(responseJson, "error");
-
-        bool hasStateFailure = IsStateFailure(responseJson);
-
-        // 没有 state=false 且错误码是成功值时视为正常响应，避免 code=0 被误报为业务错误。
-        if (!hasStateFailure && IsSuccessCode(codeText))
-        {
-            return null;
-        }
-
-        // 某些成功响应没有 code/message 字段，此时不能仅因为描述符存在就构造错误。
-        if (!hasStateFailure && string.IsNullOrWhiteSpace(codeText) && string.IsNullOrWhiteSpace(message))
-        {
-            return null;
-        }
-
-        string rawField = ResolveRawField(responseJson, descriptor);
-        int? numericCode = TryReadNumericCode(codeText);
-        return new CloudDriveApiError(numericCode, message ?? codeText, rawField, requestUri);
-    }
-
-    /// <summary>
-    /// 解析当前错误命中的原始字段名称。
-    /// </summary>
-    private static string ResolveRawField(JsonDocument responseJson, ErrorFieldDescriptor descriptor)
-    {
-        if (HasProperty(responseJson, descriptor.CodeFieldName))
-        {
-            return descriptor.CodeFieldName;
-        }
-
-        if (!string.IsNullOrWhiteSpace(descriptor.FallbackCodeFieldName)
-            && HasProperty(responseJson, descriptor.FallbackCodeFieldName))
-        {
-            return descriptor.FallbackCodeFieldName;
-        }
-
-        if (HasProperty(responseJson, descriptor.MessageFieldName))
-        {
-            return descriptor.MessageFieldName;
-        }
-
-        if (!string.IsNullOrWhiteSpace(descriptor.FallbackMessageFieldName)
-            && HasProperty(responseJson, descriptor.FallbackMessageFieldName))
-        {
-            return descriptor.FallbackMessageFieldName;
-        }
-
-        // 保留特殊字段名，便于日志和测试追踪是哪类未知结构触发了兜底逻辑。
-        return "unknown_error_shape";
-    }
-
-    /// <summary>
-    /// 判断 state 字段是否表示业务失败。
-    /// </summary>
-    private static bool IsStateFailure(JsonDocument responseJson)
-    {
-        if (!responseJson.RootElement.TryGetProperty("state", out JsonElement stateElement))
-        {
-            return false;
-        }
-
-        bool? state = JsonElementReaders.ReadBoolean(stateElement);
-        return state == false;
-    }
-
-    /// <summary>
-    /// 判断响应是否包含任何默认错误字段。
-    /// </summary>
-    private static bool HasAnyDefaultErrorField(JsonDocument responseJson)
-    {
-        return HasProperty(responseJson, "code")
-            || HasProperty(responseJson, "errno")
-            || HasProperty(responseJson, "errNo")
-            || HasProperty(responseJson, "errCode")
-            || HasProperty(responseJson, "errcode")
-            || HasProperty(responseJson, "message")
-            || HasProperty(responseJson, "Message")
-            || HasProperty(responseJson, "error")
-            || HasProperty(responseJson, "err")
-            || HasProperty(responseJson, "msg")
-            || HasProperty(responseJson, "error_msg");
-    }
-
-    /// <summary>
-    /// 判断响应 JSON 是否包含指定属性。
-    /// </summary>
-    private static bool HasProperty(JsonDocument responseJson, string? propertyName)
-    {
-        return !string.IsNullOrWhiteSpace(propertyName)
-            && responseJson.RootElement.TryGetProperty(propertyName, out _);
-    }
-
-    /// <summary>
-    /// 从响应 JSON 的指定属性中读取字符串值。
-    /// </summary>
-    private static string? ReadString(JsonDocument responseJson, string? propertyName)
-    {
-        if (string.IsNullOrWhiteSpace(propertyName)
-            || !responseJson.RootElement.TryGetProperty(propertyName, out JsonElement property))
-        {
-            return null;
-        }
-
-        return JsonElementReaders.ReadString(property);
-    }
-
-    /// <summary>
-    /// 判断错误码文本是否表示业务成功。
-    /// </summary>
-    private static bool IsSuccessCode(string? codeText)
-    {
-        if (string.IsNullOrWhiteSpace(codeText))
+        if (required is null)
         {
             return true;
         }
 
-        return codeText.Equals("0", StringComparison.OrdinalIgnoreCase)
-            || codeText.Equals("success", StringComparison.OrdinalIgnoreCase)
-            || codeText.Equals("true", StringComparison.OrdinalIgnoreCase);
+        return required.All(item => query.TryGetValue(item.Key, out string? value)
+            && value.Equals(item.Value, StringComparison.Ordinal));
     }
 
-    /// <summary>
-    /// 尝试将错误码文本读取为数字错误码。
-    /// </summary>
-    private static int? TryReadNumericCode(string? codeText)
+    private static IReadOnlyDictionary<string, string> ParseQuery(string queryString)
     {
-        if (string.IsNullOrWhiteSpace(codeText))
+        var query = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        string rawQuery = queryString.TrimStart('?');
+        foreach (string part in rawQuery.Split('&', StringSplitOptions.RemoveEmptyEntries))
         {
-            return null;
+            string[] pair = part.Split('=', 2);
+            string name = Uri.UnescapeDataString(pair[0].Replace('+', ' '));
+            string value = pair.Length == 1 ? string.Empty : Uri.UnescapeDataString(pair[1].Replace('+', ' '));
+            query[name] = value;
         }
 
-        return int.TryParse(
-            codeText,
-            System.Globalization.NumberStyles.Integer,
-            System.Globalization.CultureInfo.InvariantCulture,
-            out int code)
-            ? code
-            : null;
+        return query;
     }
+
+    private static CloudDriveApiError? TryParseFailure(Uri requestUri, JsonDocument responseJson, ErrorFieldDescriptor descriptor)
+    {
+        (string? Value, string? Field) code = ReadCode(responseJson, descriptor.CodeFieldName, descriptor.CodeType);
+        if (code.Value is null)
+        {
+            code = ReadCode(responseJson, descriptor.FallbackCodeFieldName, descriptor.CodeType);
+        }
+
+        string? codeText = code.Value;
+        string? message = ReadMessage(responseJson, descriptor.MessageFieldName)
+            ?? ReadMessage(responseJson, descriptor.FallbackMessageFieldName);
+
+        if (codeText is null && message is null)
+        {
+            return UnknownError(requestUri);
+        }
+
+        string rawField = ResolveRawField(responseJson, descriptor, code.Field, message);
+        int? numericCode = int.TryParse(codeText, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed)
+            ? parsed
+            : null;
+        return new CloudDriveApiError(numericCode, message ?? codeText, rawField, requestUri);
+    }
+
+    private static (string? Value, string? Field) ReadCode(JsonDocument document, string? fieldName, ErrorCodeType? codeType)
+    {
+        if (string.IsNullOrWhiteSpace(fieldName)
+            || codeType is null
+            || !document.RootElement.TryGetProperty(fieldName, out JsonElement property))
+        {
+            return (null, null);
+        }
+
+        string? value = codeType == ErrorCodeType.Number && property.ValueKind == JsonValueKind.Number && property.TryGetInt32(out int number)
+            ? number.ToString(CultureInfo.InvariantCulture)
+            : codeType == ErrorCodeType.String && property.ValueKind == JsonValueKind.String
+                ? property.GetString()
+                : null;
+        return (value, value is null ? null : fieldName);
+    }
+
+    private static string? ReadMessage(JsonDocument document, string? fieldName)
+    {
+        return string.IsNullOrWhiteSpace(fieldName)
+            || !document.RootElement.TryGetProperty(fieldName, out JsonElement property)
+            || property.ValueKind != JsonValueKind.String
+            ? null
+            : property.GetString();
+    }
+
+    private static string ResolveRawField(JsonDocument document, ErrorFieldDescriptor descriptor, string? codeField, string? message)
+    {
+        if (!string.IsNullOrWhiteSpace(codeField))
+        {
+            return codeField;
+        }
+
+        if (message is not null && !string.IsNullOrWhiteSpace(descriptor.MessageFieldName)
+            && document.RootElement.TryGetProperty(descriptor.MessageFieldName, out _))
+        {
+            return descriptor.MessageFieldName;
+        }
+
+        if (message is not null && !string.IsNullOrWhiteSpace(descriptor.FallbackMessageFieldName))
+        {
+            return descriptor.FallbackMessageFieldName;
+        }
+
+        return "unknown_error_shape";
+    }
+
+    private static bool HasRegisteredErrorField(JsonDocument document, ErrorFieldDescriptor descriptor)
+    {
+        return (!string.IsNullOrWhiteSpace(descriptor.CodeFieldName) && document.RootElement.TryGetProperty(descriptor.CodeFieldName, out _))
+            || (!string.IsNullOrWhiteSpace(descriptor.MessageFieldName) && document.RootElement.TryGetProperty(descriptor.MessageFieldName, out _));
+    }
+
+    private static bool HasAnyErrorLikeField(JsonDocument document)
+    {
+        string[] fields = ["code", "errno", "errNo", "errCode", "errcode", "msg_code", "error", "error_msg", "message", "msg"];
+        return fields.Any(field => document.RootElement.TryGetProperty(field, out _));
+    }
+
+    private static bool TryReadState(JsonDocument document, out bool state)
+    {
+        if (document.RootElement.TryGetProperty("state", out JsonElement value)
+            && (value.ValueKind == JsonValueKind.True || value.ValueKind == JsonValueKind.False))
+        {
+            state = value.GetBoolean();
+            return true;
+        }
+
+        state = false;
+        return false;
+    }
+
+    private static CloudDriveApiError UnknownError(Uri requestUri) =>
+        new(null, null, "unknown_error_shape", requestUri);
+
+    private sealed record Resolution(ErrorFieldDescriptor? Descriptor, bool Matched, bool Ambiguous);
 }

@@ -17,74 +17,11 @@ internal sealed class SubmitTranscodeCommandHandler(
     IOptions<CloudDriveAppConfig> configOptions)
     : ICommandHandler<SubmitTranscodeCommand, CloudDriveVideoTranscodeDto>
 {
-    public async Task<Result<CloudDriveVideoTranscodeDto>> Handle(
+    public Task<Result<CloudDriveVideoTranscodeDto>> Handle(
         SubmitTranscodeCommand request,
         CancellationToken cancellationToken)
     {
-        CloudDriveHandlerGuard.EnsureEnabled(configOptions.Value);
-
-        Result<SubmitTranscodeInput> inputResult = await NormalizeInputAsync(
-            request.UserId,
-            request.Input,
-            cancellationToken);
-
-        if (inputResult.IsFailure)
-        {
-            return Result.Failure<CloudDriveVideoTranscodeDto>(inputResult.Error);
-        }
-
-        Guid jobId = await jobOrchestrator.EnqueueVideoTranscodeAsync(
-            request.UserId,
-            accountContextAccessor.CloudAccountUid,
-            inputResult.Value,
-            cancellationToken);
-
-        return Result.Success(new CloudDriveVideoTranscodeDto
-        {
-            FileId = inputResult.Value.FileId ?? inputResult.Value.PickCode ?? string.Empty,
-            Status = "Pending",
-            JobId = jobId,
-        });
-    }
-
-    private async Task<Result<SubmitTranscodeInput>> NormalizeInputAsync(
-        Guid userId,
-        SubmitTranscodeInput input,
-        CancellationToken cancellationToken)
-    {
-        if (!string.IsNullOrWhiteSpace(input.FileId))
-        {
-            string cloudAccountUid = accountContextAccessor.CloudAccountUid;
-            CloudDriveFileDetailDto? file = await fileManager.GetFileDetailAsync<CloudDriveFileDetailDto?>(
-                userId,
-                cloudAccountUid,
-                input.FileId,
-                CloudDriveFileHandlerSupport.CreateFileDetailContext(new GetFileInput
-                {
-                    FileId = input.FileId,
-                }),
-                cancellationToken);
-
-            if (file is null)
-            {
-                return Result.Failure<SubmitTranscodeInput>(CloudDriveFileHandlerSupport.FileNotFound(input.FileId));
-            }
-
-            if (!CloudDriveVideoSupport.IsVideo(file))
-            {
-                return Result.Failure<SubmitTranscodeInput>(CloudDriveVideoSupport.NotVideoFile);
-            }
-
-            if (string.IsNullOrWhiteSpace(file.PickCode))
-            {
-                return Result.Failure<SubmitTranscodeInput>(CloudDriveVideoSupport.PickCodeRequired);
-            }
-
-            input.PickCode = file.PickCode;
-        }
-
-        return string.IsNullOrWhiteSpace(input.PickCode)
-            ? Result.Failure<SubmitTranscodeInput>(CloudDriveVideoSupport.PickCodeRequired)
-            : Result.Success(input);
+        return Task.FromResult(Result.Failure<CloudDriveVideoTranscodeDto>(
+            CloudDriveFileHandlerSupport.ApiNotCollected("主动转码")));
     }
 }

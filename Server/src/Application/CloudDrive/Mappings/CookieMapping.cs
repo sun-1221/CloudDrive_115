@@ -1,4 +1,4 @@
-using Application.CloudDrive.Auth;
+﻿using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
 
 using Domain.Entities;
@@ -14,6 +14,7 @@ public static class CookieMapping
     /// <summary>
     /// 将 Cookie 会话聚合根映射为 DTO。
     /// </summary>
+    /// <returns>返回当前操作的处理结果。</returns>
     public static CloudDriveCookieSessionDto ToDto(this CookieSession session)
     {
         return new CloudDriveCookieSessionDto
@@ -29,6 +30,7 @@ public static class CookieMapping
     /// <summary>
     /// 将 Cookie 会话摘要映射为 DTO。
     /// </summary>
+    /// <returns>返回当前操作的处理结果。</returns>
     public static CloudDriveCookieSessionDto ToDto(this CookieSessionSummary summary)
     {
         return new CloudDriveCookieSessionDto
@@ -44,6 +46,7 @@ public static class CookieMapping
     /// <summary>
     /// 将 Cookie 会话摘要映射为账号摘要 DTO。
     /// </summary>
+    /// <returns>返回当前操作的处理结果。</returns>
     public static CloudDriveAccountSummaryDto ToDto(this CookieSessionSummary summary, bool includeOnlyAccountSummary)
     {
         return new CloudDriveAccountSummaryDto
@@ -59,6 +62,7 @@ public static class CookieMapping
     /// <summary>
     /// 将注入输入映射为 Cookie 三元组值对象。
     /// </summary>
+    /// <returns>返回当前操作的处理结果。</returns>
     public static CookieTriplet ToEntity(this UpsertCookieSessionInput input)
     {
         return new CookieTriplet(input.Uid, input.Cid, input.Ussid);

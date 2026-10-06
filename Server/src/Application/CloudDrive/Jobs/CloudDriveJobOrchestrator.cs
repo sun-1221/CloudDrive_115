@@ -1,10 +1,11 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 using Application.Abstractions.CloudDrive;
 using Application.CloudDrive.Dtos;
 
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Exceptions;
 using Domain.Repositories;
 
 using Microsoft.Extensions.Logging;
@@ -31,6 +32,8 @@ public sealed class CloudDriveJobOrchestrator(
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(input);
+        EnsureCapabilityEnabled(CloudDriveJobType.Upload);
+        EnsureCapabilityEnabled(CloudDriveJobType.ClearRecycleBin);
         EnsureValidUserId(userId);
         EnsureValidCloudAccountUid(cloudAccountUid);
 
@@ -52,6 +55,7 @@ public sealed class CloudDriveJobOrchestrator(
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(payload);
+        EnsureCapabilityEnabled(jobType);
         EnsureValidUserId(userId);
         EnsureValidCloudAccountUid(cloudAccountUid);
         EnsureBatchJobType(jobType);
@@ -71,6 +75,7 @@ public sealed class CloudDriveJobOrchestrator(
         string cloudAccountUid,
         CancellationToken cancellationToken = default)
     {
+        EnsureCapabilityEnabled(CloudDriveJobType.ClearRecycleBin);
         EnsureValidUserId(userId);
         EnsureValidCloudAccountUid(cloudAccountUid);
 
@@ -93,6 +98,7 @@ public sealed class CloudDriveJobOrchestrator(
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(input);
+        EnsureCapabilityEnabled(CloudDriveJobType.Transcode);
         EnsureValidUserId(userId);
         EnsureValidCloudAccountUid(cloudAccountUid);
 
@@ -165,5 +171,11 @@ public sealed class CloudDriveJobOrchestrator(
                 jobType,
                 "Job type must be a batch operation type.");
         }
+    }
+
+    private static void EnsureCapabilityEnabled(CloudDriveJobType jobType)
+    {
+        throw new CloudDriveApiNotCollectedException(
+            $"后台任务类型 {jobType} 对应的 115 网页端接口尚未采集。");
     }
 }

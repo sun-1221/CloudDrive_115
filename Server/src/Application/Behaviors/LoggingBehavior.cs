@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 
 using MediatR;
 
@@ -12,8 +12,8 @@ namespace Application.Behaviors;
 /// <typeparam name="TRequest">请求类型。</typeparam>
 /// <typeparam name="TResponse">响应类型。</typeparam>
 /// <remarks>
-/// 作用于所有 Command 与 Query，是 Pipeline 的第一层（LoggingBehavior → ValidationBehavior →
-/// TransactionBehavior → DomainEventDispatchBehavior）。
+/// 作用于所有 Command 与 Query，是 Pipeline 的第一层（LoggingBehavior → CloudDriveAccountContextBehavior →
+/// ValidationBehavior → TransactionBehavior → DomainEventDispatchBehavior）。
 /// 使用静态日志模板（CA2254），不序列化完整请求以避免敏感字段泄露。
 /// </remarks>
 public sealed class LoggingBehavior<TRequest, TResponse>(

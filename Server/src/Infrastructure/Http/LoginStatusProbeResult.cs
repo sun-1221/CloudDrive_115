@@ -1,4 +1,4 @@
-namespace Infrastructure.Http;
+﻿namespace Infrastructure.Http;
 
 /// <summary>
 /// 115 Cookie 登录态探测结果。

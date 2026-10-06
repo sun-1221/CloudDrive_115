@@ -1,6 +1,4 @@
-using Domain.Enums;
-
-namespace Application.CloudDrive.Dtos;
+﻿namespace Application.CloudDrive.Dtos;
 
 /// <summary>
 /// 获取后台任务状态输入。

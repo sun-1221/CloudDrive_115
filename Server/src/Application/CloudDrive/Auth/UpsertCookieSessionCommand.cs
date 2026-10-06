@@ -1,3 +1,4 @@
+﻿using Application.Abstractions;
 using Application.CloudDrive.Dtos;
 using Application.Commands;
 
@@ -9,4 +10,4 @@ namespace Application.CloudDrive.Auth;
 /// <param name="UserId">系统用户 ID。</param>
 /// <param name="Input">Cookie 会话输入。</param>
 public sealed record UpsertCookieSessionCommand(Guid UserId, UpsertCookieSessionInput Input)
-    : ICommand<CloudDriveCookieSessionDto>;
+    : ICommand<CloudDriveCookieSessionDto>, IHasInput<UpsertCookieSessionInput>;

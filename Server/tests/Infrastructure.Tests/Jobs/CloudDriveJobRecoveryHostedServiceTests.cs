@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 using Application.Abstractions;
 using Application.Abstractions.CloudDrive;
@@ -28,7 +28,7 @@ public sealed class CloudDriveJobRecoveryHostedServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task StartAsync_WhenPendingAndRunningJobsRecoverable_SchedulesThemAsync()
+    public async Task StartAsync_WhenJobsBelongToDisabledCapabilities_MarksThemFailedAsync()
     {
         // Arrange
         await File.WriteAllTextAsync(_tempFilePath, "demo");
@@ -48,11 +48,11 @@ public sealed class CloudDriveJobRecoveryHostedServiceTests : IDisposable
         await service.StartAsync(CancellationToken.None);
 
         // Assert
-        Assert.Equal(
-            [(upload.Id, CloudDriveJobType.Upload), (batch.Id, CloudDriveJobType.BatchDelete)],
-            scheduler.Scheduled);
-        Assert.Equal(CloudDriveJobStatus.Pending, upload.Status);
-        Assert.Equal(CloudDriveJobStatus.Running, batch.Status);
+        Assert.Empty(scheduler.Scheduled);
+        Assert.Equal(CloudDriveJobStatus.Failed, upload.Status);
+        Assert.Equal(CloudDriveJobStatus.Failed, batch.Status);
+        Assert.Contains("cloud_drive_api_not_collected", upload.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains("cloud_drive_api_not_collected", batch.ErrorMessage, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -76,8 +76,8 @@ public sealed class CloudDriveJobRecoveryHostedServiceTests : IDisposable
         Assert.Empty(scheduler.Scheduled);
         Assert.Equal(CloudDriveJobStatus.Failed, missingPayload.Status);
         Assert.Equal(CloudDriveJobStatus.Failed, missingTempFile.Status);
-        Assert.Contains("缺少 PayloadJson", missingPayload.ErrorMessage, StringComparison.Ordinal);
-        Assert.Contains("本地临时文件不可用", missingTempFile.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains("cloud_drive_api_not_collected", missingPayload.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains("cloud_drive_api_not_collected", missingTempFile.ErrorMessage, StringComparison.Ordinal);
         Assert.Equal(2, transactionManager.CommitCount);
     }
 
@@ -111,6 +111,7 @@ public sealed class CloudDriveJobRecoveryHostedServiceTests : IDisposable
         services.AddSingleton(scheduler);
         services.AddSingleton(transactionManager ?? new CloudDriveJobTestDoubles.RecordingTransactionManager());
         services.AddSingleton<ICloudDriveJobAuditLogger, CloudDriveJobTestDoubles.RecordingJobAuditLogger>();
+        services.AddScoped<CloudDriveJobRecoveryCoordinator>();
         ServiceProvider provider = services.BuildServiceProvider();
 
         return new CloudDriveJobRecoveryHostedService(

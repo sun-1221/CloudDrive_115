@@ -1,4 +1,4 @@
-using Application.Behaviors;
+﻿using Application.Behaviors;
 using Application.Commands;
 using Application.Queries;
 using Application.Tests.Support;

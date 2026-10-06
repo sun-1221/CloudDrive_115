@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 using Infrastructure.Http.Json;
 
@@ -27,6 +27,12 @@ internal sealed class CloudDrive115BreadcrumbItem
     [JsonConverter(typeof(NullableStringOrNumberToLongJsonConverter))]
     [JsonPropertyName("aid")]
     public long? Aid { get; init; }
+
+    /// <summary>
+    /// 获取或设置当前路径是否被选中的原始值。
+    /// </summary>
+    [JsonPropertyName("isp")]
+    public string IsSelectedPath { get; init; } = string.Empty;
 
     /// <summary>
     /// 获取或设置父级目录标识。

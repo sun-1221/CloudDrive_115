@@ -35,9 +35,10 @@ public static class CloudDriveInfrastructureServiceCollectionExtensions
 
         services.AddCaching();
         services.AddCloudDriveHttpClients();
-        services.AddSqlSugarCodeFirst(typeof(CookieSession), typeof(CloudDriveJob));
+        services.AddSqlSugarCodeFirst(typeof(User), typeof(UserSession), typeof(CookieSession), typeof(CloudDriveJob));
 
-        services.AddScoped<ICloudDriveOpenApiGateway, CloudDriveApiClient>();
+        services.AddScoped<ICloudDriveWebApiGateway, CloudDriveApiClient>();
+        services.AddScoped<ICloudDriveAccountContextAccessor, CloudDriveAccountContextAccessor>();
         services.AddScoped<ICloudDriveAccountContextResolver, CloudDriveAccountContextResolver>();
         services.AddScoped<CookieSessionManager>();
         services.AddScoped<CloudDriveFileManager>();
@@ -50,6 +51,9 @@ public static class CloudDriveInfrastructureServiceCollectionExtensions
         services.AddSingleton<ICookieSignatureStrategy, NotImplementedCookieSignatureStrategy>();
         services.AddSingleton<ICloudDriveMetadataCache, CloudDriveMetadataCache>();
         services.AddSingleton<ICloudDriveRateLimiter, CloudDriveRateLimiter>();
+
+        services.AddSingleton<Application.Abstractions.ISecretPasswordHasher, Pbkdf2PasswordHasher>();
+        services.AddScoped<Application.Abstractions.IUserSessionContextAccessor, UserSessionContextAccessor>();
 
         services.AddRepositories();
 

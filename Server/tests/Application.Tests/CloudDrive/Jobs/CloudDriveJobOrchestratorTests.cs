@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 using Application.Abstractions.CloudDrive;
 using Application.CloudDrive.Dtos;
@@ -7,16 +7,23 @@ using Application.Tests.Support;
 
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Exceptions;
 
 namespace Application.Tests.CloudDrive.Jobs;
 
+/// <summary>
+/// 115 网盘后台任务编排器测试。
+/// </summary>
 public sealed class CloudDriveJobOrchestratorTests
 {
     private static readonly Guid TestUserId = Guid.Parse("33333333-3333-3333-3333-333333333333");
     private const string TestCloudAccountUid = "115001";
 
+    /// <summary>
+    /// 验证未采集的上传能力不会创建任务。
+    /// </summary>
     [Fact]
-    public async Task EnqueueLargeUploadAsync_WhenValid_CreatesUploadJobWithSerializedPayloadAndSchedulesIt()
+    public async Task EnqueueLargeUploadAsync_WhenCapabilityDisabled_ThrowsWithoutSideEffects()
     {
         // Arrange
         var repository = new FakeCloudDriveJobRepository();
@@ -34,31 +41,25 @@ public sealed class CloudDriveJobOrchestratorTests
         };
 
         // Act
-        Guid jobId = await orchestrator.EnqueueLargeUploadAsync(TestUserId, TestCloudAccountUid, input, CancellationToken.None);
+        Task Act() => orchestrator.EnqueueLargeUploadAsync(TestUserId, TestCloudAccountUid, input, CancellationToken.None);
 
         // Assert
-        CloudDriveJob job = Assert.Single(repository.Inserted);
-        Assert.Equal(job.Id, jobId);
-        Assert.Equal(TestUserId, job.UserId);
-        Assert.Equal(TestCloudAccountUid, job.CloudAccountUid);
-        Assert.Equal(CloudDriveJobType.Upload, job.JobType);
-        Assert.Equal("dir-001", job.ResourceId);
-        Assert.Equal(CloudDriveJobStatus.Pending, job.Status);
-        Assert.Equal([(job.Id, CloudDriveJobType.Upload)], scheduler.Scheduled);
-
-        using JsonDocument payload = JsonDocument.Parse(job.PayloadJson!);
-        Assert.Equal("video.mp4", payload.RootElement.GetProperty("fileName").GetString());
-        Assert.Equal(@"D:\temp\upload.tmp", payload.RootElement.GetProperty("tempFilePath").GetString());
-        Assert.Equal("pick-001", payload.RootElement.GetProperty("pickCode").GetString());
+        CloudDriveApiNotCollectedException exception = await Assert.ThrowsAsync<CloudDriveApiNotCollectedException>(Act);
+        Assert.Equal("cloud_drive_api_not_collected", exception.ErrorCode);
+        Assert.Empty(repository.Inserted);
+        Assert.Empty(scheduler.Scheduled);
     }
 
+    /// <summary>
+    /// 验证未采集的批量能力不会创建任务。
+    /// </summary>
     [Theory]
     [InlineData(CloudDriveJobType.BatchCopy)]
     [InlineData(CloudDriveJobType.BatchMove)]
     [InlineData(CloudDriveJobType.BatchDelete)]
     [InlineData(CloudDriveJobType.BatchRecycleBinRestore)]
     [InlineData(CloudDriveJobType.BatchRecycleBinDelete)]
-    public async Task EnqueueBatchOperationAsync_WhenValidBatchType_CreatesJobAndSchedulesIt(
+    public async Task EnqueueBatchOperationAsync_WhenCapabilityDisabled_ThrowsWithoutSideEffects(
         CloudDriveJobType jobType)
     {
         // Arrange
@@ -72,7 +73,7 @@ public sealed class CloudDriveJobOrchestratorTests
         };
 
         // Act
-        Guid jobId = await orchestrator.EnqueueBatchOperationAsync(
+        Task Act() => orchestrator.EnqueueBatchOperationAsync(
             TestUserId,
             TestCloudAccountUid,
             jobType,
@@ -80,18 +81,14 @@ public sealed class CloudDriveJobOrchestratorTests
             CancellationToken.None);
 
         // Assert
-        CloudDriveJob job = Assert.Single(repository.Inserted);
-        Assert.Equal(job.Id, jobId);
-        Assert.Equal(jobType, job.JobType);
-        Assert.Equal(TestCloudAccountUid, job.CloudAccountUid);
-        Assert.Null(job.ResourceId);
-        Assert.Equal([(job.Id, jobType)], scheduler.Scheduled);
-
-        using JsonDocument payloadJson = JsonDocument.Parse(job.PayloadJson!);
-        Assert.Equal("target-001", payloadJson.RootElement.GetProperty("targetDirectoryId").GetString());
-        Assert.Equal("file-001", payloadJson.RootElement.GetProperty("fileIds")[0].GetString());
+        await Assert.ThrowsAsync<CloudDriveApiNotCollectedException>(Act);
+        Assert.Empty(repository.Inserted);
+        Assert.Empty(scheduler.Scheduled);
     }
 
+    /// <summary>
+    /// 验证非批量任务类型不会创建批量任务且抛出异常。
+    /// </summary>
     [Fact]
     public async Task EnqueueBatchOperationAsync_WhenNonBatchType_ThrowsAndDoesNotSchedule()
     {
@@ -109,13 +106,16 @@ public sealed class CloudDriveJobOrchestratorTests
             CancellationToken.None);
 
         // Assert
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(Act);
+        await Assert.ThrowsAsync<CloudDriveApiNotCollectedException>(Act);
         Assert.Empty(repository.Inserted);
         Assert.Empty(scheduler.Scheduled);
     }
 
+    /// <summary>
+    /// 验证清空回收站不会创建后台任务。
+    /// </summary>
     [Fact]
-    public async Task EnqueueClearRecycleBinAsync_WhenValid_CreatesClearRecycleBinJob()
+    public async Task EnqueueClearRecycleBinAsync_WhenCapabilityDisabled_ThrowsWithoutSideEffects()
     {
         // Arrange
         var repository = new FakeCloudDriveJobRepository();
@@ -123,24 +123,22 @@ public sealed class CloudDriveJobOrchestratorTests
         CloudDriveJobOrchestrator orchestrator = CreateOrchestrator(repository, scheduler);
 
         // Act
-        Guid jobId = await orchestrator.EnqueueClearRecycleBinAsync(
+        Task Act() => orchestrator.EnqueueClearRecycleBinAsync(
             TestUserId,
             TestCloudAccountUid,
             CancellationToken.None);
 
         // Assert
-        CloudDriveJob job = Assert.Single(repository.Inserted);
-        Assert.Equal(job.Id, jobId);
-        Assert.Equal(CloudDriveJobType.ClearRecycleBin, job.JobType);
-        Assert.Equal("recycle-bin", job.ResourceId);
-        Assert.Equal([(job.Id, CloudDriveJobType.ClearRecycleBin)], scheduler.Scheduled);
-
-        using JsonDocument payload = JsonDocument.Parse(job.PayloadJson!);
-        Assert.False(payload.RootElement.TryGetProperty("cloudAccountUid", out _));
+        await Assert.ThrowsAsync<CloudDriveApiNotCollectedException>(Act);
+        Assert.Empty(repository.Inserted);
+        Assert.Empty(scheduler.Scheduled);
     }
 
+    /// <summary>
+    /// 验证主动转码保持禁用，不创建后台任务。
+    /// </summary>
     [Fact]
-    public async Task EnqueueVideoTranscodeAsync_WhenFileIdPresent_UsesFileIdAsResourceId()
+    public async Task EnqueueVideoTranscodeAsync_WhenCapabilityDisabled_ThrowsWithoutSideEffects()
     {
         // Arrange
         var repository = new FakeCloudDriveJobRepository();
@@ -154,18 +152,12 @@ public sealed class CloudDriveJobOrchestratorTests
         };
 
         // Act
-        Guid jobId = await orchestrator.EnqueueVideoTranscodeAsync(TestUserId, TestCloudAccountUid, input, CancellationToken.None);
+        Task Act() => orchestrator.EnqueueVideoTranscodeAsync(TestUserId, TestCloudAccountUid, input, CancellationToken.None);
 
         // Assert
-        CloudDriveJob job = Assert.Single(repository.Inserted);
-        Assert.Equal(job.Id, jobId);
-        Assert.Equal(CloudDriveJobType.Transcode, job.JobType);
-        Assert.Equal("file-001", job.ResourceId);
-        Assert.Equal([(job.Id, CloudDriveJobType.Transcode)], scheduler.Scheduled);
-
-        using JsonDocument payload = JsonDocument.Parse(job.PayloadJson!);
-        Assert.Equal("pick-001", payload.RootElement.GetProperty("pickCode").GetString());
-        Assert.Equal("vip_push", payload.RootElement.GetProperty("op").GetString());
+        await Assert.ThrowsAsync<CloudDriveApiNotCollectedException>(Act);
+        Assert.Empty(repository.Inserted);
+        Assert.Empty(scheduler.Scheduled);
     }
 
     private static CloudDriveJobOrchestrator CreateOrchestrator(

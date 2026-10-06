@@ -1,4 +1,4 @@
-namespace Application.CloudDrive;
+﻿namespace Application.CloudDrive;
 
 /// <summary>
 /// 115 网盘集成配置。通过 <c>IOptions&lt;CloudDriveAppConfig&gt;</c> + <c>IConfiguration</c> 注入。
@@ -50,7 +50,7 @@ public sealed class CloudDriveAppConfig
     /// <summary>
     /// 云下载 API 基础域名。
     /// </summary>
-    public string OfflineApiBaseUrl { get; set; } = "https://115.com/web/lixian/";
+    public string OfflineApiBaseUrl { get; set; } = "https://clouddownload.115.com/web/";
 
     /// <summary>
     /// 默认每秒最大请求数。
@@ -125,6 +125,7 @@ public sealed class CloudDriveAppConfig
     /// <summary>
     /// 应用启动期配置完整性校验。核心配置缺失时禁用 115 集成功能，但不阻止应用启动。
     /// </summary>
+    /// <returns>返回当前操作的处理结果。</returns>
     public IReadOnlyList<string> ValidateStartupConfiguration()
     {
         List<string> errors = [];
@@ -172,5 +173,5 @@ public enum RateLimitOverflowStrategy
     /// <summary>
     /// 立即拒绝。
     /// </summary>
-    Reject
+    Reject,
 }

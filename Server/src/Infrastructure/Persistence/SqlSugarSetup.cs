@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 
 using Domain.Entities;
 
@@ -16,7 +16,7 @@ namespace Infrastructure.Persistence;
 /// - <see cref="ConnectionConfig.IsAutoCloseConnection"/> = <see langword="true"/>（R5.2）<br/>
 /// - <see cref="ConnectionConfig.InitKeyType"/> = <see cref="InitKeyType.Attribute"/>（R5.3）<br/>
 /// - 生命周期 <see cref="ServiceLifetime.Scoped"/>（R5.1）。<br/>
-/// 调用方通过 <paramref name="configureConnection"/> 提供连接字符串、数据库类型等部署相关配置。
+/// 调用方通过 <c>configureConnection</c> 提供连接字符串、数据库类型等部署相关配置。
 /// </remarks>
 public static class SqlSugarSetup
 {

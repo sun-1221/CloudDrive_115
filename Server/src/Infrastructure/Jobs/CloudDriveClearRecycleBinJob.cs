@@ -35,12 +35,12 @@ internal sealed class CloudDriveClearRecycleBinJob(
     private static readonly JsonSerializerOptions PayloadJsonOptions = new(JsonSerializerDefaults.Web);
 
     /// <inheritdoc />
-    public async Task Execute(IJobExecutionContext context)
+    public async ValueTask Execute(IJobExecutionContext context, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
 
         Guid jobId = ReadJobId(context);
-        CloudDriveJob? job = await jobRepository.GetByIdAsync(jobId, context.CancellationToken);
+        CloudDriveJob? job = await jobRepository.GetByIdAsync(jobId, cancellationToken);
         if (job is null)
         {
             logger.LogWarning("115 清空回收站后台任务不存在 JobId={JobId}", jobId);
@@ -49,21 +49,21 @@ internal sealed class CloudDriveClearRecycleBinJob(
 
         if (job.JobType != CloudDriveJobType.ClearRecycleBin)
         {
-            await MarkFailedAsync(job, $"后台任务类型不匹配，期望 ClearRecycleBin，实际 {job.JobType}", context.CancellationToken);
+            await MarkFailedAsync(job, $"后台任务类型不匹配，期望 ClearRecycleBin，实际 {job.JobType}", cancellationToken);
             return;
         }
 
         ClearRecycleBinInput? input = DeserializePayload(job);
         if (input is null)
         {
-            await MarkFailedAsync(job, "清空回收站任务缺少有效 PayloadJson。", context.CancellationToken);
+            await MarkFailedAsync(job, "清空回收站任务缺少有效 PayloadJson。", cancellationToken);
             return;
         }
 
         try
         {
-            await StartJobAsync(job, context.CancellationToken);
-            await MarkFailedAsync(job, $"{ApiNotCollectedCode}: {ApiNotCollectedMessage}", context.CancellationToken);
+            await StartJobAsync(job, cancellationToken);
+            await MarkFailedAsync(job, $"{ApiNotCollectedCode}: {ApiNotCollectedMessage}", cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -74,7 +74,7 @@ internal sealed class CloudDriveClearRecycleBinJob(
                 job.Id,
                 sensitiveFieldsFilter.Redact(job.CloudAccountUid));
 
-            await MarkFailedAsync(job, CreateSafeErrorMessage(ex), context.CancellationToken);
+            await MarkFailedAsync(job, CreateSafeErrorMessage(ex), cancellationToken);
         }
     }
 

@@ -1,4 +1,4 @@
-using Application.CloudDrive.Dtos;
+﻿using Application.CloudDrive.Dtos;
 
 using Domain.Enums;
 
@@ -12,6 +12,7 @@ public interface ICloudDriveJobOrchestrator
     /// <summary>
     /// 创建大文件异步上传任务。
     /// </summary>
+    /// <returns>返回已创建的后台上传任务 ID。</returns>
     Task<Guid> EnqueueLargeUploadAsync(
         Guid userId,
         string cloudAccountUid,
@@ -21,6 +22,7 @@ public interface ICloudDriveJobOrchestrator
     /// <summary>
     /// 创建批量文件或回收站操作任务。
     /// </summary>
+    /// <returns>返回已创建的批量后台任务 ID。</returns>
     Task<Guid> EnqueueBatchOperationAsync(
         Guid userId,
         string cloudAccountUid,
@@ -31,6 +33,7 @@ public interface ICloudDriveJobOrchestrator
     /// <summary>
     /// 创建清空回收站任务。
     /// </summary>
+    /// <returns>返回已创建的清空回收站后台任务 ID。</returns>
     Task<Guid> EnqueueClearRecycleBinAsync(
         Guid userId,
         string cloudAccountUid,
@@ -39,6 +42,7 @@ public interface ICloudDriveJobOrchestrator
     /// <summary>
     /// 创建视频转码任务。
     /// </summary>
+    /// <returns>返回已创建的视频转码后台任务 ID。</returns>
     Task<Guid> EnqueueVideoTranscodeAsync(
         Guid userId,
         string cloudAccountUid,

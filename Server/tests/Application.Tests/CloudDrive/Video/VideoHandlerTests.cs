@@ -1,5 +1,4 @@
-using Application.Abstractions.CloudDrive;
-using Application.CloudDrive;
+﻿using Application.CloudDrive;
 using Application.CloudDrive.Auth;
 using Application.CloudDrive.Dtos;
 using Application.CloudDrive.Files;
@@ -12,18 +11,24 @@ using Microsoft.Extensions.Options;
 
 namespace Application.Tests.CloudDrive.Video;
 
+/// <summary>
+/// 115 网盘视频播放、转码、字幕与播放进度处理器测试。
+/// </summary>
 public sealed class VideoHandlerTests
 {
     private static readonly Guid TestUserId = Guid.Parse("77777777-7777-7777-7777-777777777777");
     private const string TestCloudAccountUid = "115001";
 
+    /// <summary>
+    /// 验证视频播放结构未采集时返回空播放信息。
+    /// </summary>
     [Fact]
-    public async Task GetVideoPlayUrlCommandHandler_WhenVideoSchemaUncollected_ReturnsEmptyPlayback()
+    public async Task GetVideoPlayUrlCommandHandler_WhenVideoSchemaCollected_ReturnsBasePlaybackFields()
     {
         // Arrange
         TestContext context = CreateContext();
         context.Gateway.RespondWeb("files/video", """
-            {"state":true,"data":{"play_long":120,"video_url":[{"definition":4,"url":"https://video.test/1080.mp4","title":"1080P","height":1080,"width":1920}]}}
+            {"state":true,"data":{"download_url":"https://video.test/1080.mp4","dv_profile":"profile","file_id":"fid-1","file_name":"clip.mp4","file_size":"100","file_status":1,"hdr_type":"none","inlay_power":0,"is_dolby_vision":0,"is_hdr":0,"is_mark":"0","parent_id":"0","pick_code":"pick-1","sha1":"sha1","video_push_state":true}}
             """);
         var handler = new GetVideoPlayUrlCommandHandler(
             context.FileManager,
@@ -44,8 +49,11 @@ public sealed class VideoHandlerTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal(VideoPlayStatus.SchemaNotCollected, result.Value.Status);
-        Assert.Equal("not_collected", result.Value.PlaybackSchemaStatus);
+        Assert.Equal(VideoPlayStatus.Ready, result.Value.Status);
+        Assert.Equal("available", result.Value.PlaybackSchemaStatus);
+        Assert.Equal("https://video.test/1080.mp4", result.Value.DownloadUrl);
+        Assert.Equal("fid-1", result.Value.FileId);
+        Assert.Equal("clip.mp4", result.Value.FileName);
         Assert.Empty(result.Value.QualityOptions);
         Assert.True(result.Value.IsTemporary);
         Assert.Empty(context.JobOrchestrator.Transcodes);
@@ -54,6 +62,9 @@ public sealed class VideoHandlerTests
         Assert.Equal("0", request.Context.QueryParameters!["share_id"]);
     }
 
+    /// <summary>
+    /// 验证转码中视频播放查询不会创建转码任务。
+    /// </summary>
     [Fact]
     public async Task GetVideoPlayUrlCommandHandler_WhenTranscoding_EnqueuesTranscodeJob()
     {
@@ -78,13 +89,17 @@ public sealed class VideoHandlerTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal(VideoPlayStatus.SchemaNotCollected, result.Value.Status);
+        Assert.Equal(VideoPlayStatus.Ready, result.Value.Status);
+        Assert.Equal("available", result.Value.PlaybackSchemaStatus);
         Assert.Null(result.Value.JobId);
         Assert.Empty(context.JobOrchestrator.Transcodes);
     }
 
+    /// <summary>
+    /// 验证主动转码保持 disabled，不创建转码后台任务。
+    /// </summary>
     [Fact]
-    public async Task SubmitTranscodeCommandHandler_WhenVideoFile_EnqueuesTranscode()
+    public async Task SubmitTranscodeCommandHandler_WhenVideoFile_ReturnsNotCollectedWithoutJob()
     {
         // Arrange — files/file 接口未采集，直接传 PickCode 绕过文件详情查找
         TestContext context = CreateContext();
@@ -105,11 +120,14 @@ public sealed class VideoHandlerTests
             CancellationToken.None);
 
         // Assert
-        Assert.True(result.IsSuccess);
-        Assert.Equal(context.JobOrchestrator.NextJobId, result.Value.JobId);
-        Assert.Equal("pick-1", context.JobOrchestrator.Transcodes.Single().Input.PickCode);
+        Assert.True(result.IsFailure);
+        Assert.Equal("cloud_drive_api_not_collected", result.Error.Code);
+        Assert.Empty(context.JobOrchestrator.Transcodes);
     }
 
+    /// <summary>
+    /// 验证字幕查询返回未采集状态时不暴露字幕明细。
+    /// </summary>
     [Fact]
     public async Task GetSubtitlesQueryHandler_WhenSubtitlesReturned_MapsPublicFields()
     {
@@ -141,6 +159,9 @@ public sealed class VideoHandlerTests
         Assert.Equal("not_collected", result.Value.ItemSchemaStatus);
     }
 
+    /// <summary>
+    /// 验证播放历史为空时返回空播放进度。
+    /// </summary>
     [Fact]
     public async Task GetVideoPlayProgressQueryHandler_WhenHistoryIsEmpty_ReturnsEmptyProgress()
     {
@@ -174,6 +195,9 @@ public sealed class VideoHandlerTests
         Assert.Equal("available", result.Value.SchemaStatus);
     }
 
+    /// <summary>
+    /// 验证播放历史为对象结构时映射播放进度字段。
+    /// </summary>
     [Fact]
     public async Task GetVideoPlayProgressQueryHandler_WhenHistoryIsObject_MapsProgressFields()
     {
@@ -207,8 +231,11 @@ public sealed class VideoHandlerTests
         Assert.Equal("available", result.Value.SchemaStatus);
     }
 
+    /// <summary>
+    /// 验证播放进度写入保持 disabled。
+    /// </summary>
     [Fact]
-    public async Task RememberVideoPlayProgressCommandHandler_WhenValidInput_PostsHistory()
+    public async Task RememberVideoPlayProgressCommandHandler_WhenValidInput_ReturnsNotCollected()
     {
         // Arrange
         TestContext context = CreateContext();
@@ -231,12 +258,9 @@ public sealed class VideoHandlerTests
             CancellationToken.None);
 
         // Assert
-        Assert.True(result.IsSuccess);
-        CloudDriveGatewayRequest request = Assert.Single(context.Gateway.WebApiRequests);
-        Assert.Equal("files/history", request.Endpoint);
-        Assert.Equal(HttpMethod.Post, request.Method);
-        Assert.Equal("end", request.Context.FormFields!["op"]);
-        Assert.Equal("30", request.Context.FormFields["time"]);
+        Assert.True(result.IsFailure);
+        Assert.Equal("cloud_drive_api_not_collected", result.Error.Code);
+        Assert.Empty(context.Gateway.WebApiRequests);
     }
 
     private static TestContext CreateContext()
@@ -247,7 +271,6 @@ public sealed class VideoHandlerTests
         var fileManager = new CloudDriveFileManager(
             cache,
             gateway,
-            rateLimiter,
             CreateEnabledConfig(),
             new FakeLogger<CloudDriveFileManager>());
         var accessor = new CloudDriveAccountContextAccessor();

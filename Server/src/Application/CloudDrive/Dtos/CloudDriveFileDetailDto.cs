@@ -6,6 +6,11 @@ namespace Application.CloudDrive.Dtos;
 public class CloudDriveFileDetailDto : CloudDriveFileDto
 {
     /// <summary>
+    /// 获取或设置详情来源。
+    /// </summary>
+    public string SchemaSource { get; set; } = "file_list_derived";
+
+    /// <summary>
     /// 获取或设置创建时间。
     /// </summary>
     public DateTime CreatedTime { get; set; }
@@ -24,11 +29,6 @@ public class CloudDriveFileDetailDto : CloudDriveFileDto
     /// 获取或设置子文件夹数量。
     /// </summary>
     public int? FolderCount { get; set; }
-
-    /// <summary>
-    /// 获取或设置父目录 ID。
-    /// </summary>
-    public string? ParentId { get; set; }
 
     /// <summary>
     /// 获取或设置路径树。

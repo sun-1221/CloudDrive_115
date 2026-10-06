@@ -1,4 +1,4 @@
-using Infrastructure.Diagnostics;
+﻿using Infrastructure.Diagnostics;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
@@ -13,9 +13,9 @@ namespace Infrastructure.Http;
 /// </summary>
 /// <remarks>
 /// 按设计 §5. IHttpClientFactory 与 Polly 韧性策略实现：<br/>
-/// - 读请求：重试 + 超时 + 熔断（R9.3）<br/>
-/// - 写请求：仅超时 + 熔断，避免在幂等性无法保证时重复提交（R9.4）<br/>
-/// - 均以命名 HttpClient 形式注册（R9.1、R9.2）。<br/>
+/// - 读请求：最多 3 次重试 + 10 秒超时 + 熔断（R9.2）<br/>
+/// - 写请求：仅 10 秒超时 + 熔断，避免在幂等性无法保证时重复提交（R9.3）<br/>
+/// - 均以命名 HttpClient 形式注册（R9.1）。<br/>
 /// 业务模块应使用 <see cref="HttpRequestBuilders"/> 构造 query string、
 /// <c>application/x-www-form-urlencoded</c>、<c>multipart/form-data</c> 与 JSON 请求（R9.5）。
 /// </remarks>
@@ -25,14 +25,17 @@ public static class HttpClientSetup
     /// 获取读请求默认重试延迟。
     /// </summary>
     private static readonly TimeSpan DefaultRetryDelay = TimeSpan.FromSeconds(1);
+
     /// <summary>
     /// 获取默认 HTTP 请求超时时间。
     /// </summary>
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(10);
+
     /// <summary>
     /// 获取熔断器默认采样窗口。
     /// </summary>
     private static readonly TimeSpan DefaultCircuitBreakSampling = TimeSpan.FromSeconds(30);
+
     /// <summary>
     /// 获取熔断器默认熔断持续时间。
     /// </summary>
