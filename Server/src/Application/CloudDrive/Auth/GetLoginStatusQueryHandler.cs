@@ -17,7 +17,8 @@ namespace Application.CloudDrive.Auth;
 internal sealed class GetLoginStatusQueryHandler(
     ICookieSessionRepository cookieSessionRepository,
     ICloudDriveWebApiGateway openApiGateway,
-    IOptions<CloudDriveAppConfig> configOptions)
+    IOptions<CloudDriveAppConfig> configOptions,
+    IUserSessionRepository? userSessionRepository = null)
     : IQueryHandler<GetLoginStatusQuery, CloudDriveAuthCheckDto>
 {
     public async Task<Result<CloudDriveAuthCheckDto>> Handle(
@@ -29,26 +30,22 @@ internal sealed class GetLoginStatusQueryHandler(
         DateTime checkedAt = DateTime.UtcNow;
         IReadOnlyList<CookieSession> activeSessions = await ResolveActiveSessionsAsync(request, cancellationToken);
 
+        // 匿名请求不具备用户上下文，不能从其他用户的绑定中猜测账号并发起上游请求。
+        if (!request.UserId.HasValue)
+        {
+            return Result.Success(CreateNotLoggedInStatus(checkedAt, "cookie_invalid"));
+        }
+
         if (activeSessions.Count == 0)
         {
-            return Result.Success(new CloudDriveAuthCheckDto
-            {
-                IsAuthenticated = false,
-                IsLoggedIn = false,
-                LastCheckedAt = checkedAt,
-                FailureReason = "cookie_invalid",
-            });
+            return Result.Success(CreateNotLoggedInStatus(checkedAt, "cookie_invalid"));
         }
 
         if (activeSessions.Count > 1)
         {
-            return Result.Success(new CloudDriveAuthCheckDto
-            {
-                IsAuthenticated = false,
-                IsLoggedIn = false,
-                LastCheckedAt = checkedAt,
-                FailureReason = "cookie_invalid",
-            });
+            return Result.Success(CreateNotLoggedInStatus(
+                checkedAt,
+                "cloud_drive_account_context_ambiguous"));
         }
 
         CookieSession session = activeSessions[0];
@@ -110,9 +107,36 @@ internal sealed class GetLoginStatusQueryHandler(
         GetLoginStatusQuery request,
         CancellationToken cancellationToken)
     {
-        IReadOnlyList<CookieSession> sessions = request.UserId.HasValue
-            ? await cookieSessionRepository.GetByUserAsync(request.UserId.Value, cancellationToken)
-            : await cookieSessionRepository.GetAvailableSessionsAsync(cancellationToken);
+        if (!request.UserId.HasValue)
+        {
+            return [];
+        }
+
+        IReadOnlyList<CookieSession> sessions = await cookieSessionRepository.GetByUserAsync(
+            request.UserId.Value,
+            cancellationToken);
+
+        if (request.SessionId.HasValue && userSessionRepository is not null)
+        {
+            UserSession? userSession = await userSessionRepository.GetActiveAsync(
+                request.SessionId.Value,
+                cancellationToken);
+
+            if (userSession?.UserId != request.UserId.Value)
+            {
+                return [];
+            }
+
+            if (!string.IsNullOrWhiteSpace(userSession.ActiveCloudAccountUid))
+            {
+                sessions = sessions
+                    .Where(session => string.Equals(
+                        session.CloudAccountUid,
+                        userSession.ActiveCloudAccountUid,
+                        StringComparison.Ordinal))
+                    .ToList();
+            }
+        }
 
         return sessions
             .Where(session => session.Status is CookieSessionStatus.Active)
@@ -144,6 +168,19 @@ internal sealed class GetLoginStatusQueryHandler(
             IsLoggedIn = null,
             LastCheckedAt = checkedAt,
             FailureReason = NormalizeFailureReason(failureReason, fallback),
+        };
+    }
+
+    private static CloudDriveAuthCheckDto CreateNotLoggedInStatus(
+        DateTime checkedAt,
+        string failureReason)
+    {
+        return new CloudDriveAuthCheckDto
+        {
+            IsAuthenticated = false,
+            IsLoggedIn = false,
+            LastCheckedAt = checkedAt,
+            FailureReason = failureReason,
         };
     }
 

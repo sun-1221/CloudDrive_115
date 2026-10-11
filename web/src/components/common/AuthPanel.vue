@@ -12,6 +12,13 @@ const router = useRouter();
 const isAuthorized = computed(() => authStore.authStatus === 'authorized');
 const isDisabled = computed(() => authStore.authStatus === 'disabled');
 const hasAccount = computed(() => (authStore.currentUser?.accounts.length ?? 0) > 0);
+const needsAccountSelection = computed(() => hasAccount.value
+  && (authStore.currentUser?.accounts.length ?? 0) > 1
+  && !authStore.currentUser?.currentCloudAccountUid);
+const upstreamUnavailable = computed(() => {
+  const check = authStore.loginCheckResult;
+  return Boolean(check && check.isLoggedIn !== true);
+});
 
 function handleRetryCheck() {
   authStore.bootstrapAuthState();
@@ -49,7 +56,21 @@ function openUserCenter() {
       </NButton>
     </div>
 
-    <!-- 已授权态（简化：仅显示已连接状态） -->
+    <!-- 已登录但尚未选择账号 -->
+    <div v-else-if="needsAccountSelection" class="glass-card p-6 max-w-md w-full space-y-4 text-center">
+      <p class="text-white font-medium">请选择当前 115 账号</p>
+      <p class="text-xs text-white/50">当前会话绑定了多个账号，请先选择一个再浏览文件。</p>
+      <NButton type="primary" block @click="openUserCenter">打开账号管理</NButton>
+    </div>
+
+    <!-- 上游 Cookie 会话失效 -->
+    <div v-else-if="hasAccount && upstreamUnavailable" class="glass-card p-6 max-w-md w-full space-y-4 text-center">
+      <p class="text-white font-medium">115 会话暂不可用</p>
+      <p class="text-xs text-white/50">请在用户中心重新绑定或选择可用账号。</p>
+      <NButton type="primary" block @click="openUserCenter">打开账号管理</NButton>
+    </div>
+
+    <!-- 已授权态 -->
     <div v-else-if="hasAccount" class="glass-card p-6 max-w-md w-full space-y-4">
       <div class="flex items-center gap-4">
         <div class="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">

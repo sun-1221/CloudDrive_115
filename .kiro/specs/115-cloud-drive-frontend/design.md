@@ -2,7 +2,7 @@
 
 ## 概述
 
-前端采用 Vue 3 + TypeScript + Pinia + Vue Router，只调用后端 `/api/*`。后端负责 Cookie 会话、上游请求、错误适配与敏感值过滤。前端以 capability matrix 控制 Api、Service、Store、组件、快捷键和路由入口，任何 disabled 能力都必须形成零上游调用闭环。
+前端采用 Vue 3 + TypeScript + Pinia + Vue Router，只调用后端 `/api/*`。后端负责 JWT UserSession、CookieSession 账号上下文、上游请求、错误适配与敏感值过滤。前端以 capability matrix 控制 Api、Service、Store、组件、快捷键和路由入口，任何 disabled 能力都必须形成零上游调用闭环。
 
 ## 设计原则
 
@@ -80,7 +80,7 @@ flowchart LR
 | `/offline` | 云下载读视图 | partial |
 | `/share` | 我的分享 | available |
 | `/user` | VIP/余额/空间 | available |
-| `/login` | Cookie 会话指引 | available |
+| `/login` | JWT 登录/注册与账号绑定指引 | available |
 
 搜索不建立可触发路由；禁用能力不通过 query 参数或深链重新开放。
 
@@ -88,10 +88,20 @@ flowchart LR
 
 ### AuthSessionService
 
-- `check()` → `GET /api/auth/check`。
-- `isAuthenticated === (isLoggedIn === true)`。
-- `cookie_invalid` / `cookie_not_active` 导航到 `/login`；网络未知态保留重试。
-- 不调用用户基础资料端点，不在前端实现 Cookie 注入。
+- `register(input)` → `POST /api/auth/register`；`login(input)` → `POST /api/auth/login`。
+- `refresh()` → `POST /api/auth/refresh`；`logout()` → `POST /api/auth/logout`；`me()` → `GET /api/auth/me`。
+- 仅在内存中保存 `accessToken/tokenType/expiresAt/userId`；JWT 不包含 Cookie 或角色。
+- `check()` → `GET /api/auth/check`，用于探测当前用户当前 CookieSession；`cookie_invalid` / `cookie_not_active` / `cloud_drive_account_context_ambiguous` 导航到登录或账号选择界面。
+- 不调用用户基础资料端点，不在前端实现 Cookie 注入；401 时清理 JWT 和账号摘要。
+
+### CloudDriveAccountService
+
+- `list()` → `GET /api/cloud-drive/accounts`，只消费账号摘要。
+- `bind(input)` → `POST /api/cloud-drive/accounts`；UID/CID/USSID 仅存在绑定请求的短生命周期内。
+- `select(cloudAccountUid)` → `POST /api/cloud-drive/accounts/select`，更新当前 UserSession 账号。
+- 命名映射：API cloudAccountUid 对应领域 UserSession.ActiveCloudAccountUid，数据库列为 active_cloud_account_uid；普通业务 Service 不重复传递 UID。
+- `unbind(cloudAccountUid)` → `DELETE /api/cloud-drive/accounts/{cloudAccountUid}`，成功后清除对应摘要和当前选择。
+- 多账号未选择时阻止普通业务 Service 调用，不通过前端重复传递 `CloudAccountUid`。
 
 ### FileBrowserService
 
@@ -353,7 +363,7 @@ interface SafeProblemDetails {
 
 | 需求 | 设计 |
 |---|---|
-| 1 登录态 | §AuthSessionService、§错误处理 |
+| 1 登录态 | §AuthSessionService、§CloudDriveAccountService、§错误处理 |
 | 2 文件浏览 | §FileBrowserService、§FileBrowserStore |
 | 3 文件操作 | §FileOperationService、§文件浏览与已启用写操作 |
 | 4 上下文菜单 | §Store 与组件状态、§能力状态模型 |

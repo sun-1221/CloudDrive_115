@@ -13,11 +13,15 @@
     - 删除历史开放接口、旧域名、旧上传/搜索推断和部分脱敏示例，记录低置信度及禁用边界。
     - _需求: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 2.1, 2.2, 2.3, 2.4, 2.5, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6_
     - _设计: §前置约束与边界, §关键设计决策_
+  - [x] 1.2 对齐个人 JWT、UserSession 与多账号 CookieSession 契约
+    - JWT 仅携带用户/会话标识和生命周期字段；绑定、选择、解绑均按当前用户隔离，普通业务请求从 `UserSession.ActiveCloudAccountUid` 解析账号。
+    - _需求: 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 3.1, 3.2, 3.3_
+    - _设计: §1. 认证与会话管理模块 (Auth), §LoginCheckHandler（需求 3 登录态检测）, §账号隔离策略_
 
 - [x] 2. 实现 Cookie 会话边界与网页端 Gateway
   - [x] 2.1 将统一网关命名和装配收敛为 `ICloudDriveWebApiGateway`
     - 仅配置 `webapi.115.com`、`vip.115.com`、`pay.115.com`、`clouddownload.115.com` 的已采集路径。
-    - Cookie 由受保护配置注入；日志、异常、追踪标签和响应中不得出现任何 Cookie 片段。
+    - Cookie 由已认证用户绑定并通过 Data Protection 加密；日志、异常、追踪标签和响应中不得出现任何 Cookie 片段。
     - _需求: 19.1, 19.2, 19.3, 19.4, 19.5, 19.6, 19.7, 26.1, 26.2, 26.3, 26.4, 26.5, 26.6, 29.1, 29.2, 29.3, 29.4, 29.5, 29.6_
     - _设计: §ICloudDriveWebApiGateway / CloudDriveApiClient, §CookieSessionManager_
   - [x] 2.2 实现 method + host + path + 关键 query 感知的错误适配注册表

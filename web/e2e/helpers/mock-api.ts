@@ -58,6 +58,14 @@ export async function mockAuthorizedState(page: Page) {
       }],
     }),
   );
+  await page.route(
+    (url) => matchPath(url.toString(), '/auth/check'),
+    (route) => json(route, {
+      isAuthenticated: true,
+      isLoggedIn: true,
+      lastCheckedAt: '2024-06-10T10:00:00Z',
+    }),
+  );
 }
 
 /** 模拟未授权状态 */

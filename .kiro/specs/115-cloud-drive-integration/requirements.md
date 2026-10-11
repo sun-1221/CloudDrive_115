@@ -2,17 +2,17 @@
 
 ## 简介
 
-本功能为 .NET 10 原生 DDD + CQRS 项目集成 115 网盘 **网页端原生 API**，通过后端 Cookie 认证机制调用 `webapi.115.com`、`clouddownload.115.com`、`vip.115.com`、`pay.115.com` 等网页端 API，为前端提供标准化的 REST 端点。能力是否启用严格取决于已验收脱敏 HTTP 契约；没有闭环证据的入口保持禁用。
+本功能为 .NET 10 原生 DDD + CQRS 项目集成 115 网盘 **网页端原生 API**。系统先通过本地 User/UserSession 完成个人 JWT 会话认证，再按当前 UserSession 选择的 CookieSession 调用 `webapi.115.com`、`clouddownload.115.com`、`vip.115.com`、`pay.115.com` 等网页端 API，为前端提供标准化 REST 端点。能力是否启用严格取决于已验收脱敏 HTTP 契约；没有闭环证据的入口保持禁用。
 
 > **架构定位**：本 spec 定义 115 网盘**后端业务模块**，基于 `.kiro/specs/115-cloud-drive-net10/` 已搭建的 .NET 10 DDD 四层框架实现。前端 Vue 3 应用通过本模块提供的 `/api/*` REST 端点访问 115 网盘数据。
 
 > **数据源权威性**：本系统仅对接 **115 网页端原生 API**。接口事实只以 `docs/115-api-docs.md` 记录的 2026-08-09 已验收脱敏 capture result 为权威；其他历史采集、外部文档和第三方实现均不得补齐 method、path、参数、响应或错误字段。
 
-> **认证方式**：采用 **Cookie-based 认证**（UID/CID/USSID），由管理员从已登录的 115 网页端导出 Cookie 注入系统配置；后端通过 ASP.NET Core Data Protection 加密存储，请求 115 API 时自动注入。前端不读取、传递或记录 115 Cookie。
+> **认证方式**：本地用户通过用户名/密码获取 JWT；JWT 仅包含用户 ID、UserSession ID 与生命周期字段，不携带角色、115 Cookie 或账号凭据。115 Cookie 由已认证用户通过账号绑定 API 提交，后端通过 ASP.NET Core Data Protection 加密存储，请求 115 API 时按当前 UserSession 的 `ActiveCloudAccountUid` 自动注入。前端不读取、传递或记录 Cookie 原文。
 
 > **合规声明**：系统使用的是用户在 115 网页端登录后的 Cookie 会话，归属其本人。系统不得将 API 用于图床、软件床、视频外链播放、OSS 对象存储等违反 115 服务条款的场景。
 
-> **账号模型**：**单账号模型**。系统仅维护一个 115 账号的 Cookie 会话，不支持多账号切换。
+> **账号模型**：**个人多账号模型**。每个用户可绑定多个 115 账号；每个 UserSession 独立保存当前账号，未选择且存在多个 Active 账号时请求必须 fail-closed。
 
 > **API 覆盖说明**：已验收 evidence 包含两批共 116 条结构化脱敏记录和四个固定 SHA-256 清单。可启用：文件列表、下载地址、新建、重命名、星标、单样本复制、回收站非空列表、视频播放、播放进度读取、字幕空列表、我的分享非空列表、云下载配额/计数/空列表、VIP/余额/空间。保持禁用：搜索、上传、移动、删除、回收站写操作、播放进度写入、主动转码、云下载写操作及非空任务 item、分享 send/receive 成功列表、基础资料、字幕非空 item、清晰度与音轨。网页 UI 成功但未取得 HTTP body 的动作不得视为接口完成。
 
@@ -23,8 +23,8 @@
 ## 前置要求与约束
 
 1. 本系统 SHALL 只调用 `docs/115-api-docs.md` 标记为 collected 且已启用的 115 网页端契约
-2. 本系统 SHALL 以部署方持有有效的 115 网页端 Cookie（UID/CID/USSID）为前提，通过环境变量或安全配置文件注入
-3. IF Cookie 缺失、格式无效或失效，THEN 系统 SHALL 禁用 115 相关功能并记录错误
+2. 本系统 SHALL 以本地 User/UserSession JWT 和当前用户绑定的有效 CookieSession（UID/CID/USSID）为前提；Cookie 只能通过当前用户账号绑定用例写入
+3. IF Data Protection、CookieSession 或当前账号上下文缺失、格式无效或失效，THEN 系统 SHALL 在 Gateway 前禁用对应 115 请求并返回稳定错误
 4. 所有下载/播放/缩略图地址 SHALL 仅供当前授权用户在本系统内短时使用，不得持久化为公开链接
 5. 对于高频浏览、媒体扫描、批量操作场景，系统 SHALL 结合限流、缓存和后台任务策略，降低频控与风控风险
 
@@ -37,11 +37,16 @@
 - **Infrastructure_Layer**：基础设施层（`src/Infrastructure/CloudDrive/`），实现 Gateway、仓储、缓存、限流与外部 HTTP 客户端
 - **Gateway_Layer**：访问 115 网页端 API 的网关抽象层；物理实现为单一 `ICloudDriveWebApiGateway` / `CloudDriveApiClient`（不得按子域拆出多套并行 HTTP 客户端）
 - **FileGateway**：`Gateway_Layer` / `ICloudDriveWebApiGateway` 的逻辑别名（需求叙述用语；无独立物理类型）
-- **Cookie_Manager** / **CookieManager**：Cookie 会话编排的逻辑别名；物理实现为应用层 `CookieSessionManager`（加密存储/注入/失效/冷却）
+- **User**：本地个人用户，不包含管理员或角色语义
+- **UserSession**：本地 JWT 登录会话，保存撤销状态、过期时间和 `ActiveCloudAccountUid`
+- **CurrentAccount**：当前 UserSession 选择的 Active 115 账号
+- **ActiveCloudAccountUid 映射**：HTTP 账号字段为 `cloudAccountUid`，领域属性为 `UserSession.ActiveCloudAccountUid`，数据库列为 `active_cloud_account_uid`
+- **CookieSession**：用户与 115 账号的绑定凭据记录，Cookie 三元组由 Data Protection 加密
+- **Cookie_Manager** / **CookieManager**：Cookie 会话编排的逻辑别名；物理实现为应用层 `CookieSessionManager`（按 UserId + CloudAccountUid 加密存储、注入、失效和冷却）
 - **ExceptionHandlingMiddleware**：WebApi 全局异常中间件，将已分类异常与失败结果映射为 `ProblemDetails`（**不**负责解析 115 响应错误字段）
 - **ErrorFieldAdapter**：Gateway/ApiClient 解析路径中的错误字段适配器（`IErrorFieldAdapter`），按 URL 路径解析 115 错误字段变体并映射为内部异常
 - **LoggingBehavior**：MediatR Pipeline Behavior，负责结构化请求日志与敏感字段脱敏
-- **Auth_Service**：Cookie 会话认证服务
+- **Auth_Service**：个人 JWT 会话与 CookieSession 账号上下文服务
 - **File_Service**：文件管理服务
 - **Preview_Service**：文件预览服务
 - **Video_Service**：视频管理服务
@@ -58,46 +63,44 @@
 
 ## 需求
 
-### 需求 1：Cookie 会话认证
+### 需求 1：个人 JWT 会话与 115 Cookie 上下文
 
-**用户故事：** 作为系统管理员，我希望通过注入一组 115 网页端 Cookie 建立系统与 115 的会话。
-
-> **说明**：本系统采用**管理员注入 Cookie** 模式，不涉及用户密码、短信、二维码等登录流程。
+**用户故事：** 作为个人用户，我希望通过本地账号登录，并在访问 115 网盘时使用自己绑定的 Cookie 会话。
 
 #### 验收标准
 
-1. THE Cookie_Manager SHALL 支持通过环境变量（`COOKIE_UID`/`COOKIE_CID`/`COOKIE_USSID`）或配置文件读取明文 Cookie
-2. THE Cookie_Manager SHALL 通过 ASP.NET Core Data Protection（`IDataProtector`）加密 Cookie 并持久化，key ring 持久化共享以支持服务重启和多实例部署
-3. WHEN Gateway_Layer 发起 115 API 请求时，THE Cookie_Manager SHALL 在 Header 注入 `Cookie: UID=...; CID=...; USSID=...`
-4. IF 115 API 响应指示登录态失效（HTTP 401 或 errNo/code 匹配登录失效语义），THEN THE Cookie_Manager SHALL 发布领域事件 `CookieInvalidated`
-5. WHEN `CookieInvalidated` 事件发生后，THE Cloud_Drive_Service SHALL 在冷却时间内（默认 60 秒，可通过 `CookieCooldownSeconds` 配置调整）短路后续 115 API 调用，直接返回 `auth_expired` 错误
-6. THE Cookie_Manager SHALL 严禁通过日志、响应体、异常消息泄露原始 Cookie 值或任意原值片段；只记录固定占位符与非敏感状态
-7. THE Cloud_Drive_Service SHALL 采用单账号模型，不支持多账号切换
+1. WHEN 匿名用户注册或登录成功 THEN 系统 SHALL 创建或恢复 UserSession，并返回仅包含用户 ID、会话 ID 和生命周期字段的 Bearer JWT；JWT 不包含角色、Cookie 原文或账号凭据。
+2. THE WebApi_Layer SHALL 对除公开认证端点外的业务端点强制 JWT 认证；缺少有效 JWT、会话已撤销或已过期时返回 HTTP 401。
+3. THE Cookie_Manager SHALL 通过 ASP.NET Core Data Protection 加密并持久化用户提交的 UID/CID/USSID；任何日志、异常、ProblemDetails 或响应均不得泄露 Cookie 原文或片段。
+4. WHEN 当前 UserSession 具备有效 `ActiveCloudAccountUid` THEN Gateway_Layer SHALL 使用该用户对应 CookieSession 注入 115 请求；不得要求前端重复提交账号 UID。
+5. IF CookieSession 缺失、失效或处于冷却期 THEN 系统 SHALL 在 Gateway 前短路并返回稳定业务错误，不得发起 115 请求。
+6. IF 115 API 响应表示 Cookie 失效 THEN Cookie_Manager SHALL 标记对应 CookieSession、发布 CookieInvalidated 领域事件并进入冷却期。
+7. THE Cookie_Manager SHALL 不从环境变量或全局用户配置读取用户 Cookie；Cookie 仅能通过当前用户的绑定用例写入。
 
-### 需求 2：Cookie 配置管理
+### 需求 2：多账号绑定、选择与解绑
 
-**用户故事：** 作为系统管理员，我希望通过配置管理 Cookie 的注入、更新与失效处理。
-
-#### 验收标准
-
-1. THE Cloud_Drive_Service SHALL 在启动时验证 Cookie 配置完整性（UID/CID/USSID 三项非空）
-2. IF Cookie 配置缺失，THEN THE Cloud_Drive_Service SHALL 记录 `LogLevel.Error` 日志并将 `CloudDriveFeatureEnabled` 标志设为 `false`，不阻止应用启动
-3. WHEN 配置更新时，THE Cookie_Manager SHALL 支持热加载新 Cookie 无需重启
-4. THE Cookie_Manager SHALL 严禁以明文形式将 Cookie 出现在代码仓库、日志或响应中
-5. THE Cloud_Drive_Service SHALL 提供 `GET /api/auth/check` 端点让前端查询 Cookie 是否有效
-
-### 需求 3：登录态检测 API
-
-**用户故事：** 作为前端工程师，我希望后端提供统一的登录态校验端点。
+**用户故事：** 作为已认证用户，我希望绑定多个 115 账号，并在每个登录会话中选择当前账号。
 
 #### 验收标准
 
-1. THE WebApi_Layer SHALL 提供 `GET /api/auth/check`，返回公开 JSON（camelCase）：`{ isAuthenticated: boolean, isLoggedIn: boolean | null, lastCheckedAt: string (ISO-8601), cooldownUntil?: string | null, failureReason?: 'cookie_invalid' | 'network' | 'cookie_not_active' }`，且始终满足 `isAuthenticated === (isLoggedIn === true)`
-2. WHEN 收到 `/api/auth/check` 请求时，THE Cloud_Drive_Service SHALL 通过 FileGateway（`ICloudDriveWebApiGateway` 逻辑别名）调用 `GET webapi.115.com/files?cid=0&limit=1` 轻量探测；IF Cookie 处于冷却期或会话非 Active，THEN THE Cloud_Drive_Service SHALL 短路且不发起探测，返回 `isLoggedIn=false`、`isAuthenticated=false`、`failureReason='cookie_not_active'`，并在已知时设置 `cooldownUntil`
-3. IF 探测成功，THEN THE Cloud_Drive_Service SHALL 返回 `isLoggedIn=true`、`isAuthenticated=true`，且省略 `failureReason`
-4. IF 探测失败且登录态无效，THEN THE Cloud_Drive_Service SHALL 返回 `isLoggedIn=false`、`isAuthenticated=false`、`failureReason='cookie_invalid'`
-5. IF 探测失败且原因为网络异常，THEN THE Cloud_Drive_Service SHALL 返回 `isLoggedIn=null`、`isAuthenticated=false`、`failureReason='network'`
-6. THE WebApi_Layer SHALL 对此端点不强制要求认证（`AllowAnonymous`）；Controller SHALL NOT 调用 `GetAuthenticatedUserId()`，改为解析系统单账号 Cookie 会话（可选 JWT 用户上下文）
+1. THE WebApi_Layer SHALL 提供 `GET/POST/DELETE /api/cloud-drive/accounts` 与 `POST /api/cloud-drive/accounts/select`；所有接口均要求有效 JWT。
+2. WHEN 用户提交账号 UID 与 Cookie 三元组 THEN 系统 SHALL 创建或更新该用户的 CookieSession；相同用户和账号 UID 不得产生重复有效绑定。
+3. WHEN 用户查询账号列表 THEN 系统 SHALL 只返回 UID、状态和时间等摘要，不返回 Cookie 原文；WHEN 用户解绑 THEN 系统 SHALL 撤销目标 CookieSession。
+4. WHEN 用户选择 Active 账号 THEN 系统 SHALL 将 UID 保存到当前 UserSession 的 `ActiveCloudAccountUid`；选择不存在或非 Active 账号返回稳定业务错误。
+5. IF 当前用户存在多个 Active 账号且当前 UserSession 未选择账号 THEN 普通业务 API SHALL 不向 115 发起请求，并返回 `cloud_drive_account_context_ambiguous`。
+
+### 需求 3：认证与上游登录态检测 API
+
+**用户故事：** 作为前端工程师，我希望分别得到本地 JWT 会话状态和当前用户 115 账号的安全状态。
+
+#### 验收标准
+
+1. THE WebApi_Layer SHALL 提供 `POST /api/auth/register`、`POST /api/auth/login`、`POST /api/auth/logout`、`POST /api/auth/refresh`、`GET /api/auth/me`。
+2. THE WebApi_Layer SHALL 保留 `GET /api/auth/check` 作为上游登录态探测端点；该端点允许匿名访问，但在存在 JWT 时只探测当前用户的当前 CookieSession。
+3. WHEN `/api/auth/check` 收到请求时，系统 SHALL 返回 camelCase 的 `isAuthenticated`、`isLoggedIn`、`lastCheckedAt`、可选 `cooldownUntil` 和安全的 `failureReason`，并始终满足 `isAuthenticated === (isLoggedIn === true)`。
+4. IF 没有当前用户、没有 Active CookieSession、Cookie 处于冷却期或账号上下文不明确 THEN `/api/auth/check` SHALL 短路且不发起 115 请求。
+5. IF 探测成功 THEN /api/auth/check SHALL 返回 isLoggedIn=true、isAuthenticated=true 并省略失败原因。
+6. IF 探测因网络异常失败 THEN /api/auth/check SHALL 返回 isLoggedIn=null、isAuthenticated=false 和 failureReason=network。
 
 ### 需求 4：获取文件列表
 
@@ -436,7 +439,7 @@
 
 ### 需求 24：API 频控与限流
 
-**用户故事：** 作为系统管理员，我希望控制对 115 API 的调用频率避免触发风控。
+**用户故事：** 作为系统使用者，我希望控制对 115 API 的调用频率避免触发风控。
 
 #### 验收标准
 
@@ -586,7 +589,7 @@
 5. THE Cloud_Drive_Service SHALL 支持 CORS 配置，允许前端域名访问
 6. THE WebApi_Layer SHALL NOT 将 115 的短字段名（`n`/`s`/`fc`/`pc` 等）暴露至前端响应；所有响应字段 SHALL 使用归一化 DTO 的长字段名
 7. THE WebApi_Layer SHALL NOT 将 Cookie、签名 `sign`、`UID` 等敏感字段暴露至前端响应
-8. THE WebApi_Layer SHALL NOT 在公开前端端点中要求或暴露 `CloudAccountUid`；单账号上下文由后端根据已配置 Cookie 会话解析。`CloudAccountUid` 仅允许出现在受保护的运维端点、内部实体、缓存键、限流键和审计记录中。
+8. THE WebApi_Layer SHALL NOT 在普通业务端点中要求前端重复传递 `CloudAccountUid`；后端根据 JWT UserSession 的 `ActiveCloudAccountUid` 解析上下文。`CloudAccountUid` 可出现在账号绑定/选择/解绑端点、内部实体、缓存键、限流键和审计记录中，但不得携带 Cookie 原文。
 
 ### 需求 31：CSRF 与浏览器 Cookie 安全属性
 
@@ -625,13 +628,13 @@
 1. 结构化日志（Serilog）：记录 request_id/endpoint/method/status/upstream_code/latency_ms
 2. OpenTelemetry traces：覆盖 HTTP 入站请求 → Application Handler → Gateway → 115 API 全链路
 3. Metrics：`cloud_drive.requests.total`、`cloud_drive.requests.latency_ms`、`cloud_drive.errors.total{category}`
-4. 健康检查：`/health/live`（应用存活）、`/health/ready`（Cookie 有效 + 数据库可达）
+4. 健康检查：`/health/live`（应用存活）、`/health/ready`（Data Protection key ring 可用 + 数据库可达）；用户 CookieSession 只在请求上下文中检查
 
-### 部署与运维
+### 部署与系统
 
 1. Docker 镜像化部署；支持 Kubernetes 多副本横向扩展
 2. Data Protection key ring 持久化到共享存储（Redis/文件系统）以支持多实例
-3. `appsettings.json` + 环境变量覆盖机制；生产环境 Cookie 通过 Secret 注入
+3. `appsettings.json` + 环境变量覆盖机制；生产环境 Data Protection key ring 通过 Secret 或共享存储配置，用户 Cookie 不从全局配置注入
 4. Quartz.NET `JobStore` 使用 SqlSugar 持久化，支持任务跨实例协调
 5. 数据库迁移通过 SqlSugar CodeFirst 或独立脚本执行
 

@@ -2,7 +2,7 @@
 
 ## 简介
 
-本前端仅消费 `115-cloud-drive-integration` 暴露的后端 API。115 上游认证固定为受保护的 Cookie 会话；浏览器端不接触上游 Cookie、签名或账号凭据。
+本前端仅消费 `115-cloud-drive-integration` 暴露的后端 API。用户通过本地 JWT 注册/登录维持 UserSession；115 上游 Cookie 由后端按当前用户的 CookieSession 管理，浏览器端不接触 Cookie、签名或账号凭据。
 
 契约依据仅为父阶段于 2026-08-09 验收的脱敏网页端采集结果及 `docs/115-api-docs.md`。前端必须遵循能力闭集：`collected` 可实现，`low-confidence` 与 `disabled` 不得提供可触发入口。后端端点存在但返回占位错误，不等于能力可用。
 
@@ -10,6 +10,8 @@
 
 | 前端能力 | 状态 | UI 规则 |
 |---|---|---|
+| JWT 注册、登录、刷新、退出与当前用户 | available | 只保存 JWT 会话状态，不保存 Cookie 原文 |
+| 115 账号列表、绑定、选择、解绑 | available | 只展示摘要，当前账号来自 UserSession.ActiveCloudAccountUid |
 | 文件列表、详情派生、下载、新建目录、单项复制、重命名、星标 | collected | 可实现并正常展示 |
 | 回收站列表及非空 item | collected | 可展示；写按钮禁用 |
 | 视频基础播放信息、字幕空态、播放历史读取 | collected/partial | 基础字段可用；清晰度/音轨/字幕 item 不推断 |
@@ -23,15 +25,19 @@
 
 ## 需求
 
-### 需求 1：登录态检测与会话管理
+### 需求 1：个人 JWT 会话与多账号上下文
 
-**用户故事：** 作为用户，我希望页面能准确反映 115 Cookie 会话状态，以便在会话失效时得到安全提示。
+**用户故事：** 作为个人用户，我希望注册/登录后管理多个 115 账号，并在当前 UserSession 中选择要使用的账号。
 
 #### 验收标准
 
-1. WHEN 应用启动 THEN 前端 SHALL 调用匿名 `GET /api/auth/check` 并以 `isAuthenticated/isLoggedIn/failureReason/cooldownUntil` 为唯一 115 会话状态来源。
-2. IF 响应表示 Cookie 无效或未激活 THEN 前端 SHALL 导航到登录指引页，且不得展示、请求或存储任何上游 Cookie 字段。
-3. WHEN 用户基础资料不可用 THEN 前端 SHALL 不调用 `/api/user/info`，并使用中性账号图标而非伪造昵称或头像。
+1. WHEN 用户注册或登录成功 THEN 前端 SHALL 保存 Bearer JWT 及过期时间，并支持 `POST /api/auth/refresh`、`POST /api/auth/logout` 和 `GET /api/auth/me`。
+2. WHEN 应用启动或 JWT 会话仍有效 THEN 前端 SHALL 调用 GET /api/auth/check 获取当前 CookieSession 登录态，并区分本地 JWT 会话与上游账号状态。
+3. WHEN 用户打开账号管理 THEN 前端 SHALL 调用 `GET /api/cloud-drive/accounts`，仅展示账号 UID、状态和时间摘要，不读取或持久化 Cookie 原文。
+4. WHEN 用户绑定、选择或解绑账号 THEN 前端 SHALL 分别调用 `POST /api/cloud-drive/accounts`、`POST /api/cloud-drive/accounts/select` 和 `DELETE /api/cloud-drive/accounts/{cloudAccountUid}`；绑定表单的 Cookie 值只存在于请求内存。
+5. WHEN 当前 UserSession 未选择账号且存在多个 Active 账号 THEN 前端 SHALL 展示明确的账号选择提示，不发起普通 115 业务请求；后端返回 `cloud_drive_account_context_ambiguous` 时不得自动重试。
+6. WHEN JWT 会话失效或退出 THEN 前端 SHALL 清理内存中的会话和账号摘要，并导航到登录页；不得展示、请求或存储任何上游 Cookie 字段。
+7. WHEN 用户基础资料不可用 THEN 前端 SHALL 不调用 `/api/user/info`，并使用中性账号图标而非伪造昵称或头像。
 
 ### 需求 2：文件浏览器
 

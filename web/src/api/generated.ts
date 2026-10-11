@@ -5,6 +5,9 @@
  */
 import type {
   CloudDriveAuthCheckDto,
+  AuthResponseDto,
+  CurrentUserDto,
+  CloudDriveAccountSummaryDto,
   CloudDriveFileDetailDto,
   CloudDriveFileDto,
   CloudDriveOperationResultDto,
@@ -23,6 +26,14 @@ import type {
 
 export interface ApiPaths {
   '/auth/check': { get: { response: CloudDriveAuthCheckDto } };
+  '/auth/register': { post: { response: AuthResponseDto } };
+  '/auth/login': { post: { response: AuthResponseDto } };
+  '/auth/refresh': { post: { response: AuthResponseDto } };
+  '/auth/logout': { post: { response: unknown } };
+  '/auth/me': { get: { response: CurrentUserDto } };
+  '/cloud-drive/accounts': { get: { response: CloudDriveAccountSummaryDto[] }; post: { response: unknown } };
+  '/cloud-drive/accounts/select': { post: { response: unknown } };
+  '/cloud-drive/accounts/{cloudAccountUid}': { delete: { response: unknown } };
   '/files': { get: { response: PagedResult<CloudDriveFileDto> } };
   '/files/{fileId}': { get: { response: CloudDriveFileDetailDto } };
   '/files/folders': { post: { response: CloudDriveOperationResultDto } };

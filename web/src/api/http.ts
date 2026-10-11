@@ -34,12 +34,15 @@ async function refreshAccessToken(): Promise<string | null> {
   const currentToken = localStorage.getItem('115web.accessToken');
   if (!currentToken) return null;
   if (!refreshPromise) {
-    refreshPromise = axios.post<{ accessToken?: string }>('/api/auth/refresh', undefined, {
+    refreshPromise = axios.post<{ accessToken?: string; expiresAt?: string }>('/api/auth/refresh', undefined, {
       headers: { Authorization: `Bearer ${currentToken}` },
       timeout: 30000,
     }).then(({ data }) => {
       const nextToken = typeof data.accessToken === 'string' ? data.accessToken : null;
-      if (nextToken) localStorage.setItem('115web.accessToken', nextToken);
+      if (nextToken) {
+        localStorage.setItem('115web.accessToken', nextToken);
+        if (typeof data.expiresAt === 'string') localStorage.setItem('115web.expiresAt', data.expiresAt);
+      }
       return nextToken;
     }).catch(() => null).finally(() => {
       refreshPromise = null;

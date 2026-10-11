@@ -137,6 +137,94 @@ public sealed class LoginStatusHandlersTests
         Assert.Null(gateway.LastEndpoint);
     }
 
+    /// <summary>
+    /// 验证匿名认证检查不会从其他用户的绑定中选择账号并访问 115。
+    /// </summary>
+    [Fact]
+    public async Task GetLoginStatusQueryHandler_WhenAnonymous_SkipsGateway()
+    {
+        // Arrange
+        var repository = new FakeCookieSessionRepository();
+        Guid userId = Guid.NewGuid();
+        await CreateManager(repository, featureEnabled: true)
+            .UpsertSessionAsync(userId, "115001", new CookieTriplet("uid", "cid", "ussid"));
+        var gateway = new StubGateway(JsonDocument.Parse("""{"state":true}""").RootElement.Clone());
+        var handler = CreateLoginHandler(repository, gateway, featureEnabled: true);
+
+        // Act
+        Result<CloudDriveAuthCheckDto> result = await handler.Handle(
+            new GetLoginStatusQuery(null),
+            CancellationToken.None);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.False(result.Value.IsAuthenticated);
+        Assert.False(result.Value.IsLoggedIn);
+        Assert.Equal("cookie_invalid", result.Value.FailureReason);
+        Assert.Null(gateway.LastEndpoint);
+    }
+
+    /// <summary>
+    /// 验证多个 Active 账号且未提供当前会话选择时不会访问 115。
+    /// </summary>
+    [Fact]
+    public async Task GetLoginStatusQueryHandler_WhenMultipleActiveAccounts_SkipsGateway()
+    {
+        // Arrange
+        var repository = new FakeCookieSessionRepository();
+        Guid userId = Guid.NewGuid();
+        CookieSessionManager manager = CreateManager(repository, featureEnabled: true);
+        await manager.UpsertSessionAsync(userId, "115001", new CookieTriplet("uid-1", "cid-1", "ussid-1"));
+        await manager.UpsertSessionAsync(userId, "115002", new CookieTriplet("uid-2", "cid-2", "ussid-2"));
+        var gateway = new StubGateway(JsonDocument.Parse("""{"state":true}""").RootElement.Clone());
+        var handler = CreateLoginHandler(repository, gateway, featureEnabled: true);
+
+        // Act
+        Result<CloudDriveAuthCheckDto> result = await handler.Handle(
+            new GetLoginStatusQuery(userId),
+            CancellationToken.None);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.False(result.Value.IsAuthenticated);
+        Assert.False(result.Value.IsLoggedIn);
+        Assert.Equal("cloud_drive_account_context_ambiguous", result.Value.FailureReason);
+        Assert.Null(gateway.LastEndpoint);
+    }
+
+    /// <summary>
+    /// 验证认证检查会按照当前 UserSession 的 ActiveCloudAccountUid 选择账号。
+    /// </summary>
+    [Fact]
+    public async Task GetLoginStatusQueryHandler_WhenSessionSelectsAccount_ProbesSelectedAccount()
+    {
+        // Arrange
+        var repository = new FakeCookieSessionRepository();
+        Guid userId = Guid.NewGuid();
+        CookieSessionManager manager = CreateManager(repository, featureEnabled: true);
+        await manager.UpsertSessionAsync(userId, "115001", new CookieTriplet("uid-1", "cid-1", "ussid-1"));
+        await manager.UpsertSessionAsync(userId, "115002", new CookieTriplet("uid-2", "cid-2", "ussid-2"));
+        UserSession userSession = UserSession.Create(userId, TimeSpan.FromHours(1));
+        userSession.SelectCloudAccount("115002");
+        var userSessions = new StubUserSessionRepository(userSession);
+        var gateway = new StubGateway(JsonDocument.Parse("""{"state":true}""").RootElement.Clone());
+        var handler = new GetLoginStatusQueryHandler(
+            repository,
+            gateway,
+            Options.Create(new CloudDriveAppConfig { CloudDriveFeatureEnabled = true }),
+            userSessions);
+
+        // Act
+        Result<CloudDriveAuthCheckDto> result = await handler.Handle(
+            new GetLoginStatusQuery(userId, userSession.Id),
+            CancellationToken.None);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value.IsAuthenticated);
+        Assert.Equal("115002", gateway.LastCloudAccountUid);
+    }
+
     private static CookieSessionManager CreateManager(FakeCookieSessionRepository repository, bool featureEnabled)
     {
         return new CookieSessionManager(
@@ -162,6 +250,8 @@ public sealed class LoginStatusHandlersTests
     {
         public string? LastEndpoint { get; private set; }
 
+        public string? LastCloudAccountUid { get; private set; }
+
         public CloudDriveApiContext? LastContext { get; private set; }
 
         public Task<T> SendWebApiRequestAsync<T>(
@@ -173,6 +263,7 @@ public sealed class LoginStatusHandlersTests
             CancellationToken cancellationToken = default)
         {
             LastEndpoint = endpoint;
+            LastCloudAccountUid = cloudAccountUid;
             LastContext = context;
 
             return responseOrException is Exception exception
@@ -214,5 +305,26 @@ public sealed class LoginStatusHandlersTests
             IDictionary<string, string>? formFields = null,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class StubUserSessionRepository(UserSession session) : IUserSessionRepository
+    {
+        public Task<UserSession?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+            => Task.FromResult<UserSession?>(id == session.Id ? session : null);
+
+        public Task<UserSession?> GetActiveAsync(Guid id, CancellationToken cancellationToken = default)
+            => Task.FromResult<UserSession?>(id == session.Id && session.IsActive(DateTime.UtcNow) ? session : null);
+
+        public Task<IReadOnlyList<UserSession>> GetListAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<UserSession>>([session]);
+
+        public Task<int> InsertAsync(UserSession entity, CancellationToken cancellationToken = default)
+            => Task.FromResult(1);
+
+        public Task<int> UpdateAsync(UserSession entity, CancellationToken cancellationToken = default)
+            => Task.FromResult(1);
+
+        public Task<int> DeleteAsync(UserSession entity, CancellationToken cancellationToken = default)
+            => Task.FromResult(1);
     }
 }

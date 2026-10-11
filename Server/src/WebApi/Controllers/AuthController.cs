@@ -71,9 +71,12 @@ public sealed class AuthController(ISender sender, IJwtTokenFactory tokenFactory
         Guid? userId = this.User.Identity?.IsAuthenticated == true
             ? this.GetAuthenticatedUserId()
             : null;
+        Guid? sessionId = this.User.Identity?.IsAuthenticated == true
+            ? this.GetAuthenticatedSessionId()
+            : null;
 
         var result = await sender.Send(
-            new GetLoginStatusQuery(userId),
+            new GetLoginStatusQuery(userId, sessionId),
             cancellationToken);
 
         return result.ToHttpResult();

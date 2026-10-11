@@ -2,12 +2,12 @@
 
 - [x] 1. 领域模型与持久化
   - [x] 1.1 新增 User/UserSession、仓储接口与 SqlSugar 映射。_需求: 1.1, 1.3, 4.1_ _设计: §User/UserSession_
-  - [x] 1.2 注册 User、UserSession、CookieSession 表。_需求: 2.1, 4.1_ _设计: §数据模型与接口_
+  - [x] 1.2 注册 User、UserSession、CookieSession 表，并将 UserSession.ActiveCloudAccountUid 映射为 active_cloud_account_uid。_需求: 2.1, 4.1_ _设计: §数据模型与接口_
 - [x] 2. Application 认证与账号用例
   - [x] 2.1 实现 PBKDF2 哈希及注册/登录/注销/刷新 Handler。_需求: 1.1, 1.2, 1.3_ _设计: §PersonalAuthHandlers_
-  - [x] 2.2 实现账号绑定、列表、选择、解绑和当前账号解析。_需求: 2.1, 2.2, 2.3_ _设计: §CookieSessionManager + AccountContextResolver_
+  - [x] 2.2 实现账号绑定、列表、选择、解绑和当前账号解析；普通业务请求从 UserSession.ActiveCloudAccountUid 解析 CloudAccountUid。_需求: 2.1, 2.2, 2.3_ _设计: §CookieSessionManager + AccountContextResolver_
 - [x] 3. WebApi 与前端
-  - [x] 3.1 添加认证和账号 API，移除 LocalAdmin 登录入口。_需求: 3.1, 3.2, 3.3_ _设计: §AuthController / CloudDriveAccountsController_
+  - [x] 3.1 添加认证、/api/auth/check 和账号 API，移除 LocalAdmin 登录入口。_需求: 3.1, 3.2, 3.3_ _设计: §AuthController / CloudDriveAccountsController, §AuthCheckHandler_
   - [x] 3.2 添加前端 JWT 会话、登录/注册、绑定和切换流程。_需求: 3.1, 3.2_ _设计: §AuthController / CloudDriveAccountsController_
 - [x] 4. 验证检查点
   - [x] 4.1 WebApi 干净构建：`dotnet build Server/src/WebApi/WebApi.csproj --no-restore --nologo -p:UseSharedCompilation=false -p:BuildInParallel=false`，exit code 0。_需求: 1.1, 3.1, 4.1_ _设计: §测试策略_

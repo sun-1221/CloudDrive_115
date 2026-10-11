@@ -2,9 +2,9 @@
 
 ## 概述
 
-本设计文档描述 115 网盘集成功能的技术架构与实现方案。系统基于 .NET 10 原生技术栈，采用 DDD 四层架构 + MediatR CQRS 模式，通过 **Cookie 会话认证机制**（UID/CID/USSID）对接已验收证据覆盖的 **115 网页端 API**（`webapi.115.com`、`vip.115.com`、`pay.115.com`、`clouddownload.115.com`）。
+本设计文档描述 115 网盘集成功能的技术架构与实现方案。系统基于 .NET 10 原生技术栈，采用 DDD 四层架构 + MediatR CQRS 模式，通过本地 User/UserSession 的 JWT 认证和按用户绑定的 CookieSession 上下文，对接已验收证据覆盖的 **115 网页端 API**（`webapi.115.com`、`vip.115.com`、`pay.115.com`、`clouddownload.115.com`）。
 
-> **认证方案声明**：Cookie 由运维/管理员通过受保护的配置注入与轮换，系统不主动发起任何授权流程。当 Cookie 失效时，系统仅标记状态、进入冷却期并发布 `CookieInvalidated` 领域事件，不尝试自动恢复。
+> **认证方案声明**：本地用户通过 JWT 登录；已认证用户通过绑定 API 提交自己的 115 Cookie 三元组，系统按 UserId + CloudAccountUid 以 Data Protection 加密保存。当 Cookie 失效时，系统仅标记状态、进入冷却期并发布 `CookieInvalidated` 领域事件，不尝试自动恢复。
 
 > **框架依赖说明：** 本模块构建在 `115-cloud-drive-net10` 定义的 .NET 10 原生框架之上，复用其 MediatR CQRS 分发、Pipeline Behavior（Validation / Transaction / Logging / DomainEventDispatch）、SqlSugar 仓储基类、Quartz.NET 调度、IDistributedCache JSON 封装、FluentValidation 集成、全局异常中间件 + ProblemDetails 等基础设施。
 
@@ -15,7 +15,7 @@
 ### 设计目标
 
 - 遵循 .NET 10 DDD 四层架构（Domain / Application / Infrastructure / WebApi），职责清晰分离
-- 通过 **Cookie 会话机制**对接 115 网页端 API，Cookie 由运维注入，系统不主动发起授权流程
+- 通过 **JWT 用户会话 + CookieSession 账号上下文**对接 115 网页端 API；系统不主动发起 115 授权流程
 - 仅对已验收采集契约提供能力；未采集的上传、搜索、移动、删除及其他写操作保持禁用
 - 内置频控限流、缓存、后台任务机制，降低 API 调用频率与风控风险
 - 统一错误响应字段适配（errNo / errCode / errno / code / msg / message 等变体），由 `ErrorFieldAdapter` 按 URL 路径定向处理
@@ -25,10 +25,11 @@
 
 | 决策 | 选择 | 理由 |
 |------|------|------|
-| 认证模式 | **Cookie 会话认证**（UID/CID/USSID + 可选额外字段），管理员注入 | 对接已验收的 115 网页端接口 |
-| Cookie 存储 | 通过 `ICloudDriveSecretProtector` 加密持久化至数据库 | 支持单账号 Cookie 安全存储，避免明文泄露 |
-| 账号隔离 | 当前用户 + 后端解析出的唯一 115 账号 UID | 当前版本为单账号模型；账号 UID 仅用于后端内部 Cookie、缓存、限流与审计隔离 |
-| 账号上下文传递 | 前端公开 `/api/*` 端点不得要求 `CloudAccountUid`；应用层由 `ICloudDriveAccountContextResolver` 解析当前唯一账号上下文，运维端点可显式指定账号 UID |
+| 认证模式 | **个人 JWT 会话 + CookieSession**（UID/CID/USSID 由用户绑定） | 本地用户会话决定可访问的 115 账号上下文 |
+| Cookie 存储 | 通过 `ICloudDriveSecretProtector`/Data Protection 按 UserId + CloudAccountUid 加密持久化 | 支持多账号绑定、更新、撤销并避免明文泄露 |
+| 账号隔离 | 当前用户 + 当前 UserSession 的 `ActiveCloudAccountUid` | 同一用户可绑定多个账号；每个会话独立保存当前账号 |
+| 命名映射 | HTTP cloudAccountUid -> Domain UserSession.ActiveCloudAccountUid -> DB active_cloud_account_uid | 绑定/选择 API 显式传 UID，普通业务请求由会话解析 |
+| 账号上下文传递 | 普通业务端点不要求前端传递 `CloudAccountUid`；应用层由 `ICloudDriveAccountContextResolver` 根据 UserSession 解析，绑定/选择/解绑端点显式接收账号 UID |
 | Cookie 失效处理 | 标记状态 + 冷却期（默认 60 秒，可通过 `CookieCooldownSeconds` 配置）+ `CookieInvalidated` 领域事件 | 避免失效后短时间内反复探测或暴露内部状态，系统不尝试自动恢复 |
 | 云下载写能力 | 默认禁用 | `add_task_urls` 仅有失败样本，签名算法与成功响应未采集 |
 | 限流策略 | 令牌桶算法 + 有界排队/拒绝 + 按用户/115账号/场景维度 | 支持分类请求频率、超限处置与可观测性 |
@@ -45,7 +46,7 @@
 ### 前置约束与边界
 
 - **数据源范围**：系统只使用父阶段已验收的脱敏采集证据。未出现在证据闭集中的域名、路径、参数、响应或错误映射一律不得启用
-- 系统以前置条件已满足为部署前提：运维必须已为每个待访问的 115 账号提供有效的 Cookie 会话三元组（UID/CID/USSID）；若未配置 Cookie 或系统检测到配置缺失，必须禁用 115 集成功能并记录配置错误。具体采用双层保护机制：
+- 系统以前置条件已满足为部署前提：用户必须先拥有本地 JWT UserSession，并为需要访问的 115 账号绑定有效 Cookie 三元组（UID/CID/USSID）；若 Data Protection、数据库或网页端配置缺失，必须禁用 115 集成功能并记录配置错误。具体采用双层保护机制：
   - **启动期校验**：在 `AddCloudDrive()` 扩展方法中通过 `IOptions<CloudDriveAppConfig>` 的 `ValidateOnStart()` 或手动校验逻辑，检查 Cookie 加密密钥、签名密钥、网页端基础域名等核心配置是否完整；校验失败时记录 `LogLevel.Error` 日志并将 `CloudDriveFeatureEnabled` 标志设为 `false`，但不阻止应用启动
   - **运行期保护**：所有 115 相关 Handler 在入口处检查 `CloudDriveFeatureEnabled` 标志（通过 `IOptions<CloudDriveAppConfig>` 注入），若为 `false` 则立即抛出 `CloudDriveConfigurationException`，确保不会发起任何 115 API 调用
 - 所有下载地址、预览地址、播放地址均视为临时授权资源，只能在当前已绑定用户上下文中短时使用，不得持久化为公开永久链接
@@ -54,13 +55,13 @@
 
 ### 账号隔离策略
 
-- Cookie 会话记录按 `UserId + CloudAccountUid` 维度组织，其中 `CloudAccountUid` 为后端从 Cookie 配置解析出的 115 账号唯一标识（Cookie 方案无 AppId 维度）
-- 当前版本为单账号模型：每个用户上下文最多解析出一个 Active 115 账号；若不存在或存在多条 Active 记录，业务 Handler 应返回明确 ProblemDetails，提示运维修复 Cookie 配置
-- 元数据缓存键按 `UserId + CloudAccountUid + DirectoryId/FileId` 组合生成，确保后续恢复多账号时缓存维度稳定；当前公开 API 不接收账号参数
+- Cookie 会话记录按 `UserId + CloudAccountUid` 维度组织，其中 `CloudAccountUid` 为用户绑定 Cookie 三元组解析出的 115 账号唯一标识（Cookie 方案无 AppId 维度）
+- `UserSession.ActiveCloudAccountUid` 保存当前会话选择的账号；没有选择时单个 Active 账号可自动使用，多账号时必须显式选择
+- 元数据缓存键按 `UserId + CloudAccountUid + DirectoryId/FileId` 组合生成，确保多账号缓存维度稳定；当前公开 API 不接收账号参数
 - 限流桶按 `UserId + CloudAccountUid + Category` 维度维护，避免后台任务、媒体播放与云下载互相挤占配额
 - 后台任务记录需关联 `CloudAccountUid`，以便审计、恢复和重放时准确定位账号上下文
-- 前端公开 `/api/*` 端点不得通过 query、body、header 显式传递 `CloudAccountUid`；账号上下文由应用层通过 `ICloudDriveAccountContextResolver` 统一解析
-- 运维端点（Cookie 注入、冷却、撤销）可以显式指定 `CloudAccountUid`，但必须位于受保护的 `/api/admin/cloud-drive/*` 命名空间，不纳入普通前端消费面
+- 普通业务端点不得要求前端重复传递账号 UID；账号绑定、选择、解绑端点可以显式接收 UID，并必须验证其属于当前用户
+- 账号上下文由 `ICloudDriveAccountContextResolver` 根据 JWT UserSession 统一解析；无账号返回 unavailable，多账号未选择返回 `cloud_drive_account_context_ambiguous`
 
 ### 同步/异步执行边界
 
@@ -99,7 +100,7 @@ _覆盖需求: 29_
 
 _覆盖需求: 1, 2, 3_
 
-> **认证方案说明**：本系统采用 **Cookie 会话认证**（UID/CID/USSID），对接 115 网页端 API。Cookie 由运维/管理员通过受保护的配置注入与轮换，系统不主动发起授权流程。当 Cookie 失效时，系统仅标记状态、进入冷却期并发布 `CookieInvalidated` 领域事件，不尝试自动恢复。
+> **认证方案说明**：本系统采用个人 JWT 会话认证；每个用户通过账号绑定 API 保存一个或多个 CookieSession。请求 115 时由当前 UserSession 的 `ActiveCloudAccountUid` 解析 Cookie。Cookie 失效时仅标记状态、进入冷却期并发布 `CookieInvalidated` 领域事件，不尝试自动恢复。
 
 #### CloudDriveAuth 模块（CQRS Command/Query）
 
@@ -107,20 +108,20 @@ _覆盖需求: 1, 2, 3_
 
 ```csharp
 // --- Commands ---
-/// 管理员注入或更新指定 115 账号的 Cookie 会话（UID/CID/USSID + 可选额外字段）
+/// 已认证用户绑定或更新自己的 115 账号 Cookie 会话（UID/CID/USSID + 可选额外字段）
 public sealed record UpsertCookieSessionCommand(Guid UserId, UpsertCookieSessionInput Input) : ICommand<CloudDriveCookieSessionDto>, IHasInput<UpsertCookieSessionInput>;
 
-/// 撤销指定 115 账号的 Cookie 会话（主动解绑，运维专用）
+/// 已认证用户解绑指定 115 账号的 Cookie 会话
 public sealed record RevokeCookieSessionCommand(Guid UserId, RevokeCookieSessionInput Input) : ICommand, IHasInput<RevokeCookieSessionInput>;
 
 /// 标记 Cookie 失效并进入冷却期（由失效检测链路内部触发，非对外端点）
 public sealed record EnterCookieCooldownCommand(Guid UserId, EnterCookieCooldownInput Input) : ICommand, IHasInput<EnterCookieCooldownInput>;
 
 // --- Queries ---
-/// 探测当前唯一 115 账号的登录态（对应需求 3 `/api/auth/check`）
+/// 探测当前用户当前账号的登录态（对应需求 3 `/api/auth/check`）
 public sealed record GetLoginStatusQuery(Guid? UserId) : IQuery<CloudDriveAuthCheckDto>;
 
-/// 查询当前用户已绑定的 Cookie 会话摘要（运维内部能力，不暴露 Cookie 原文）
+/// 查询当前用户已绑定的 Cookie 会话摘要（不暴露 Cookie 原文）
 public sealed record GetBoundAccountsQuery(Guid UserId) : IQuery<List<CloudDriveAccountSummaryDto>>;
 
 /// 聚合查询 115 账号的用户信息（对应需求 23 多源聚合：user_info + vip_limit + get_yun_card + pay.115.com/）
@@ -128,11 +129,11 @@ public sealed record GetUserInfoQuery(Guid UserId) : IQuery<CloudDriveUserInfoDt
 ```
 
 > 说明：每个 Command/Query 对应一个 `ICommandHandler` / `IQueryHandler`，Handler 返回 `Result<T>` 或 `Result`，内部调用应用层服务或 Domain 方法。
-> 说明：`UpsertCookieSessionCommand` 仅面向运维/管理员可访问的受保护端点；Cookie 来源由运维通过受保护配置注入，系统不主动发起授权。
+> 说明：`UpsertCookieSessionCommand` 仅面向已认证个人用户；输入通过 JWT UserSession 绑定到当前用户，系统不主动发起 115 授权。
 > 说明：`GetLoginStatusQuery` 通过调用 `GET webapi.115.com/files?cid=0&limit=1` 探测 Cookie 是否仍然可用，并映射为公开 `CloudDriveAuthCheckDto`（camelCase JSON）。不变式：`IsAuthenticated === (IsLoggedIn === true)`。(1) 业务成功 → `IsLoggedIn=true`、`IsAuthenticated=true`，省略 `FailureReason`；(2) `errNo=login_required` 等登录失效 → `CloudDriveApiClient` 调用 `CookieSessionManager.MarkInvalidatedAsync`，Handler 返回 `IsLoggedIn=false`、`IsAuthenticated=false`、`FailureReason='cookie_invalid'`；(3) 网络异常或未分类错误 → `IsLoggedIn=null`、`IsAuthenticated=false`、`FailureReason='network'`，不触发冷却；(4) 冷却期/非 Active 短路 → `IsLoggedIn=false`、`IsAuthenticated=false`、`FailureReason='cookie_not_active'`，并在已知时填 `CooldownUntil`。Controller 对该端点 `AllowAnonymous`，不调用 `GetAuthenticatedUserId()`。
 > 说明：`RevokeCookieSessionCommand` 不调用远程登出接口（网页端无对应接口），仅清除本地 `CookieSession` 记录、失效相关缓存与限流桶。
 > 说明：普通 Command Handler 中的领域事件由框架 `DomainEventDispatchBehavior` 在 Handler 执行后、事务提交前自动分发（前提是仓储在 Insert/Update 时调用了 `IDomainEventSource.Track(entity)`），Handler 内部不应手动调用 `IMediator.Publish()`。仅 Quartz Job 因不经过 MediatR Pipeline，需要手动发布领域事件。
-> 说明：公开前端端点的输入 DTO 不包含 `CloudAccountUid`。Command/Query Handler 在进入应用层后通过 `ICloudDriveAccountContextResolver` 解析当前唯一账号上下文，再传递给 Cookie、Gateway、缓存、限流与后台任务组件。仅运维 Cookie 管理输入 DTO 可以显式携带 `CloudAccountUid`。
+> 说明：普通业务端点的输入 DTO 不包含 `CloudAccountUid`。Command/Query Handler 在进入应用层后通过 `ICloudDriveAccountContextResolver` 根据 JWT UserSession 解析当前账号上下文；绑定、选择和解绑 DTO 可以显式携带 `CloudAccountUid`，但必须校验当前用户归属。
 > 说明：Cookie 失效或探测失败时基础设施层抛出 `CloudDriveCookieInvalidatedException`，由全局异常中间件统一处理并保留原始错误字段供上层提示；同时触发 `CookieInvalidated` 领域事件发布。
 
 #### CookieSessionManager
@@ -140,7 +141,7 @@ public sealed record GetUserInfoQuery(Guid UserId) : IQuery<CloudDriveUserInfoDt
 应用层服务，按 `UserId + CloudAccountUid` 编排 Cookie 会话生命周期（读取、更新、加密存储、失效标记、冷却管理）。通过构造函数注入依赖，不继承框架基类。注入 `ICookieSessionRepository`、`ICloudDriveSecretProtector`、`ICookieInvalidationNotifier` 与 `IOptions<CloudDriveAppConfig>`，负责仓储读写、机密保护、失效通知与配置读取的编排协作。
 
 > 说明：`CookieSessionManager` 的职责是编排 Cookie 读取 → 注入请求头 → 失效检测 → 冷却管理的流程，属于应用层编排逻辑。纯业务规则（如"Cookie 是否处于冷却期"、"是否已失效"）保留在 `CookieSession` 实体方法中。
-> 说明：Cookie 没有自动刷新机制 — 失效后必须由管理员重新注入。`CookieSessionManager` 在检测到 Cookie 失效时，仅标记状态、进入冷却期并发布 `CookieInvalidated` 领域事件，不尝试自动恢复；冷却期默认 60 秒，可通过 `CookieCooldownSeconds` 配置调整。
+> 说明：Cookie 没有自动刷新机制 — 失效后必须由用户重新绑定。`CookieSessionManager` 在检测到 Cookie 失效时，仅标记状态、进入冷却期并发布 `CookieInvalidated` 领域事件，不尝试自动恢复；冷却期默认 60 秒，可通过 `CookieCooldownSeconds` 配置调整。
 
 ```csharp
 public class CookieSessionManager
@@ -167,7 +168,7 @@ public readonly record struct CookieTriplet(string Uid, string Cid, string Ussid
 
 #### ICookieInvalidationNotifier
 
-应用层抽象，用于输出 Cookie 失效通知与运维告警。默认实现 `LoggingCookieInvalidationNotifier` 仅输出脱敏结构化日志；`CookieInvalidated` 领域事件由 `CookieSession` 聚合根在仓储 Update 后经 `DomainEventDispatchBehavior` 统一分发，Notifier 不直接调用 `IMediator.Publish()`。
+应用层抽象，用于输出 Cookie 失效通知与系统告警。默认实现 `LoggingCookieInvalidationNotifier` 仅输出脱敏结构化日志；`CookieInvalidated` 领域事件由 `CookieSession` 聚合根在仓储 Update 后经 `DomainEventDispatchBehavior` 统一分发，Notifier 不直接调用 `IMediator.Publish()`。
 
 ```csharp
 public interface ICookieInvalidationNotifier
@@ -211,14 +212,14 @@ public readonly record struct CookieSignature(string Sign, long Time, string Uid
 
 `GetLoginStatusQuery` 的处理器，按以下策略探测 Cookie 是否仍然可用：
 
-1. 从 `CookieSessionManager` 解析系统单账号会话（不要求 JWT 已认证用户）；若会话非 Active 或处于冷却期内，直接返回 `IsLoggedIn = false`、`IsAuthenticated = false`、`FailureReason = "cookie_not_active"`，并在已知时填 `CooldownUntil`，不发起官方请求
+1. 从 `CookieSessionManager` 解析当前用户账号上下文；匿名请求无用户上下文时返回未登录状态；若会话非 Active 或处于冷却期内，直接返回 `IsLoggedIn = false`、`IsAuthenticated = false`、`FailureReason = "cookie_not_active"`，并在已知时填 `CooldownUntil`，不发起官方请求
 2. 否则调用 `GET webapi.115.com/files?cid=0&limit=1` 并解析响应：
     - 业务成功（`state == true`）→ `IsLoggedIn = true`、`IsAuthenticated = true`，省略 `FailureReason`
     - 识别为登录失效类错误码（如 `errNo=login_required` 或 `ErrorFieldAdapter` 判定为登录失效的其他变体）→ `CloudDriveApiClient` 已通过 `CookieSessionManager.MarkInvalidatedAsync` 持久化失效状态和冷却期；Query Handler 捕获 `CloudDriveCookieInvalidatedException` 后返回 `IsLoggedIn = false`、`IsAuthenticated = false`、`FailureReason = "cookie_invalid"`
     - 其他未知错误或网络超时 → `IsLoggedIn = null`、`IsAuthenticated = false`、`FailureReason = "network"`，不触发冷却
 3. 返回公开 DTO `CloudDriveAuthCheckDto`；始终保证 `IsAuthenticated === (IsLoggedIn === true)`；内部诊断日志可记录脱敏后的 `CloudAccountUid`
 
-> 说明：该 Handler 为 Query Handler，符合 CQRS 约束（不发布事件、不写库、不调用写 Command）。冷却状态推进由基础设施请求链路中的 `CloudDriveApiClient` 与 `CookieSessionManager.MarkInvalidatedAsync` 负责，运维手动标记冷却仍通过独立的 `EnterCookieCooldownCommand` 完成。
+> 说明：该 Handler 为 Query Handler，符合 CQRS 约束（不发布事件、不写库、不调用写 Command）。冷却状态推进由基础设施请求链路中的 `CloudDriveApiClient` 与 `CookieSessionManager.MarkInvalidatedAsync` 负责，系统手动标记冷却仍通过独立的 `EnterCookieCooldownCommand` 完成。
 
 ##### 时序：Cookie 探测 / auth check + 冷却
 
@@ -233,7 +234,7 @@ sequenceDiagram
 
     Frontend->>AuthController: GET /api/auth/check (AllowAnonymous)
     AuthController->>LoginCheckHandler: GetLoginStatusQuery(userId: null|optional)
-    LoginCheckHandler->>CookieSessionManager: Resolve single-account session
+    LoginCheckHandler->>CookieSessionManager: Resolve current UserSession account
     alt cooldown or not Active
         CookieSessionManager-->>LoginCheckHandler: cookie_not_active + cooldownUntil?
         LoginCheckHandler-->>AuthController: AuthCheckDto(isLoggedIn=false, isAuthenticated=false)
@@ -733,8 +734,8 @@ _覆盖需求: 1, 2, 28_
 public enum CookieSessionStatus
 {
     Active,       // 当前有效
-    Invalidated,  // 探测到失效，处于冷却期或待运维重新注入
-    Revoked       // 管理员主动解绑
+    Invalidated,  // 探测到失效，处于冷却期或待系统重新注入
+    Revoked       // 用户主动解绑
 }
 ```
 
@@ -767,7 +768,7 @@ public enum CookieSessionStatus
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | CookieEncryptionKeyName | string | `ICloudDriveSecretProtector` 用于加密 Cookie 负载的 key ring 名称 |
-| SignatureKeyName | string? | 云下载签名密钥在 `ICloudDriveSecretProtector` 中的 key ring 名称（运维注入，可为空表示未启用云下载） |
+| SignatureKeyName | string? | 云下载签名密钥在 `ICloudDriveSecretProtector` 中的 key ring 名称（系统注入，可为空表示未启用云下载） |
 | CookieCooldownSeconds | int | Cookie 失效后的冷却期（默认 60 秒） |
 | WebApiBaseUrl | string | 网页端 API 基础域名，默认 `https://webapi.115.com/` |
 | MyApiBaseUrl | string | 用户中心 API 基础域名，默认 `https://my.115.com/` |
@@ -816,7 +817,7 @@ public class CloudDriveOperationResultDto
     public string? Message { get; set; }        // 结果或受理说明
 }
 
-// 运维 DTO：不纳入普通前端消费面
+// 系统 DTO：不纳入普通前端消费面
 public class CloudDriveCookieSessionDto
 {
     public string CloudAccountUid { get; set; }
@@ -915,7 +916,7 @@ public class CloudDriveYunCardDto
     public double VipCount { get; set; }
 }
 
-// 运维 DTO：不纳入普通前端消费面
+// 系统 DTO：不纳入普通前端消费面
 public class CloudDriveAccountSummaryDto
 {
     public string CloudAccountUid { get; set; }
@@ -934,14 +935,14 @@ public class UpsertCookieSessionInput
 
 public class EnterCookieCooldownInput
 {
-    public string CloudAccountUid { get; set; }           // 运维指定账号 UID
+    public string CloudAccountUid { get; set; }           // 系统指定账号 UID
     public string Reason { get; set; }                    // 失效原因（供日志与审计）
     public int? CooldownSeconds { get; set; }             // 可选覆盖默认冷却时长
 }
 
 public class RevokeCookieSessionInput
 {
-    public string CloudAccountUid { get; set; }           // 运维指定账号 UID
+    public string CloudAccountUid { get; set; }           // 系统指定账号 UID
 }
 ```
 
@@ -1534,7 +1535,7 @@ public class GetJobListInput
 
 ### P2: Cookie 失效处理
 
-- **属性**: 对于任意使用 Cookie 的 API 调用，若 `CloudDriveApiClient` 探测到 Cookie 失效（`errNo=login_required` 或 HTTP 401/403），则系统必须：(1) 立即将 `CookieSession.Status` 标记为 `Invalidated` 并设置 `CooldownUntil`；(2) 抛出 `CloudDriveCookieInvalidatedException` 而非模糊错误；(3) 发布 `CookieInvalidated` 领域事件；(4) 在冷却期内不重复发起探测请求。系统不尝试自动恢复失效 Cookie（必须由运维重新注入）
+- **属性**: 对于任意使用 Cookie 的 API 调用，若 `CloudDriveApiClient` 探测到 Cookie 失效（`errNo=login_required` 或 HTTP 401/403），则系统必须：(1) 立即将 `CookieSession.Status` 标记为 `Invalidated` 并设置 `CooldownUntil`；(2) 抛出 `CloudDriveCookieInvalidatedException` 而非模糊错误；(3) 发布 `CookieInvalidated` 领域事件；(4) 在冷却期内不重复发起探测请求。系统不尝试自动恢复失效 Cookie（必须由用户重新绑定）
 - **关联需求**: 需求 1 (AC4, AC5, AC6, AC7), 需求 3 (AC3, AC4)
 - **验证方式**: 集成测试模拟 `errNo=login_required` 与 HTTP 401/403 两种失效场景，验证 `CookieSession.Status` 被标记为 `Invalidated`、`CookieInvalidated` 事件被发布，冷却期内的重复探测返回缓存结果而不发起新的官方请求
 
@@ -1645,5 +1646,5 @@ public class GetJobListInput
 | NFR 性能与响应 | §概述, §设计目标, §CloudDriveRateLimiter, §CloudDriveMetadataCache |
 | NFR 安全 | §1. 认证与会话管理模块 (Auth), §CookieSessionManager, §10. CSRF 与 Antiforgery（WebApi）, §P1: Cookie 安全性, §P2: Cookie 失效处理 |
 | NFR 可观测性 | §ICloudDriveWebApiGateway / CloudDriveApiClient, §IErrorFieldAdapter / ErrorFieldAdapter（错误响应字段适配器）, §P6: 错误码映射完整性 |
-| NFR 部署与运维 | §9. 基础设施组件, §CookieSession（聚合根 - 领域层）, §5. 后台任务模块 (Quartz.NET Job) |
+| NFR 部署与系统 | §9. 基础设施组件, §CookieSession（聚合根 - 领域层）, §5. 后台任务模块 (Quartz.NET Job) |
 | NFR 测试覆盖 | §正确性属性（Properties）, §P1: Cookie 安全性 … §P13: 后台任务重启恢复协调 |
